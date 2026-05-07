@@ -1,0 +1,204 @@
+(1) Concise Plan
+1.  **Define Constants**: Create `packages/stats/defensive/constants.py` to centralize the noise threshold (e.g., 1000 innings).
+2.  **Implement Parsers**: Create `packages/stats/defensive/parsers.py` with functions to extract DRS, UZR, UZR150, and OAA from raw dictionaries (representing API payloads). Include logic to handle per-game UZR normalization (multiplying by games played or a standard season factor if specified, but here we will assume a `games_played` field exists in the payload for normalization).
+3.  **Implement Qualification**: Create `packages/stats/defensive/qualification.py` with a function that tags samples as `(noisy)` if innings played < threshold, otherwise clean.
+4.  **Implement Tests**: Create `packages/stats/defensive/tests/test_defensive.py` covering:
+    *   Extraction of standard metrics.
+    *   UZR150 normalization logic.
+    *   Noisy tagging for low innings.
+    *   Clean tagging for sufficient innings.
+
+(2) Exact File Edits as Unified Diff
+
+```diff
+diff --git a/packages/stats/defensive/__init__.py b/packages/stats/defensive/__init__.py
+new file mode 100644
+index 0000000..e69de29
+--- /dev/null
++++ b/packages/stats/defensive/__init__.py
+@@ -0,0 +1 @@
++# Defensive Stats Package
+
+diff --git a/packages/stats/defensive/constants.py b/packages/stats/defensive/constants.py
+new file mode 100644
+index 0000000..8b137c2
+--- /dev/null
++++ b/packages/stats/defensive/constants.py
+@@ -0,0 +1,5 @@
++"""Constants for defensive statistics processing."""
++
++# Minimum innings required to avoid "noisy" tagging
++MIN_INNINGS_THRESHOLD = 1000
+diff --git a/packages/stats/defensive/parsers.py b/packages/stats/defensive/parsers.py
+new file mode 100644
+index 0000000..a2b3c4d
+--- /dev/null
++++ b/packages/stats/defensive/parsers.py
+@@ -0,0 +1,45 @@
++"""Defensive statistics parsers."""
++
++from .constants import MIN_INNINGS_THRESHOLD
++
++
++def extract_defensive_metrics(payload: dict) -> dict:
++    """
++    Extract DRS, UZR, UZR150, and OAA from a raw source payload.
++    
++    Args:
++        payload: Dictionary containing raw defensive stats.
++        
++    Returns:
++        Dictionary with keys: 'drs', 'uzr', 'uzr150', 'oaa'.
++    """
++    return {
++        'drs': payload.get('drs'),
++        'uzr': payload.get('uzr'),
++        'uzr150': payload.get('uzr150'),
++        'oaa': payload.get('oaa'),
++    }
++
++
++def normalize_uzr150_from_per_game(payload: dict) -> float:
++    """
++    Normalize UZR/150 if the source provides a per-game value.
++    
++    Assumes payload contains 'uzr_per_game' and 'games_played'.
++    Standardizes to a full season (approx 162 games for MLB, but we use 
++    the actual games played in the payload context or a default factor).
++    
++    Note: UZR/150 is already normalized per 150 games. If source gives 
++    per-game, we multiply by 150 to get the standard metric.
++    """
++    uzr_per_game = payload.get('uzr_per_game')
++    if uzr_per_game is None:
++        return None
++    
++    # UZR/150 implies normalization to 150 games. 
++    # If the source gives per-game, multiply by 150.
++    return uzr_per_game * 150
++
++
++def qualify_sample(innings_played: float) -> str:
++    """
++    Tag a defensive sample based on innings played.
++    
++    Args:
++        innings_played: Number of innings played.
++        
++    Returns:
++        '(noisy)' if below threshold, else 'qualified'.
++    """
++    if innings_played < MIN_INNINGS_THRESHOLD:
++        return "(noisy)"
++    return "qualified"
+diff --git a/packages/stats/defensive/tests/__init__.py b/packages/stats/defensive/tests/__init__.py
+new file mode 100644
+index 0000000..e69de29
+--- /dev/null
++++ b/packages/stats/defensive/tests/__init__.py
+@@ -0,0 +1 @@
++# Defensive Stats Tests
+
+diff --git a/packages/stats/defensive/tests/test_defensive.py b/packages/stats/defensive/tests/test_defensive.py
+new file mode 100644
+index 0000000..1234567
+--- /dev/null
++++ b/packages/stats/defensive/tests/test_defensive.py
+@@ -0,0 +1,80 @@
++"""Tests for defensive parsers and qualification."""
++
++import pytest
++from packages.stats.defensive.parsers import (
++    extract_defensive_metrics,
++    normalize_uzr150_from_per_game,
++    qualify_sample,
++)
++from packages.stats.defensive.constants import MIN_INNINGS_THRESHOLD
++
++
++class TestExtractDefensiveMetrics:
++    def test_extracts_all_metrics(self):
++        payload = {
++            'drs': 5,
++            'uzr': 3.2,
++            'uzr150': 4.1,
++            'oaa': 8,
++        }
++        result = extract_defensive_metrics(payload)
++        assert result['drs'] == 5
++        assert result['uzr'] == 3.2
++        assert result['uzr150'] == 4.1
++        assert result['oaa'] == 8
++
++    def test_handles_missing_metrics(self):
++        payload = {'drs': 1}
++        result = extract_defensive_metrics(payload)
++        assert result['drs'] == 1
++        assert result['uzr'] is None
++        assert result['uzr150'] is None
++        assert result['oaa'] is None
++
++
++class TestNormalizeUZR150:
++    def test_normalizes_per_game_to_uzr150(self):
++        payload = {'uzr_per_game': 0.1}
++        result = normalize_uzr150_from_per_game(payload)
++        # 0.1 per game * 150 games = 15.0
++        assert result == 15.0
++
++    def test_handles_missing_per_game(self):
++        payload = {}
++        result = normalize_uzr150_from_per_game(payload)
++        assert result is None
++
++
++class TestQualifySample:
++    def test_marks_noisy_below_threshold(self):
++        # Threshold is 1000
++        result = qualify_sample(999.0)
++        assert result == "(noisy)"
++
++    def test_marks_qualified_at_threshold(self):
++        result = qualify_sample(1000.0)
++        assert result == "qualified"
++
++    def test_marks_qualified_above_threshold(self):
++        result = qualify_sample(1500.0)
++        assert result == "qualified"
++
++    def test_marks_noisy_for_zero_innings(self):
++        result = qualify_sample(0.0)
++        assert result == "(noisy)"
+diff --git a/packages/stats/defensive/qualification.py b/packages/stats/defensive/qualification.py
+new file mode 100644
+index 0000000..5a6b7c8
+--- /dev/null
++++ b/packages/stats/defensive/qualification.py
+@@ -0,0 +1,10 @@
++"""Qualification logic for defensive samples."""
++
++from .parsers import qualify_sample
++
++# Re-export for convenience if needed elsewhere
++def tag_defensive_sample(innings: float) -> str:
++    """
++    Tag a defensive sample.
++    
++    Args:
++        innings: Innings played.
++        
++    Returns:
++        Tag string.
++    """
++    return qualify_sample(innings)
+```
+
+(3) Verification Commands
+
+```bash
+# Create the directory structure if it doesn't exist
+mkdir -p packages/stats/defensive/tests
+
+# Run the specific test suite
+.venv/bin/pytest packages/stats/defensive/tests -q
+```
