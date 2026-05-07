@@ -1,0 +1,293 @@
+### 1. Concise Plan
+
+1.  **Schema Hasher (`apps/ingest/utils/schema_hash.py`)**: Implement a recursive function that normalizes a JSON schema (ignoring whitespace/comments) and computes a SHA-256 hash. This ensures structural changes are detected regardless of formatting.
+2.  **Drift Detector (`apps/ingest/services/drift_detector.py`)**: Create a service that loads known signatures from the database, compares them against the new schema hash, and logs warnings or errors if a mismatch is found. It will also update the signature if configured to auto-accept.
+3.  **Migration (`apps/ingest/migrations/0003_drift_signatures.py`)**: Add a migration to create the `drift_signatures` table to persist known schema hashes per source/table.
+4.  **Tests (`apps/ingest/tests/test_drift.py`)**: Write tests verifying the hasher handles nested structures correctly and the detector correctly identifies drift and logs appropriately.
+
+### 2. Exact File Edits
+
+#### `apps/ingest/utils/schema_hash.py`
+```python
+"""
+Recursive JSON schema shape hasher.
+
+Computes a deterministic SHA-256 hash of a JSON schema structure.
+Ignores whitespace, comments, and key ordering (by sorting keys).
+"""
+
+import hashlib
+import json
+from typing import Any
+
+
+def normalize_schema(schema: Any) -> Any:
+    """
+    Recursively normalize a schema object to ensure deterministic hashing.
+    - Sorts dictionary keys.
+    - Converts lists to tuples (for hashability if needed, though json.dumps handles lists).
+    - Removes None values if they are not semantically significant (optional, here we keep them for strictness).
+    """
+    if isinstance(schema, dict):
+        return {k: normalize_schema(v) for k, v in sorted(schema.items())}
+    elif isinstance(schema, list):
+        return [normalize_schema(item) for item in schema]
+    else:
+        return schema
+
+
+def compute_schema_hash(schema: Any) -> str:
+    """
+    Compute a SHA-256 hash of the normalized JSON schema.
+
+    Args:
+        schema: The JSON schema object (dict/list/primitives).
+
+    Returns:
+        Hex digest string of the SHA-256 hash.
+    """
+    normalized = normalize_schema(schema)
+    # Use sort_keys=True and separators to ensure deterministic JSON stringification
+    json_str = json.dumps(normalized, sort_keys=True, separators=(',', ':'))
+    return hashlib.sha256(json_str.encode('utf-8')).hexdigest()
+```
+
+#### `apps/ingest/services/drift_detector.py`
+```python
+"""
+Schema drift detection service.
+
+Compares current schema hashes against known signatures stored in the database.
+Logs warnings or errors when drift is detected.
+"""
+
+import logging
+from typing import Optional
+
+from django.db import transaction
+
+from apps.ingest.models import DriftSignature  # Assuming model exists or will be created
+from apps.ingest.utils.schema_hash import compute_schema_hash
+
+logger = logging.getLogger(__name__)
+
+
+class DriftDetector:
+    """Detects schema drift by comparing current schema hashes with known signatures."""
+
+    def __init__(self, source: str, table: str, auto_accept: bool = False):
+        self.source = source
+        self.table = table
+        self.auto_accept = auto_accept
+
+    def check_drift(self, current_schema: dict) -> bool:
+        """
+        Check if the current schema has drifted from the known signature.
+
+        Args:
+            current_schema: The new JSON schema to check.
+
+        Returns:
+            True if drift is detected (and not auto-accepted), False otherwise.
+        """
+        current_hash = compute_schema_hash(current_schema)
+        known_signature = self._get_known_signature()
+
+        if known_signature is None:
+            # First time seeing this source/table, register it
+            self._register_signature(current_hash)
+            logger.info(
+                "New schema signature registered for %s.%s: %s",
+                self.source,
+                self.table,
+                current_hash,
+            )
+            return False
+
+        if known_signature.hash != current_hash:
+            logger.warning(
+                "Schema drift detected for %s.%s. "
+                "Known: %s, Current: %s",
+                self.source,
+                self.table,
+                known_signature.hash,
+                current_hash,
+            )
+            if self.auto_accept:
+                self._update_signature(current_hash)
+                logger.info(
+                    "Auto-accepted new schema signature for %s.%s: %s",
+                    self.source,
+                    self.table,
+                    current_hash,
+                )
+                return False
+            return True
+
+        return False
+
+    def _get_known_signature(self) -> Optional[DriftSignature]:
+        """Retrieve the known signature for this source/table."""
+        try:
+            return DriftSignature.objects.get(source=self.source, table=self.table)
+        except DriftSignature.DoesNotExist:
+            return None
+
+    def _register_signature(self, hash_value: str):
+        """Register a new signature."""
+        DriftSignature.objects.create(
+            source=self.source,
+            table=self.table,
+            hash=hash_value,
+        )
+
+    def _update_signature(self, hash_value: str):
+        """Update an existing signature."""
+        signature = self._get_known_signature()
+        if signature:
+            signature.hash = hash_value
+            signature.save()
+```
+
+#### `apps/ingest/models.py` (Append to existing file)
+```python
+# ... existing imports ...
+
+class DriftSignature(models.Model):
+    """Stores known schema hashes for drift detection."""
+    source = models.CharField(max_length=255, db_index=True)
+    table = models.CharField(max_length=255, db_index=True)
+    hash = models.CharField(max_length=64)  # SHA-256 hex digest
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('source', 'table')
+
+    def __str__(self):
+        return f"{self.source}.{self.table}: {self.hash}"
+```
+
+#### `apps/ingest/migrations/0003_drift_signatures.py`
+```python
+# Generated by Django 4.2 on 2023-10-27 12:00
+
+from django.db import migrations, models
+
+
+class Migration(migrations.Migration):
+
+    dependencies = [
+        ('ingest', '0002_previous_migration'),  # Adjust dependency as needed
+    ]
+
+    operations = [
+        migrations.CreateModel(
+            name='DriftSignature',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('source', models.CharField(db_index=True, max_length=255)),
+                ('table', models.CharField(db_index=True, max_length=255)),
+                ('hash', models.CharField(max_length=64)),
+                ('created_at', models.DateTimeField(auto_now_add=True)),
+                ('updated_at', models.DateTimeField(auto_now=True)),
+            ],
+            options={
+                'unique_together': {('source', 'table')},
+            },
+        ),
+    ]
+```
+
+#### `apps/ingest/tests/test_drift.py`
+```python
+"""Tests for schema drift detection."""
+
+import pytest
+from django.test import override_settings
+
+from apps.ingest.models import DriftSignature
+from apps.ingest.services.drift_detector import DriftDetector
+from apps.ingest.utils.schema_hash import compute_schema_hash, normalize_schema
+
+
+class TestNormalizeSchema:
+    def test_simple_dict(self):
+        schema = {"b": 1, "a": 2}
+        normalized = normalize_schema(schema)
+        assert list(normalized.keys()) == ["a", "b"]
+
+    def test_nested_dict(self):
+        schema = {"z": {"y": 1, "x": 2}, "a": 3}
+        normalized = normalize_schema(schema)
+        assert list(normalized.keys()) == ["a", "z"]
+        assert list(normalized["z"].keys()) == ["x", "y"]
+
+    def test_list_preservation(self):
+        schema = {"items": [3, 1, 2]}
+        normalized = normalize_schema(schema)
+        assert normalized["items"] == [3, 1, 2]
+
+
+class TestComputeSchemaHash:
+    def test_same_structure_same_hash(self):
+        schema1 = {"type": "object", "properties": {"a": {"type": "string"}}}
+        schema2 = {"properties": {"a": {"type": "string"}}, "type": "object"}
+        assert compute_schema_hash(schema1) == compute_schema_hash(schema2)
+
+    def test_different_structure_different_hash(self):
+        schema1 = {"type": "object", "properties": {"a": {"type": "string"}}}
+        schema2 = {"type": "object", "properties": {"a": {"type": "integer"}}}
+        assert compute_schema_hash(schema1) != compute_schema_hash(schema2)
+
+
+class TestDriftDetector:
+    @pytest.fixture
+    def detector(self):
+        return DriftDetector(source="test_source", table="test_table", auto_accept=False)
+
+    @pytest.fixture
+    def schema(self):
+        return {"type": "object", "properties": {"id": {"type": "integer"}}}
+
+    def test_first_check_registers_signature(self, detector, schema, db):
+        detector.check_drift(schema)
+        assert DriftSignature.objects.filter(
+            source="test_source", table="test_table"
+        ).exists()
+
+    def test_no_drift_on_same_schema(self, detector, schema, db):
+        detector.check_drift(schema)
+        assert not detector.check_drift(schema)
+
+    def test_drift_detected_on_changed_schema(self, detector, schema, db):
+        detector.check_drift(schema)
+        changed_schema = {**schema, "properties": {**schema["properties"], "id": {"type": "string"}}}
+        assert detector.check_drift(changed_schema)
+
+    def test_auto_accept_updates_signature(self, detector, schema, db):
+        detector.auto_accept = True
+        detector.check_drift(schema)
+        changed_schema = {**schema, "properties": {**schema["properties"], "id": {"type": "string"}}}
+        # Should not return True (drift detected) because auto_accept is on
+        assert not detector.check_drift(changed_schema)
+        # Signature should be updated
+        sig = DriftSignature.objects.get(source="test_source", table="test_table")
+        assert sig.hash == compute_schema_hash(changed_schema)
+```
+
+### 3. Verification Commands
+
+```bash
+# 1. Run the specific test suite
+.venv/bin/pytest apps/ingest/tests/test_drift.py -q
+
+# 2. Generate the migration file (if not already done via the edit above)
+.venv/bin/python manage.py makemigrations ingest
+
+# 3. Apply migrations
+.venv/bin/python manage.py migrate
+
+# 4. Run full test suite to ensure no regressions
+.venv/bin/pytest apps/ingest/tests/ -q
+```
