@@ -21,7 +21,7 @@ A "stat picker" in each view lets you re-rank by any of ~20 sabermetric stats: A
 ## What this isn't
 
 - Not a fantasy baseball site. There are no projections, no recommendations, no draft tools.
-- Not a real-time scoring service. We don't show pitch-by-pitch; we show the leaderboard *responding* to game events.
+- Not a real-time scoring service. We don't show pitch-by-pitch; we show the leaderboard _responding_ to game events.
 - Not a historical encyclopedia. We track current-season stats with rolling history. For deep history, Baseball Reference exists.
 - Not a betting tool. There are no odds, no money lines, no anything financial.
 - Not affiliated with MLB. We use public stat data, branded carefully (no logos we don't have rights to).
@@ -74,7 +74,7 @@ diamond/
 It demonstrates:
 
 - **Real-time backend work** — SSE channels per-view, change detection, broadcast efficiency
-- **Animation that matters** — the split-flap is *the* feature; getting it to feel snappy without being chaotic is real frontend craft
+- **Animation that matters** — the split-flap is _the_ feature; getting it to feel snappy without being chaotic is real frontend craft
 - **Data pipeline thinking** — stat ingestion, schema-stable computation, off-season handling, drift detection
 - **Domain knowledge done right** — sabermetrics has its own vocabulary; doing it well shows depth
 - **Honest framing of data sources** — MLB Stats API has gaps; the case study explains them
@@ -97,6 +97,6 @@ Pin DATA.md and ARCHITECTURE.md in any Claude Code session that touches the back
 
 Recommended slot in the portfolio buildout: **third project to ship**, after Backend Bake-off and Terraplane.
 
-Reasoning: Diamond depends on a live data source (MLB Stats API) which is most useful to demonstrate during baseball season (April through October). If you're shipping in November-March, the off-season presentation is the *only* thing visitors see, which undersells the project. Better to time the launch with at least a few weeks of regular-season games left so the live aspect is the first impression.
+Reasoning: Diamond depends on a live data source (MLB Stats API) which is most useful to demonstrate during baseball season (April through October). If you're shipping in November-March, the off-season presentation is the _only_ thing visitors see, which undersells the project. Better to time the launch with at least a few weeks of regular-season games left so the live aspect is the first impression.
 
 If timing pushes the build into off-season, ship a "preview mode" that replays a recent week of games at accelerated speed so visitors can see the split-flap mechanic in action even without live games.

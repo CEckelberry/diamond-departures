@@ -6,8 +6,9 @@ Implement this project with **local LLM as primary coder** (llama-swap), while o
 
 ## Coding model routing
 
-- Primary coder: `coder-fast` (Qwen3.6 no-think)
-- Accuracy fallback: `coder-accurate`
+- **Test authoring (RED phase):** `coder-accurate`
+- **Implementation (GREEN phase):** `coder-fast`
+- **Refactor/edge-case cleanup:** `coder-accurate`
 - Long-context planner/reader: `planner-longctx`
 
 Endpoint: `http://127.0.0.1:8080/v1`
@@ -30,12 +31,13 @@ Endpoint: `http://127.0.0.1:8080/v1`
 
 ## Cadence
 
-- **Per packet**: plan -> local code -> review -> verify
+- **Per packet (TDD):** plan -> tests first (RED) -> implement (GREEN) -> refactor -> review -> verify
 - **Every 2 packets**: git sync checkpoint
 - **Daily**: one high-level health check (scope drift, blockers, quality)
 
 ## Hard rules
 
+- TDD is mandatory for all new packets: write failing tests first, then implement.
 - Never start a new packet if current packet acceptance criteria are failing.
 - One owner per file per packet (avoid overlap).
 - Prefer sequential execution for same subsystem.

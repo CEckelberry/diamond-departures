@@ -1,0 +1,68 @@
+{
+  "copyright": "Mock MLB Data",
+  "totalItems": 2,
+  "totalEvents": 0,
+  "totalGames": 2,
+  "totalGamesInProgress": 1,
+  "dates": [
+    {
+      "date": "2026-05-07",
+      "totalItems": 2,
+      "totalEvents": 0,
+      "totalGames": 2,
+      "totalGamesInProgress": 1,
+      "games": [
+        {
+          "gamePk": 662001,
+          "gameDate": "2026-05-07T23:05:00Z",
+          "status": {
+            "abstractGameState": "Live",
+            "codedGameState": "I",
+            "detailedState": "In Progress",
+            "statusCode": "I",
+            "startTimeTBD": false
+          },
+          "teams": {
+            "away": {
+              "team": {
+                "id": 111,
+                "name": "Boston Red Sox"
+              }
+            },
+            "home": {
+              "team": {
+                "id": 147,
+                "name": "New York Yankees"
+              }
+            }
+          }
+        },
+        {
+          "gamePk": 662002,
+          "gameDate": "2026-05-08T01:10:00Z",
+          "status": {
+            "abstractGameState": "Preview",
+            "codedGameState": "S",
+            "detailedState": "Scheduled",
+            "statusCode": "S",
+            "startTimeTBD": false
+          },
+          "teams": {
+            "away": {
+              "team": {
+                "id": 119,
+                "name": "Los Angeles Dodgers"
+              }
+            },
+            "home": {
+              "team": {
+                "id": 138,
+                "name": "St. Louis Cardinals"
+              }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

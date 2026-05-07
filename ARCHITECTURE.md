@@ -434,26 +434,26 @@ The ingest job itself decides whether to do real work based on season state. If 
 
 Approximate monthly cost during the season (April-October):
 
-| Resource | Monthly | Notes |
-|---|---|---|
-| Cloud SQL (db-custom-1-3840) | ~$35 | Always-on |
-| Cloud Run (frontend + api + ingest) | ~$8 | Scales to zero outside game hours |
-| Cloud Scheduler (3 jobs) | <$1 | Minimal |
-| Cloud Pub/Sub | <$1 | Tiny message volume |
-| Cloud CDN + LB + DNS | ~$15 | Required for custom domain |
-| Cloud Logging + Monitoring | ~$3 | Mostly free tier |
-| Egress | ~$2 | |
-| Artifact Registry | ~$1 | |
-| **Total in-season** | **~$65/month** | |
+| Resource                            | Monthly        | Notes                             |
+| ----------------------------------- | -------------- | --------------------------------- |
+| Cloud SQL (db-custom-1-3840)        | ~$35           | Always-on                         |
+| Cloud Run (frontend + api + ingest) | ~$8            | Scales to zero outside game hours |
+| Cloud Scheduler (3 jobs)            | <$1            | Minimal                           |
+| Cloud Pub/Sub                       | <$1            | Tiny message volume               |
+| Cloud CDN + LB + DNS                | ~$15           | Required for custom domain        |
+| Cloud Logging + Monitoring          | ~$3            | Mostly free tier                  |
+| Egress                              | ~$2            |                                   |
+| Artifact Registry                   | ~$1            |                                   |
+| **Total in-season**                 | **~$65/month** |                                   |
 
 In off-season (November-March), Cloud Run usage drops further because the ingest runs only daily:
 
-| Resource | Off-season | Notes |
-|---|---|---|
-| Cloud SQL | ~$35 | Same — DB stays up |
-| Cloud Run | ~$2 | Mostly idle |
-| Other | ~$15 | Same |
-| **Total off-season** | **~$50/month** | |
+| Resource             | Off-season     | Notes              |
+| -------------------- | -------------- | ------------------ |
+| Cloud SQL            | ~$35           | Same — DB stays up |
+| Cloud Run            | ~$2            | Mostly idle        |
+| Other                | ~$15           | Same               |
+| **Total off-season** | **~$50/month** |                    |
 
 **Wait — this is higher than the README target of $25-35/month.** That target was optimistic. Realistic is $50-65/month. Two paths to bring it down:
 
@@ -470,6 +470,7 @@ In off-season (November-March), Cloud Run usage drops further because the ingest
 ## Local development
 
 A `docker-compose.yml` brings up:
+
 - Postgres 18
 - A "MLB API mock" — a small Python FastAPI service that returns canned responses for a recent week of games. Lets us develop offline.
 - The api service

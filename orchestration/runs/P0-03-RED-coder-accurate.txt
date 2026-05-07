@@ -1,0 +1,298 @@
+# Packet P0-03-RED — MLB Mock Tests (TDD)
+
+## 1. Concise Plan
+
+1.  **Analyze Requirements**: Based on standard MLB AMI (Amateur/Minor/MLB) API structures and the scope defined, we need to mock four specific endpoints.
+2.  **Define Contracts**:
+    *   `GET /api/v1/schedule?date=today`: Returns a list of games for the specified date.
+    *   `GET /api/v1/game/{id}/feed/live`: Returns live game data (score, inning, status).
+    *   `GET /api/v1/people/{id}/stats?group=hitting,pitching`: Returns player statistics filtered by group.
+    *   `GET /api/v1/teams/{id}/roster`: Returns the current roster for a team.
+3.  **Create Test Structure**:
+    *   `tests/mlb_mock/test_contracts.py`: Contains `unittest.TestCase` classes for each endpoint.
+    *   `tests/mlb_mock/fixtures/`: JSON files representing expected responses for validation.
+    *   `tests/mlb_mock/README.md`: Documents assumptions (e.g., "today" maps to a fixed date for determinism).
+4.  **Implement Tests**: Write tests that assert HTTP status codes, JSON schema keys, and data types. These will initially fail because the mock service at `localhost:8090` does not exist yet.
+5.  **Verify RED State**: Run the tests to confirm they fail as expected.
+
+## 2. Exact File Edits (Unified Diff)
+
+### File: `tests/mlb_mock/__init__.py`
+```diff
+--- /dev/null
++++ b/tests/mlb_mock/__init__.py
+@@ -0,0 +1 @@
++# MLB Mock Tests Package
+```
+
+### File: `tests/mlb_mock/fixtures/schedule_today.json`
+```diff
+--- /dev/null
++++ b/tests/mlb_mock/fixtures/schedule_today.json
+@@ -0,0 +1,15 @@
++{
++  "copyright": "Copyright 2023 MLB Advanced Media, L.P.",
++  "totalItems": 2,
++  "totalEvents": 0,
++  "totalGames": 2,
++  "totalGamesInProgress": 0,
++  "dates": [
++    {
++      "date": "2023-10-01",
++      "totalItems": 2,
++      "totalEvents": 0,
++      "totalGames": 2,
++      "games": [
++        {
++          "gamePk": 716421,
++          "link": "/api/v1/game/716421/feed/live",
++          "gameType": "R",
++          "season": "2023",
++          "gameDate": "2023-10-01T19:05:00Z",
++          "status": {
++            "abstractGameState": "Final",
++            "codedGameState": "F",
++            "detailedState": "Final",
++            "statusCode": "F",
++            "startTimeTBD": false,
++            "abstractGameCode": "F"
++          },
++          "teams": {
++            "away": {
++              "leagueRecord": {
++                "wins": 90,
++                "losses": 72,
++                "pct": ".556"
++              },
++              "score": 3,
++              "team": {
++                "id": 147,
++                "name": "New York Yankees",
++                "link": "/api/v1/teams/147"
++              }
++            },
++            "home": {
++              "leagueRecord": {
++                "wins": 85,
++                "losses": 77,
++                "pct": ".525"
++              },
++              "score": 5,
++              "team": {
++                "id": 111,
++                "name": "Boston Red Sox",
++                "link": "/api/v1/teams/111"
++              }
++            }
++          },
++          "venue": {
++            "id": 3,
++            "name": "Fenway Park",
++            "link": "/api/v1/venues/3"
++          },
++          "content": {
++            "link": "/api/v1/game/716421/content"
++          }
++        },
++        {
++          "gamePk": 716422,
++          "link": "/api/v1/game/716422/feed/live",
++          "gameType": "R",
++          "season": "2023",
++          "gameDate": "2023-10-01T20:10:00Z",
++          "status": {
++            "abstractGameState": "Final",
++            "codedGameState": "F",
++            "detailedState": "Final",
++            "statusCode": "F",
++            "startTimeTBD": false,
++            "abstractGameCode": "F"
++          },
++          "teams": {
++            "away": {
++              "leagueRecord": {
++                "wins": 80,
++                "losses": 82,
++                "pct": ".494"
++              },
++              "score": 2,
++              "team": {
++                "id": 117,
++                "name": "Houston Astros",
++                "link": "/api/v1/teams/117"
++              }
++            },
++            "home": {
++              "leagueRecord": {
++                "wins": 95,
++                "losses": 67,
++                "pct": ".586"
++              },
++              "score": 4,
++              "team": {
++                "id": 119,
++                "name": "Los Angeles Dodgers",
++                "link": "/api/v1/teams/119"
++              }
++            }
++          },
++          "venue": {
++            "id": 22,
++            "name": "Dodger Stadium",
++            "link": "/api/v1/venues/22"
++          },
++          "content": {
++            "link": "/api/v1/game/716422/content"
++          }
++        }
++      ]
++    }
++  ]
++}
+```
+
+### File: `tests/mlb_mock/fixtures/live_feed.json`
+```diff
+--- /dev/null
++++ b/tests/mlb_mock/fixtures/live_feed.json
+@@ -0,0 +1,50 @@
++{
++  "gamePk": 716421,
++  "link": "/api/v1/game/716421/feed/live",
++  "metaData": {
++    "wait": 10,
++    "timeStamp": "20231001_200500",
++    "gameEvents": ["strikeout", "walk"],
++    "logicalEvents": ["atBat"]
++  },
++  "gameData": {
++    "game": {
++      "pk": 716421,
++      "type": "R",
++      "season": "2023",
++      "seasonDisplay": "2023"
++    },
++    "datetime": {
++      "dateTime": "2023-10-01T19:05:00Z",
++      "originalDate": "2023-10-01",
++      "officialDate": "2023-10-01",
++      "dayNight": "night",
++      "time": "7:05",
++      "ampm": "PM"
++    },
++    "status": {
++      "abstractGameState": "Live",
++      "codedGameState": "I",
++      "detailedState": "In Progress",
++      "statusCode": "I",
++      "startTimeTBD": false,
++      "abstractGameCode": "I"
++    },
++    "teams": {
++      "away": {
++        "id": 147,
++        "name": "New York Yankees",
++        "link": "/api/v1/teams/147"
++      },
++      "home": {
++        "id": 111,
++        "name": "Boston Red Sox",
++        "link": "/api/v1/teams/111"
++      }
++    },
++    "venue": {
++      "id": 3,
++      "name": "Fenway Park",
++      "link": "/api/v1/venues/3"
++    }
++  },
++  "liveData": {
++    "plays": {
++      "allPlays": [],
++      "currentPlay": {},
++      "playsByInning": []
++    },
++    "linescore": {
++      "currentInning": 5,
++      "currentInningOrdinal": "5th",
++      "inningState": "Top",
++      "inningHalf": "top",
++      "isTopInning": true,
++      "scheduledInnings": 9,
++      "innings": [
++        {
++          "num": 1,
++          "ordinalNum": "1st",
++          "home": {
++            "runs": 0,
++            "hits": 0,
++            "errors": 0,
++            "leftOnBase": 0
++          },
++          "away": {
++            "runs": 1,
++            "hits": 2,
++            "errors": 0,
++            "leftOnBase": 1
++          }
++        }
++      ],
++      "teams": {
++        "home": {
++          "runs": 2,
++          "hits": 4,
++          "errors": 0,
++          "leftOnBase": 3
++        },
++        "away": {
++          "runs": 1,
++          "hits": 2,
++          "errors": 0,
++          "leftOnBase": 1
++        }
++      },
++      "defense": {
++        "pitcher": {
++          "id": 543939,
++          "fullName": "Chris Sale",
++          "link": "/api/v1/people/543939"
++        },
++        "catcher": {
++          "id": 605228,
++          "fullName": "Christian Vazquez",
++          "link": "/api/v1/people/605228"
++        },
++        "firstBase": {
++          "id": 646240,
++          "fullName": "Rafael Devers",
++          "link": "/api/v1/people/646240"
++        },
++        "secondBase": {
++          "id": 656941,
++          "fullName": "Enrique Hernandez",
++          "link": "/api/v1/people/656941"
++        },
++        "thirdBase": {
++          "id": 605141,
++          "fullName": "Xander Bogaerts",
++          "link": "/api/v1/people/605141"
++        },
++        "shortstop": {
++          "id": 663993,
++          "fullName": "Trevor Story",
++          "link": "/api/v1/people/663993"
++        },
++        "leftField": {
++          "id": 656775,
++          "fullName": "Alex Verdugo",
++          "link": "/api/v1/people/656775"
++        },
++        "centerField": {
++          "id": 663853,
++          "fullName": "Jarren Duran",
++          "link": "/api/v1/people/663853"
++        },
++        "rightField": {
++          "id": 642708,
++          "fullName": "J.D. Martinez",
++          "link": "/api/v1/people/642

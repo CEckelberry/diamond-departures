@@ -1,0 +1,41 @@
+{
+  "copyright": "Mock MLB Data",
+  "stats": [
+    {
+      "type": {
+        "displayName": "season"
+      },
+      "group": {
+        "displayName": "hitting"
+      },
+      "splits": [
+        {
+          "season": "2026",
+          "stat": {
+            "avg": ".287",
+            "homeRuns": 8,
+            "rbi": 31
+          }
+        }
+      ]
+    },
+    {
+      "type": {
+        "displayName": "season"
+      },
+      "group": {
+        "displayName": "pitching"
+      },
+      "splits": [
+        {
+          "season": "2026",
+          "stat": {
+            "era": "3.77",
+            "strikeOuts": 96,
+            "wins": 7
+          }
+        }
+      ]
+    }
+  ]
+}

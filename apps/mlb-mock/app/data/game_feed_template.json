@@ -1,0 +1,35 @@
+{
+  "gamePk": 662001,
+  "metaData": {
+    "wait": 10,
+    "timeStamp": ""
+  },
+  "gameData": {
+    "status": {
+      "abstractGameState": "Live",
+      "detailedState": "In Progress"
+    },
+    "teams": {
+      "away": {
+        "id": 111,
+        "name": "Boston Red Sox"
+      },
+      "home": {
+        "id": 147,
+        "name": "New York Yankees"
+      }
+    }
+  },
+  "liveData": {
+    "plays": {
+      "currentPlay": {
+        "atBatIndex": 0
+      },
+      "allPlays": []
+    },
+    "linescore": {
+      "currentInning": 1,
+      "inningState": "Top"
+    }
+  }
+}

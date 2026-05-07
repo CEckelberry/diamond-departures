@@ -1,0 +1,40 @@
+{
+  "copyright": "Mock MLB Data",
+  "teamId": 147,
+  "roster": [
+    {
+      "person": {
+        "id": 660271,
+        "fullName": "Mock Player One"
+      },
+      "jerseyNumber": "27",
+      "position": {
+        "code": "1B",
+        "name": "First Base",
+        "type": "Infielder",
+        "abbreviation": "1B"
+      },
+      "status": {
+        "code": "A",
+        "description": "Active"
+      }
+    },
+    {
+      "person": {
+        "id": 670100,
+        "fullName": "Mock Player Two"
+      },
+      "jerseyNumber": "99",
+      "position": {
+        "code": "RF",
+        "name": "Right Field",
+        "type": "Outfielder",
+        "abbreviation": "RF"
+      },
+      "status": {
+        "code": "A",
+        "description": "Active"
+      }
+    }
+  ]
+}

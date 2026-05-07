@@ -1,0 +1,9 @@
+DROP TABLE IF EXISTS park_factors;
+DROP TABLE IF EXISTS ingest_runs;
+DROP TABLE IF EXISTS games;
+DROP TABLE IF EXISTS leaderboard_views;
+DROP INDEX IF EXISTS idx_player_stats_history;
+DROP INDEX IF EXISTS idx_player_stats_current;
+DROP TABLE IF EXISTS player_stats;
+DROP TABLE IF EXISTS players;
+DROP TABLE IF EXISTS teams;
