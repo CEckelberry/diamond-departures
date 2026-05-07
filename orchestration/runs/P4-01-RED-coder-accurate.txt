@@ -1,0 +1,141 @@
+# Packet P4-01-RED — layout shell tests first
+
+## 1. Concise Plan
+
+1.  **Create Test File**: Create `apps/web/tests/layout-shell.test.mjs` to define the requirements for the global layout shell.
+2.  **Define Expectations**: The test will assert that:
+    *   `+layout.svelte` exists and is valid Svelte code.
+    *   It imports `Nav` and `Footer` components.
+    *   It renders `<Nav />` at the top (fixed position).
+    *   It renders `<main>` for page content.
+    *   It renders `<Footer />` after the main content.
+3.  **Ensure Failing State**: Since the components (`Nav.svelte`, `Footer.svelte`) and potentially the layout structure do not yet exist or are not fully implemented, this test will initially fail (RED), satisfying the TDD requirement.
+4.  **Verification**: Run the specific test file and the project check command.
+
+## 2. Exact File Edits as Unified Diff
+
+### Create `apps/web/tests/layout-shell.test.mjs`
+
+```diff
+diff --git a/apps/web/tests/layout-shell.test.mjs b/apps/web/tests/layout-shell.test.mjs
+new file mode 100644
+index 0000000..8b7a9c5
+--- /dev/null
++++ b/apps/web/tests/layout-shell.test.mjs
+@@ -0,0 +1,120 @@
++import { test, assert } from 'node:test';
++import { readFileSync } from 'fs';
++import { resolve } from 'path';
++
++const ROOT_DIR = resolve(import.meta.dirname, '../..');
++const LAYOUT_PATH = resolve(ROOT_DIR, 'src/routes/+layout.svelte');
++const NAV_PATH = resolve(ROOT_DIR, 'src/components/Nav.svelte');
++const FOOTER_PATH = resolve(ROOT_DIR, 'src/components/Footer.svelte');
++
++test('layout-shell: +layout.svelte exists', () => {
++  assert.ok(
++    readFileSync(LAYOUT_PATH, 'utf-8'),
++    '+layout.svelte should exist in src/routes/'
++  );
++});
++
++test('layout-shell: Nav.svelte exists', () => {
++  assert.ok(
++    readFileSync(NAV_PATH, 'utf-8'),
++    'Nav.svelte should exist in src/components/'
++  );
++});
++
++test('layout-shell: Footer.svelte exists', () => {
++  assert.ok(
++    readFileSync(FOOTER_PATH, 'utf-8'),
++    'Footer.svelte should exist in src/components/'
++  );
++});
++
++test('layout-shell: +layout.svelte imports Nav and Footer', () => {
++  const layoutContent = readFileSync(LAYOUT_PATH, 'utf-8');
++  
++  // Check for import statements or direct usage
++  assert.ok(
++    /import\s+Nav/.test(layoutContent) || /<Nav\s*\/?>/.test(layoutContent),
++    '+layout.svelte should reference Nav component'
++  );
++  
++  assert.ok(
++    /import\s+Footer/.test(layoutContent) || /<Footer\s*\/?>/.test(layoutContent),
++    '+layout.svelte should reference Footer component'
++  );
++});
++
++test('layout-shell: Nav is rendered before main content', () => {
++  const layoutContent = readFileSync(LAYOUT_PATH, 'utf-8');
++  
++  // Simple structural check: Nav should appear before <main> in the source
++  const navIndex = layoutContent.indexOf('<Nav') !== -1 
++    ? layoutContent.indexOf('<Nav') 
++    : layoutContent.indexOf('Nav'); // Fallback if imported but not shown as tag yet
+    
++  const mainIndex = layoutContent.indexOf('<main');
++  
++  assert.ok(
++    navIndex !== -1 && mainIndex !== -1,
++    'Both Nav and main tags should be present'
++  );
++  
++  assert.ok(
++    navIndex < mainIndex,
++    'Nav should be rendered before the main content area'
++  );
++});
++
++test('layout-shell: Footer is rendered after main content', () => {
++  const layoutContent = readFileSync(LAYOUT_PATH, 'utf-8');
++  
++  const mainIndex = layoutContent.indexOf('<main');
++  const footerIndex = layoutContent.indexOf('<Footer') !== -1 
++    ? layoutContent.indexOf('<Footer') 
++    : layoutContent.indexOf('Footer'); // Fallback
+    
++  assert.ok(
++    mainIndex !== -1 && footerIndex !== -1,
++    'Both main and Footer tags should be present'
++  );
++  
++  assert.ok(
++    mainIndex < footerIndex,
++    'Footer should be rendered after the main content area'
++  );
++});
++
++test('layout-shell: Nav has fixed-top positioning', () => {
++  const navContent = readFileSync(NAV_PATH, 'utf-8');
++  
++  // Check for CSS class or style attribute indicating fixed top
++  assert.ok(
++    /fixed/.test(navContent) || /position:\s*fixed/.test(navContent) || /top:\s*0/.test(navContent),
++    'Nav component should have fixed positioning styles'
++  );
++});
++
++test('layout-shell: Footer stays in document flow', () => {
++  const footerContent = readFileSync(FOOTER_PATH, 'utf-8');
++  
++  // Footer should NOT be fixed. It should be in normal flow.
++  // We assert it does NOT have fixed positioning to ensure it stays after main content
++  assert.ok(
++    !/position:\s*fixed/.test(footerContent),
++    'Footer should not use fixed positioning'
++  );
++});
+```
+
+## 3. Verification Commands
+
+```bash
+# 1. Run the specific layout shell tests (expecting failure initially)
+node --test apps/web/tests/layout-shell.test.mjs
+
+# 2. Run the project check to ensure no syntax errors in existing code
+pnpm --filter web check
+```
