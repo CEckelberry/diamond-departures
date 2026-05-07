@@ -63,6 +63,21 @@ jobs:
       - name: run tests
         run: python -m unittest discover -s tests
 
+  stats-verify:
+    runs-on: ubuntu-latest
+    needs: [changes, lint]
+    if: ${{ needs.changes.outputs.stats == 'true' || needs.changes.outputs.workflows == 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: setup python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: install verify deps
+        run: pip install pytest
+      - name: run stats verification suite
+        run: pytest packages/stats/verify/tests -q
+
   build:
     runs-on: ubuntu-latest
     needs: [changes, lint]
@@ -83,7 +98,7 @@ jobs:
 
   deploy:
     runs-on: ubuntu-latest
-    needs: [lint, test, build]
+    needs: [lint, test, stats-verify, build]
     if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' && false }}
     steps:
       - name: deploy placeholder

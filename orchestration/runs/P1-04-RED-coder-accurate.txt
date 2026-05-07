@@ -1,0 +1,254 @@
+# Packet P1-04-RED — Verification Suite (Failing Tests)
+
+## 1. Concise Plan
+
+1.  **Create Directory Structure**: Establish `packages/stats/verify/tests/` and ensure `__init__.py` files exist for package recognition.
+2.  **Create Fixture Data (`data.json`)**: Define a deterministic JSON dataset containing player-season rows with known expected outputs for key stats (e.g., `pts_per_game`, `reb_per_game`). This serves as the "contract" for what the harness *should* produce.
+3.  **Create Test Harness Stub (`test_harness.py`)**: Write `pytest` tests that:
+    *   Load `data.json`.
+    *   Attempt to import and call stat functions from `packages.stats` (or a stubbed interface).
+    *   Compare actual vs. expected values using a tolerance threshold (0.5%).
+    *   Report mismatches with player ID, name, stat key, expected, actual, and % diff.
+4.  **Ensure RED State**: The tests will initially fail because the underlying stat functions or the harness logic is not yet implemented/connected. This satisfies the "RED only" constraint.
+5.  **Verification**: Run `pytest` to confirm failures with clear error messages.
+
+## 2. Exact File Edits (Unified Diff)
+
+### File: `packages/stats/verify/data.json`
+*(New File)*
+```json
+{
+  "metadata": {
+    "version": "1.0",
+    "description": "Curated player-season rows for verification suite"
+  },
+  "players": [
+    {
+      "id": "p001",
+      "name": "Player A",
+      "season": "2023-24",
+      "stats": {
+        "games_played": 80,
+        "total_points": 2000,
+        "total_rebounds": 400,
+        "total_assists": 600
+      },
+      "expected": {
+        "pts_per_game": 25.0,
+        "reb_per_game": 5.0,
+        "ast_per_game": 7.5
+      }
+    },
+    {
+      "id": "p002",
+      "name": "Player B",
+      "season": "2023-24",
+      "stats": {
+        "games_played": 70,
+        "total_points": 1400,
+        "total_rebounds": 350,
+        "total_assists": 210
+      },
+      "expected": {
+        "pts_per_game": 20.0,
+        "reb_per_game": 5.0,
+        "ast_per_game": 3.0
+      }
+    },
+    {
+      "id": "p003",
+      "name": "Player C",
+      "season": "2023-24",
+      "stats": {
+        "games_played": 60,
+        "total_points": 1200,
+        "total_rebounds": 180,
+        "total_assists": 120
+      },
+      "expected": {
+        "pts_per_game": 20.0,
+        "reb_per_game": 3.0,
+        "ast_per_game": 2.0
+      }
+    }
+  ]
+}
+```
+
+### File: `packages/stats/verify/tests/__init__.py`
+*(New File)*
+```python
+# packages/stats/verify/tests/__init__.py
+```
+
+### File: `packages/stats/verify/tests/test_harness.py`
+*(New File)*
+```python
+"""
+Verification harness tests for packages.stats.
+
+These tests load data.json and verify that stat functions produce
+expected results within a 0.5% tolerance.
+"""
+
+import json
+import os
+from pathlib import Path
+
+import pytest
+
+# Define paths
+BASE_DIR = Path(__file__).resolve().parent.parent.parent.parent
+DATA_FILE = BASE_DIR / "packages" / "stats" / "verify" / "data.json"
+
+# Tolerance threshold (0.5%)
+TOLERANCE = 0.005
+
+
+def load_verification_data():
+    """Load the curated player-season rows from data.json."""
+    if not DATA_FILE.exists():
+        pytest.skip(f"Verification data file not found: {DATA_FILE}")
+    
+    with open(DATA_FILE, "r") as f:
+        return json.load(f)
+
+
+def calculate_pct_diff(expected, actual):
+    """Calculate percentage difference between expected and actual."""
+    if expected == 0:
+        return 0.0 if actual == 0 else 100.0
+    return abs((actual - expected) / expected) * 100
+
+
+class TestVerificationHarness:
+    """Test suite for the verification harness."""
+
+    @pytest.fixture
+    def verification_data(self):
+        return load_verification_data()
+
+    def test_loads_verification_data(self, verification_data):
+        """Verify that data.json loads correctly and has expected structure."""
+        assert "players" in verification_data, "Missing 'players' key in data.json"
+        assert len(verification_data["players"]) > 0, "No player rows in data.json"
+        
+        for player in verification_data["players"]:
+            assert "id" in player, f"Missing 'id' for player"
+            assert "name" in player, f"Missing 'name' for player {player.get('id')}"
+            assert "stats" in player, f"Missing 'stats' for player {player['id']}"
+            assert "expected" in player, f"Missing 'expected' for player {player['id']}"
+
+    def test_stat_function_pts_per_game(self, verification_data):
+        """Test pts_per_game calculation against expected values."""
+        # Attempt to import stat function
+        try:
+            from packages.stats import stats  # Adjust import path as needed
+            calc_pts_per_game = getattr(stats, "pts_per_game", None)
+        except ImportError:
+            pytest.fail("Could not import packages.stats.stats module")
+
+        if calc_pts_per_game is None:
+            pytest.skip("pts_per_game function not yet implemented in stats module")
+
+        for player in verification_data["players"]:
+            games_played = player["stats"]["games_played"]
+            total_points = player["stats"]["total_points"]
+            expected_ppg = player["expected"]["pts_per_game"]
+
+            # Call the stat function
+            actual_ppg = calc_pts_per_game(games_played, total_points)
+
+            # Check tolerance
+            pct_diff = calculate_pct_diff(expected_ppg, actual_ppg)
+            
+            assert pct_diff <= (TOLERANCE * 100), (
+                f"Mismatch for player {player['id']} ({player['name']}): "
+                f"pts_per_game expected={expected_ppg}, actual={actual_ppg}, "
+                f"pct_diff={pct_diff:.2f}% (tolerance: {TOLERANCE * 100}%)"
+            )
+
+    def test_stat_function_reb_per_game(self, verification_data):
+        """Test reb_per_game calculation against expected values."""
+        try:
+            from packages.stats import stats
+            calc_reb_per_game = getattr(stats, "reb_per_game", None)
+        except ImportError:
+            pytest.fail("Could not import packages.stats.stats module")
+
+        if calc_reb_per_game is None:
+            pytest.skip("reb_per_game function not yet implemented in stats module")
+
+        for player in verification_data["players"]:
+            games_played = player["stats"]["games_played"]
+            total_rebounds = player["stats"]["total_rebounds"]
+            expected_rpg = player["expected"]["reb_per_game"]
+
+            actual_rpg = calc_reb_per_game(games_played, total_rebounds)
+            pct_diff = calculate_pct_diff(expected_rpg, actual_rpg)
+
+            assert pct_diff <= (TOLERANCE * 100), (
+                f"Mismatch for player {player['id']} ({player['name']}): "
+                f"reb_per_game expected={expected_rpg}, actual={actual_rpg}, "
+                f"pct_diff={pct_diff:.2f}% (tolerance: {TOLERANCE * 100}%)"
+            )
+
+    def test_stat_function_ast_per_game(self, verification_data):
+        """Test ast_per_game calculation against expected values."""
+        try:
+            from packages.stats import stats
+            calc_ast_per_game = getattr(stats, "ast_per_game", None)
+        except ImportError:
+            pytest.fail("Could not import packages.stats.stats module")
+
+        if calc_ast_per_game is None:
+            pytest.skip("ast_per_game function not yet implemented in stats module")
+
+        for player in verification_data["players"]:
+            games_played = player["stats"]["games_played"]
+            total_assists = player["stats"]["total_assists"]
+            expected_apg = player["expected"]["ast_per_game"]
+
+            actual_apg = calc_ast_per_game(games_played, total_assists)
+            pct_diff = calculate_pct_diff(expected_apg, actual_apg)
+
+            assert pct_diff <= (TOLERANCE * 100), (
+                f"Mismatch for player {player['id']} ({player['name']}): "
+                f"ast_per_game expected={expected_apg}, actual={actual_apg}, "
+                f"pct_diff={pct_diff:.2f}% (tolerance: {TOLERANCE * 100}%)"
+            )
+
+    def test_mismatch_reporting_format(self, verification_data):
+        """Ensure that mismatch errors include all required fields."""
+        # This test verifies the error message format by intentionally
+        # triggering a failure with a known bad value if functions existed.
+        # Since functions are skipped/missing, we assert the structure of data.json
+        # supports this reporting.
+        
+        for player in verification_data["players"]:
+            assert "id" in player, "Player missing 'id' for error reporting"
+            assert "name" in player, "Player missing 'name' for error reporting"
+            
+            for stat_key, expected_val in player["expected"].items():
+                assert isinstance(expected_val, (int, float)), \
+                    f"Expected value for {stat_key} must be numeric"
+```
+
+## 3. Verification Commands
+
+1.  **Ensure Directory Structure**:
+    ```bash
+    mkdir -p packages/stats/verify/tests
+    touch packages/stats/verify/tests/__init__.py
+    ```
+
+2.  **Create Files**:
+    *   Create `packages/stats/verify/data.json` with the content above.
+    *   Create `packages/stats/verify/tests/test_harness.py` with the content above.
+
+3.  **Run Tests (RED State)**:
+    ```bash
+    .venv/bin/pytest packages/stats/verify/tests -q
+    ```
+
+    **Expected Outcome**: Tests will fail or skip because `packages.stats.stats` module or specific functions (`pts_per_game`, etc.) are not yet implemented. The test output should clearly indicate missing implementations or import errors, satisfying the RED requirement.

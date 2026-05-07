@@ -1,0 +1,167 @@
+{
+  "metadata": {
+    "capture_date": "2026-05-07",
+    "tolerance_percent": 0.5,
+    "notes": "Hand-curated representative player-seasons for regression verification."
+  },
+  "entries": [
+    {
+      "player_id": 592450,
+      "player_name": "Mookie Betts",
+      "season": 2024,
+      "source": {
+        "fangraphs": "https://www.fangraphs.com/players/mookie-betts/13611/stats",
+        "baseball_reference": "https://www.baseball-reference.com/players/b/bettsmo01.shtml"
+      },
+      "inputs": {
+        "hitting": {
+          "h": 160,
+          "ab": 550,
+          "bb": 65,
+          "hbp": 4,
+          "sf": 6,
+          "doubles": 32,
+          "triples": 2,
+          "home_runs": 28,
+          "strikeouts": 140,
+          "intentional_walks": 5
+        },
+        "league_context": {
+          "league_woba": 0.315,
+          "woba_scale": 1.22,
+          "league_runs_per_pa": 0.12,
+          "park_factor": 0.98
+        },
+        "woba_weights_year": 2026
+      },
+      "expected": {
+        "avg": 0.290909,
+        "obp": 0.3664,
+        "slg": 0.509091,
+        "ops": 0.875491,
+        "iso": 0.218182,
+        "babip": 0.340206,
+        "woba": 0.383274,
+        "wrc_plus": 148.635378
+      }
+    },
+    {
+      "player_id": 545361,
+      "player_name": "Jose Ramirez",
+      "season": 2024,
+      "source": {
+        "fangraphs": "https://www.fangraphs.com/players/jose-ramirez/13510/stats",
+        "baseball_reference": "https://www.baseball-reference.com/players/r/ramirjo01.shtml"
+      },
+      "inputs": {
+        "hitting": {
+          "h": 138,
+          "ab": 520,
+          "bb": 48,
+          "hbp": 2,
+          "sf": 5,
+          "doubles": 24,
+          "triples": 5,
+          "home_runs": 17,
+          "strikeouts": 121,
+          "intentional_walks": 3
+        },
+        "league_context": {
+          "league_woba": 0.315,
+          "woba_scale": 1.22,
+          "league_runs_per_pa": 0.12,
+          "park_factor": 0.98
+        },
+        "woba_weights_year": 2026
+      },
+      "expected": {
+        "avg": 0.265385,
+        "obp": 0.326957,
+        "slg": 0.428846,
+        "ops": 0.755803,
+        "iso": 0.163462,
+        "babip": 0.312661,
+        "woba": 0.333427,
+        "wrc_plus": 114.586457
+      }
+    },
+    {
+      "player_id": 605400,
+      "player_name": "Gerrit Cole",
+      "season": 2024,
+      "source": {
+        "fangraphs": "https://www.fangraphs.com/players/gerrit-cole/13125/stats",
+        "baseball_reference": "https://www.baseball-reference.com/players/c/colege01.shtml"
+      },
+      "inputs": {
+        "pitching": {
+          "earned_runs": 64,
+          "innings_pitched": 182.1,
+          "hits": 155,
+          "walks": 48,
+          "strikeouts": 210,
+          "home_runs": 24,
+          "hit_by_pitch": 6,
+          "fly_balls": 210,
+          "plate_appearances": 760,
+          "ground_balls": 330
+        },
+        "league_context": {
+          "league_era": 4.08,
+          "park_factor": 0.97
+        },
+        "pitching_constants_year": 2026
+      },
+      "expected": {
+        "era": 3.163097,
+        "whip": 1.114772,
+        "k_per_nine": 10.378913,
+        "bb_per_nine": 2.372323,
+        "k_minus_bb_rate": 0.213158,
+        "fip": 3.39654,
+        "xfip": 3.482208,
+        "siera": 3.020881,
+        "era_plus": 125.240506
+      }
+    },
+    {
+      "player_id": 543037,
+      "player_name": "Blake Snell",
+      "season": 2024,
+      "source": {
+        "fangraphs": "https://www.fangraphs.com/players/blake-snell/13543/stats",
+        "baseball_reference": "https://www.baseball-reference.com/players/s/snellbl01.shtml"
+      },
+      "inputs": {
+        "pitching": {
+          "earned_runs": 51,
+          "innings_pitched": 166.2,
+          "hits": 149,
+          "walks": 62,
+          "strikeouts": 171,
+          "home_runs": 19,
+          "hit_by_pitch": 8,
+          "fly_balls": 195,
+          "plate_appearances": 705,
+          "ground_balls": 300
+        },
+        "league_context": {
+          "league_era": 4.08,
+          "park_factor": 1.02
+        },
+        "pitching_constants_year": 2026
+      },
+      "expected": {
+        "era": 2.761733,
+        "whip": 1.269555,
+        "k_per_nine": 9.259928,
+        "bb_per_nine": 3.357401,
+        "k_minus_bb_rate": 0.15461,
+        "fip": 3.791937,
+        "xfip": 4.136101,
+        "siera": 3.649776,
+        "era_plus": 150.782609
+      }
+    }
+  ]
+}

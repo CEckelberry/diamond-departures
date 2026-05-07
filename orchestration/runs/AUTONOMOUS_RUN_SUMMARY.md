@@ -5,42 +5,39 @@ Repo: `/home/roger/Documents/coding/cole-portfolio-apps/diamond-departures`
 
 ## Completed packets in this execution window
 
-- **P1-01 (Task 1.1) — done**
-  - Completed hitting package additions: `woba_weights_2026.json`, `woba.py`, `wrc.py`, `LeagueContext`, exports, and expanded tests.
-  - Verified coverage gate for hitting package: **97.32%** with `--cov-fail-under=90`.
-  - Verification artifact: `orchestration/runs/P1-01-FULL-verify.md`.
+- **P1-04 (Task 1.4) — done**
+  - Added verification dataset + docs under `packages/stats/verify`.
+  - Implemented verification harness with 0.5% tolerance mismatch reporting.
+  - Added CI `stats-verify` job running `pytest packages/stats/verify/tests -q`.
+  - Verification artifact: `orchestration/runs/P1-04-verify.md`.
 
-- **P1-02 (Task 1.2) — done**
-  - Implemented pitching package: `basic.py`, `fip.py`, `siera.py`, `era_plus.py`, `cfip_2026.json`, exports, and tests.
-  - Added constants loader and formula checks for FIP/xFIP/SIERA/ERA+.
-  - Verification artifact: `orchestration/runs/P1-02-verify.md`.
+- **P1-05 (Task 1.5) — done**
+  - Added ingest skeleton modules: config loader, MLB client retries/429 handling, store init wrapper, and one-shot job wiring.
+  - Added ingest tests for config/client/store/job and Dockerfile scaffold.
+  - Verification artifact: `orchestration/runs/P1-05-verify.md`.
 
-- **P1-03 (Task 1.3) — done (time-available extra)**
-  - Implemented defensive parsing + qualification slice: `parsers.py`, `qualification.py`, package exports, and tests.
-  - Added UZR/150 normalization path and `(noisy)` tag threshold logic.
-  - Verification artifact: `orchestration/runs/P1-03-verify.md`.
+- **P1-06 (Task 1.6) — done**
+  - Added schedule live-game extraction, feed stat-event extraction, and snapshot diff idempotency helper.
+  - Added mlb-mock-style fixtures and processing tests.
+  - Job now processes live game feeds and returns update counts + snapshot.
+  - Verification artifact: `orchestration/runs/P1-06-verify.md`.
 
 ## TDD evidence
 
-- P1-01 RED: missing `woba`/`wrc` modules caused collection failures before GREEN.
-- P1-02 RED: missing pitching modules caused collection failures before GREEN.
-- P1-03 RED: missing defensive modules caused collection failures before GREEN.
-- GREEN: all targeted package tests now pass.
+- P1-04 RED: missing `verify.harness` module + missing CI hook.
+- P1-05 RED: missing `apps.ingest.app.*` modules for config/client/store/job tests.
+- P1-06 RED: missing `schedule`, `game_processor`, `state_diff` modules.
+- GREEN: targeted suites all passing after implementation.
 
 ## Validation commands run
 
-- `.venv/bin/pytest packages/stats/hitting/tests -q`
-- `.venv/bin/pytest packages/stats/hitting/tests --cov=packages/stats/hitting --cov-report=term-missing --cov-fail-under=90 -q`
-- `.venv/bin/pytest packages/stats/pitching/tests -q`
-- `.venv/bin/pytest packages/stats/defensive/tests -q`
-- `.venv/bin/pytest packages/stats/hitting/tests packages/stats/pitching/tests packages/stats/defensive/tests -q`
+- `.venv/bin/pytest packages/stats/verify/tests -q`
+- `.venv/bin/pytest apps/ingest/tests/test_config.py apps/ingest/tests/test_mlb_client.py apps/ingest/tests/test_store.py apps/ingest/tests/test_job.py -q`
+- `.venv/bin/pytest apps/ingest/tests/test_schedule.py apps/ingest/tests/test_game_processor.py apps/ingest/tests/test_state_diff.py -q`
+- `.venv/bin/pytest apps/ingest/tests -q`
 
-## Current blockers / risks
+## Risks / follow-ups
 
-- SIERA implementation uses one deterministic coefficient form; if project standard changes to a different published variant, tests/coefficients need adjustment.
-- Defensive parser currently supports fixture-validated payload shapes only; more source variants may require parser extension.
-
-## Immediate next packets
-
-1. Task 1.4 verification suite (`packages/stats/verify`) with curated benchmark dataset.
-2. Integrate stats packages into ingest pipeline packets (Task 1.5+).
+- Verification dataset is curated contract (small starter slice), not full 50-row target yet.
+- Store layer is scaffold wrapper; real DB engine/session plumbing still needed for later packets.
+- P1-07 not started in this window.

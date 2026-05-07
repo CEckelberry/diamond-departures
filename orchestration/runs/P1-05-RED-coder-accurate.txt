@@ -1,0 +1,228 @@
+(1) Concise Plan
+1.  **Create Skeletons**: Implement the target modules (`config.py`, `mlb_client.py`, `store.py`, `job.py`) with minimal logic to satisfy imports but return dummy values or raise errors where appropriate, ensuring they are structurally correct but functionally "failing" regarding the specific test assertions (e.g., wrong defaults, no retry logic implemented yet).
+2.  **Create Tests**: Write pytest files for each module.
+    *   `test_config.py`: Assert that environment variables override defaults correctly, and check default values.
+    *   `test_mlb_client.py`: Mock `requests` to simulate 429s and transient errors. Assert that the client retries the correct number of times or raises after max retries.
+    *   `test_store.py`: Mock `sqlalchemy`. Assert that `init_db` calls the correct constructors with expected arguments.
+    *   `test_job.py`: Mock the dependencies (`mlb_client`, `store`). Assert that `run_job` calls them in the correct order.
+3.  **Verify**: Run `pytest` to ensure tests fail (RED state) as intended, confirming the test logic is sound but the implementation is incomplete.
+
+(2) Exact File Edits as Unified Diff
+
+```diff
+diff --git a/apps/ingest/app/config.py b/apps/ingest/app/config.py
+new file mode 100644
+index 0000000..1234567
+--- /dev/null
++++ b/apps/ingest/app/config.py
+@@ -0,0 +1,15 @@
++import os
++
++DEFAULTS = {
++    "MLB_API_KEY": "default_key",
++    "MLB_BASE_URL": "https://statsapi.mlb.com",
++    "DB_URL": "sqlite:///ingest.db",
++    "MAX_RETRIES": 3,
++}
++
++def get_config():
++    return {
++        "MLB_API_KEY": os.getenv("MLB_API_KEY", DEFAULTS["MLB_API_KEY"]),
++        "MLB_BASE_URL": os.getenv("MLB_BASE_URL", DEFAULTS["MLB_BASE_URL"]),
++        "DB_URL": os.getenv("DB_URL", DEFAULTS["DB_URL"]),
++    }
+diff --git a/apps/ingest/app/mlb_client.py b/apps/ingest/app/mlb_client.py
+new file mode 100644
+index 0000000..2345678
+--- /dev/null
++++ b/apps/ingest/app/mlb_client.py
+@@ -0,0 +1,10 @@
++import requests
++
++class MLBClient:
++    def __init__(self, api_key, base_url):
++        self.api_key = api_key
++        self.base_url = base_url
++        self.session = requests.Session()
++
++    def get_data(self, endpoint):
++        return self.session.get(f"{self.base_url}/{endpoint}")
+diff --git a/apps/ingest/app/store.py b/apps/ingest/app/store.py
+new file mode 100644
+index 0000000..3456789
+--- /dev/null
++++ b/apps/ingest/app/store.py
+@@ -0,0 +1,10 @@
++from sqlalchemy import create_engine
++from sqlalchemy.orm import sessionmaker
++
++def init_db(db_url):
++    engine = create_engine(db_url)
++    Session = sessionmaker(bind=engine)
++    return {
++        "engine": engine,
++        "session_factory": Session
++    }
+diff --git a/apps/ingest/app/job.py b/apps/ingest/app/job.py
+new file mode 100644
+index 0000000..4567890
+--- /dev/null
++++ b/apps/ingest/app/job.py
+@@ -0,0 +1,15 @@
++from .config import get_config
++from .mlb_client import MLBClient
++from .store import init_db
++
++def run_job():
++    config = get_config()
++    client = MLBClient(config["MLB_API_KEY"], config["MLB_BASE_URL"])
++    store = init_db(config["DB_URL"])
++    
++    # Placeholder for actual logic
++    response = client.get_data("stats")
++    
++    # Placeholder for storing
++    session = store["session_factory"]()
++    return {"status": "completed"}
+diff --git a/apps/ingest/tests/test_config.py b/apps/ingest/tests/test_config.py
+new file mode 100644
+index 0000000..5678901
+--- /dev/null
++++ b/apps/ingest/tests/test_config.py
+@@ -0,0 +1,20 @@
++import os
++from unittest.mock import patch
++from apps.ingest.app.config import get_config, DEFAULTS
++
++def test_defaults():
++    with patch.dict(os.environ, {}, clear=True):
++        config = get_config()
++        assert config["MLB_API_KEY"] == DEFAULTS["MLB_API_KEY"]
++        assert config["MLB_BASE_URL"] == DEFAULTS["MLB_BASE_URL"]
++        assert config["DB_URL"] == DEFAULTS["DB_URL"]
++
++def test_env_override():
++    with patch.dict(os.environ, {"MLB_API_KEY": "test_key", "DB_URL": "sqlite:///:memory:"}):
++        config = get_config()
++        assert config["MLB_API_KEY"] == "test_key"
++        assert config["DB_URL"] == "sqlite:///:memory:"
++        # Ensure non-overridden keys still use defaults
++        assert config["MLB_BASE_URL"] == DEFAULTS["MLB_BASE_URL"]
+diff --git a/apps/ingest/tests/test_mlb_client.py b/apps/ingest/tests/test_mlb_client.py
+new file mode 100644
+index 0000000..6789012
+--- /dev/null
++++ b/apps/ingest/tests/test_mlb_client.py
+@@ -0,0 +1,30 @@
++import pytest
++from unittest.mock import Mock, patch
++from apps.ingest.app.mlb_client import MLBClient
++
++def test_retry_on_429():
++    """Test that the client retries on 429 Too Many Requests."""
++    # Note: Current implementation does NOT implement retry logic.
++    # This test should FAIL because get_data will raise an exception or return 429 directly.
++    with patch('apps.ingest.app.mlb_client.requests.Session') as MockSession:
++        mock_instance = Mock()
++        MockSession.return_value = mock_instance
++        
++        # Simulate 429 response
++        mock_response = Mock()
++        mock_response.status_code = 429
++        mock_instance.get.return_value = mock_response
++        
++        client = MLBClient("key", "http://base")
++        response = client.get_data("test")
++        
++        # Assertion: Should have retried (e.g., 3 times). 
++        # Since current impl has no retry, call_count will be 1.
++        assert mock_instance.get.call_count == 4, "Expected 4 calls (1 initial + 3 retries)"
+diff --git a/apps/ingest/tests/test_store.py b/apps/ingest/tests/test_store.py
+new file mode 100644
+index 0000000..7890123
+--- /dev/null
++++ b/apps/ingest/tests/test_store.py
+@@ -0,0 +1,15 @@
++import pytest
++from unittest.mock import patch, MagicMock
++from apps.ingest.app.store import init_db
++
++def test_init_db_creates_engine_and_session():
++    with patch('apps.ingest.app.store.create_engine') as mock_create_engine, \
++         patch('apps.ingest.app.store.sessionmaker') as mock_sessionmaker:
++        
++        mock_engine = MagicMock()
++        mock_create_engine.return_value = mock_engine
++        
++        result = init_db("sqlite:///test.db")
++        
++        mock_create_engine.assert_called_once_with("sqlite:///test.db")
++        assert result["engine"] == mock_engine
++        assert "session_factory" in result
+diff --git a/apps/ingest/tests/test_job.py b/apps/ingest/tests/test_job.py
+new file mode 100644
+index 0000000..8901234
+--- /dev/null
++++ b/apps/ingest/tests/test_job.py
+@@ -0,0 +1,25 @@
++import pytest
++from unittest.mock import patch, MagicMock
++from apps.ingest.app.job import run_job
++
++def test_run_job_wiring():
++    """Test that run_job correctly wires config, client, and store."""
++    with patch('apps.ingest.app.job.get_config') as mock_get_config, \
++         patch('apps.ingest.app.job.MLBClient') as mock_mlb_client, \
++         patch('apps.ingest.app.job.init_db') as mock_init_db:
++         
++        mock_get_config.return_value = {
++            "MLB_API_KEY": "test_key",
++            "MLB_BASE_URL": "http://test.com",
++            "DB_URL": "sqlite:///test.db"
++        }
++        
++        mock_store = {"session_factory": MagicMock()}
++        mock_init_db.return_value = mock_store
++        
++        run_job()
++        
++        mock_get_config.assert_called_once()
++        mock_mlb_client.assert_called_once_with("test_key", "http://test.com")
++        mock_init_db.assert_called_once_with("sqlite:///test.db")
+```
+
+(3) Verification Commands
+
+```bash
+# 1. Ensure dependencies are installed (assuming requirements.txt exists or using pip install)
+pip install pytest sqlalchemy requests
+
+# 2. Run the specific test suite
+.venv/bin/pytest apps/ingest/tests/test_config.py apps/ingest/tests/test_mlb_client.py apps/ingest/tests/test_store.py apps/ingest/tests/test_job.py -q
+
+# Expected Output:
+# FFFF
+# 4 failed
+# 
+# Details:
+# - test_retry_on_429: FAILS because call_count is 1, expected 4 (RED: Implementation missing retry logic)
+# - Others: Likely PASS if skeletons are correct, or FAIL if imports are wrong. 
+#   To strictly adhere to "RED only", we might need to make the skeleton for test_store/test_job slightly broken 
+#   or adjust assertions if the skeleton is too perfect. 
+#   However, the prompt asks for "failing tests for ... paths". 
+#   Usually, this means the *logic* under test fails. 
+#   Let's adjust test_mlb_client to definitely fail.
+#   The other tests (config, store, job) are integration/smoke tests. If the skeleton works, they pass.
+#   To ensure RED state for ALL, we can make the skeleton for config return a wrong default, or 
+#   simply accept that "RED" applies to the specific feature being tested (retry logic).
+#   
+#   If strict RED for all files is required:
+#   Modify test_config.py to assert a wrong default initially? No, that's bad testing.
+#   Better: The prompt says "create failing tests for ... paths". 
+#   This usually implies the *implementation* of the feature (retry) is what fails.
+#   The other tests are smoke tests. If they pass, it means the skeleton is correct.
+#   Let's assume the goal is to have at least one failure (the retry test) to prove the test suite works and catches missing logic.
+#   
+#   If you want ALL to fail initially:
+#   Change test_store.py to assert a specific attribute that doesn't exist yet in the skeleton.
+```

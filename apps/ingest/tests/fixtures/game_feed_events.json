@@ -1,0 +1,34 @@
+{
+  "gamePk": 662001,
+  "liveData": {
+    "plays": {
+      "allPlays": [
+        {
+          "atBatIndex": 1,
+          "result": {"eventType": "single"},
+          "matchup": {"batter": {"id": 660271}}
+        },
+        {
+          "atBatIndex": 2,
+          "result": {"eventType": "double"},
+          "matchup": {"batter": {"id": 621566}}
+        },
+        {
+          "atBatIndex": 3,
+          "result": {"eventType": "home_run"},
+          "matchup": {"batter": {"id": 592450}}
+        },
+        {
+          "atBatIndex": 4,
+          "result": {"eventType": "walk"},
+          "matchup": {"batter": {"id": 545361}}
+        },
+        {
+          "atBatIndex": 5,
+          "result": {"eventType": "strikeout"},
+          "matchup": {"batter": {"id": 605400}}
+        }
+      ]
+    }
+  }
+}

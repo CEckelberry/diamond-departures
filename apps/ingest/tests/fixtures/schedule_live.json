@@ -1,0 +1,23 @@
+{
+  "dates": [
+    {
+      "date": "2026-05-07",
+      "games": [
+        {
+          "gamePk": 662001,
+          "status": {
+            "abstractGameState": "Live",
+            "codedGameState": "I"
+          }
+        },
+        {
+          "gamePk": 662002,
+          "status": {
+            "abstractGameState": "Preview",
+            "codedGameState": "S"
+          }
+        }
+      ]
+    }
+  ]
+}
