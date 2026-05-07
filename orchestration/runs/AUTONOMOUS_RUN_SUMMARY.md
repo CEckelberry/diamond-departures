@@ -70,41 +70,45 @@ Repo: `/home/roger/Documents/coding/cole-portfolio-apps/diamond-departures`
   - Implemented dev-gated flap test page with controls for single/word/storm flips and row-shift sound trigger.
   - Verification artifact: `orchestration/runs/P3-05-verify.md`.
 
+- **P4-01 (Task 4.1) — completed**
+  - Added RED tests for root shell imports/render and missing shell components.
+  - Implemented global `Nav.svelte`, `Footer.svelte`, and composed shell layout in root `+layout.svelte`.
+  - Verification artifact: `orchestration/runs/P4-01-verify.md`.
+
+- **P4-02 (Task 4.2) — completed**
+  - Added RED tests for mode class map, freshness fetch hooks, and sound toggle wiring.
+  - Implemented `Header.svelte` with mode/status pills, freshness debug placeholder, and periodic status refresh.
+  - Verification artifact: `orchestration/runs/P4-02-verify.md`.
+
+- **P4-03 (Task 4.3) — completed**
+  - Added RED tests for URL param sync behavior and position dropdown outside-click close.
+  - Implemented `ViewTabs.svelte` + `StatPicker.svelte` with `goto`-driven `view/sort/position` param writes.
+  - Verification artifact: `orchestration/runs/P4-03-verify.md`.
+
+- **P4-04 (Task 4.4) — completed**
+  - Added RED tests for board/row scaffold and `Word.svelte` composition for row cells.
+  - Implemented `Board.svelte`, `Row.svelte`, `types.ts`, and updated `+page.svelte` board screen composition.
+  - Verification artifact: `orchestration/runs/P4-04-verify.md`.
+
 ## TDD evidence
 
-- P1-10 RED: missing `apps.ingest.app.positions` module import.
-- P2-01 RED: missing FastAPI and API app modules.
-- P2-02 RED: `create_app` missing board injection and route contract.
-- P2-03 RED: missing cache module import.
-- P2-04 RED: missing pubsub module import.
-- P2-05 RED: missing sse module import / failing stream contracts.
-- P2-06 RED: `create_app` missing player reader injection args/endpoints.
-- P2-07 RED: `create_app` missing season/freshness reader injection args/endpoints.
-- P3-01 RED: web check failed due to missing `$lib/components/flap/Cell.svelte`.
-- P3-02 RED: node test failed due to missing `components/flap/animation.mjs`.
-- P3-03 RED: node test failed due to missing `components/flap/word.mjs`.
-- P3-04 RED: node test failed due to missing `stores/sound.mjs`.
-- P3-05 RED: node route test failed due to missing `/test/flap/+page.svelte`.
-- GREEN: all targeted suites passing after implementation.
+- P4-01 RED: layout shell tests failed due to missing nav/footer components and imports.
+- P4-02 RED: board header tests failed due to missing `Header.svelte`.
+- P4-03 RED: control tests failed due to missing `ViewTabs.svelte` and `StatPicker.svelte`.
+- P4-04 RED: board structure tests failed due to missing `Board.svelte` and `Row.svelte`.
+- GREEN: all Phase 4 packet suites pass after implementation.
 
 ## Validation commands run
 
-- `.venv/bin/pytest apps/ingest/tests/test_positions.py -q`
-- `.venv/bin/pytest apps/ingest/tests -q`
-- `.venv/bin/pytest apps/api/tests/test_health.py apps/api/tests/test_config.py -q`
-- `.venv/bin/pytest apps/api/tests/test_board.py -q`
-- `.venv/bin/pytest apps/api/tests/test_cache.py -q`
-- `.venv/bin/pytest apps/api/tests/test_pubsub.py -q`
-- `.venv/bin/pytest apps/api/tests/test_sse.py -q`
-- `.venv/bin/pytest apps/api/tests/test_players.py -q`
-- `.venv/bin/pytest apps/api/tests/test_status.py -q`
-- `.venv/bin/pytest apps/api/tests -q`
+- `node --test apps/web/tests/layout-shell.test.mjs`
+- `node --test apps/web/tests/board-header.test.mjs`
+- `node --test apps/web/tests/view-controls.test.mjs`
+- `node --test apps/web/tests/board-structure.test.mjs`
+- `node --test apps/web/tests/layout-shell.test.mjs apps/web/tests/board-header.test.mjs apps/web/tests/view-controls.test.mjs apps/web/tests/board-structure.test.mjs`
 - `pnpm --filter web check`
-- `node --test apps/web/tests/flap-animation.test.mjs apps/web/tests/flap-word.test.mjs apps/web/tests/flap-sound.test.mjs apps/web/tests/flap-route.test.mjs`
 
 ## Risks / follow-ups
 
-- API DB health check uses injectable callback; concrete Postgres probe still pending.
-- Board/player/status endpoints currently use injectable reader callbacks/in-memory defaults; DB-backed query integration still pending later packets.
-- Cache is local-process only; distributed multi-instance coherence strategy still pending.
-- Web check has warning-only missing `@types/node`; non-blocking for this packet but should be cleaned up later.
+- Header polling is temporary (30s); SSE freshness sync lands in Task 4.6.
+- `ViewTabs`/`StatPicker` URL contract is now established; must stay stable when server-backed loading arrives in Task 4.5.
+- Web check has warning-only missing `@types/node`; non-blocking but should be cleaned later.

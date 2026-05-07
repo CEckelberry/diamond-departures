@@ -1,0 +1,269 @@
+### 1. Concise Plan
+
+1.  **Scaffold Test File**: Create `apps/web/tests/board-structure.test.mjs`.
+2.  **Mock Components**: Since we are testing structure/composition without a full browser environment (implied by `.mjs` and Node test runner), we will use a lightweight DOM mocking strategy or assume the test harness provides a virtual DOM environment (like JSDOM). Given the prompt asks for "failing checks" that become passing, I will write tests that assert the *presence* of specific DOM nodes and attributes that the Svelte components should render.
+3.  **Implement Tests**:
+    *   **Board Test**: Render `Board.svelte`. Assert it contains a header row with consistent columns (Rank, Player, Team, Position, Stat). Assert it contains a list region with exactly 100 items (rows).
+    *   **Row Test**: Render `Row.svelte`. Assert it renders child components for Rank, Player, Team, Position, and Stat. Assert CSS classes related to height and grid alignment are present.
+4.  **Verification**: Run the specific test command and type check.
+
+### 2. Exact File Edits
+
+#### File: `apps/web/tests/board-structure.test.mjs`
+
+```javascript
+import { describe, it, expect } from 'node:test';
+import { JSDOM } from 'jsdom';
+import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+
+// Helper to load Svelte components as strings for simple DOM parsing
+// Note: In a real project, you'd use @testing-library/svelte. 
+// Here we simulate the structure assertions by checking if the rendered HTML 
+// matches expected patterns if we were to compile them, or more likely,
+// we assume the test environment can import Svelte components.
+// However, since this is a "Packet" for implementation, I will write 
+// the test assuming a standard Svelte testing setup using @testing-library/svelte.
+
+import { render } from '@testing-library/svelte';
+import Board from '../src/lib/components/Board.svelte';
+import Row from '../src/lib/components/Row.svelte';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+describe('Board Structure', () => {
+  it('renders consistent column headers', () => {
+    const { container } = render(Board, {
+      props: {
+        rows: Array.from({ length: 100 }, (_, i) => ({
+          rank: i + 1,
+          player: `Player ${i + 1}`,
+          team: `Team ${i + 1}`,
+          position: 'Forward',
+          stat: 100 - i
+        }))
+      }
+    });
+
+    // Assert header exists and has expected columns
+    const headers = container.querySelectorAll('th');
+    expect(headers.length).toBeGreaterThanOrEqual(5);
+    
+    const headerTexts = Array.from(headers).map(h => h.textContent.trim().toLowerCase());
+    expect(headerTexts).toContain('rank');
+    expect(headerTexts).toContain('player');
+    expect(headerTexts).toContain('team');
+    expect(headerTexts).toContain('position');
+    expect(headerTexts).toContain('stat');
+  });
+
+  it('renders 100-row list region', () => {
+    const rowsData = Array.from({ length: 100 }, (_, i) => ({
+      rank: i + 1,
+      player: `Player ${i + 1}`,
+      team: `Team ${i + 1}`,
+      position: 'Forward',
+      stat: 100 - i
+    }));
+
+    const { container } = render(Board, { props: { rows: rowsData } });
+
+    // Assert list region exists
+    const listRegion = container.querySelector('[data-testid="board-list"]') || 
+                       container.querySelector('.board-list') ||
+                       container.querySelector('tbody');
+    
+    expect(listRegion).toBeTruthy();
+
+    // Assert 100 rows are rendered
+    const rowElements = listRegion.querySelectorAll('tr');
+    expect(rowElements.length).toBe(100);
+  });
+});
+
+describe('Row Composition', () => {
+  it('composes Word.svelte for rank/player/team/position/stat cells', () => {
+    // Mock Word component to verify it's being used
+    const mockWord = (props) => `<div class="word-cell">${props.value}</div>`;
+    
+    // We test the Row component directly. 
+    // If Word.svelte is a child, we look for its specific class or structure.
+    // Assuming Word.svelte renders a div with class 'word' or similar.
+    
+    const rowProps = {
+      rank: 1,
+      player: 'Test Player',
+      team: 'Test Team',
+      position: 'Mid',
+      stat: 50
+    };
+
+    const { container } = render(Row, { props: rowProps });
+
+    // Assert specific cells exist
+    const rankCell = container.querySelector('[data-testid="row-rank"]') || 
+                     container.querySelector('.rank-cell');
+    const playerCell = container.querySelector('[data-testid="row-player"]') || 
+                       container.querySelector('.player-cell');
+    const teamCell = container.querySelector('[data-testid="row-team"]') || 
+                     container.querySelector('.team-cell');
+    const positionCell = container.querySelector('[data-testid="row-position"]') || 
+                         container.querySelector('.position-cell');
+    const statCell = container.querySelector('[data-testid="row-stat"]') || 
+                     container.querySelector('.stat-cell');
+
+    expect(rankCell).toBeTruthy();
+    expect(playerCell).toBeTruthy();
+    expect(teamCell).toBeTruthy();
+    expect(positionCell).toBeTruthy();
+    expect(statCell).toBeTruthy();
+
+    // Assert values are rendered
+    expect(rankCell.textContent).toContain('1');
+    expect(playerCell.textContent).toContain('Test Player');
+  });
+
+  it('asserts row height and grid column alignment styles', () => {
+    const { container } = render(Row, { 
+      props: {
+        rank: 1,
+        player: 'Player',
+        team: 'Team',
+        position: 'Pos',
+        stat: 10
+      }
+    });
+
+    const rowElement = container.querySelector('tr') || container.firstElementChild;
+    expect(rowElement).toBeTruthy();
+
+    // Assert height style/class is present
+    // Assuming a class like 'row-height-standard' or inline style
+    const hasHeightClass = Array.from(rowElement.classList).some(cls => 
+      cls.includes('height') || cls.includes('h-')
+    );
+    
+    // If using inline styles for grid alignment, check style attribute
+    const hasGridStyle = rowElement.style.display === 'grid' || 
+                         rowElement.style.display === 'flex';
+
+    // Assert at least one structural styling is present
+    expect(hasHeightClass || hasGridStyle).toBe(true);
+  });
+});
+```
+
+#### File: `apps/web/package.json` (Add devDependencies if missing)
+
+```json
+{
+  "devDependencies": {
+    "@testing-library/svelte": "^4.0.0",
+    "jsdom": "^24.0.0"
+  }
+}
+```
+
+#### File: `apps/web/src/lib/components/Board.svelte` (Create if missing)
+
+```svelte
+<script>
+  export let rows = [];
+</script>
+
+<div class="board-container">
+  <table class="board-table">
+    <thead>
+      <tr>
+        <th>Rank</th>
+        <th>Player</th>
+        <th>Team</th>
+        <th>Position</th>
+        <th>Stat</th>
+      </tr>
+    </thead>
+    <tbody data-testid="board-list">
+      {#each rows as row}
+        <Row {row} />
+      {/each}
+    </tbody>
+  </table>
+</div>
+
+<style>
+  .board-container {
+    width: 100%;
+    overflow-x: auto;
+  }
+  .board-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  th, td {
+    padding: 8px;
+    text-align: left;
+    border-bottom: 1px solid #ddd;
+  }
+</style>
+```
+
+#### File: `apps/web/src/lib/components/Row.svelte` (Create if missing)
+
+```svelte
+<script>
+  import Word from './Word.svelte';
+  
+  export let rank;
+  export let player;
+  export let team;
+  export let position;
+  export let stat;
+</script>
+
+<tr class="row-height-standard" data-testid="row">
+  <td data-testid="row-rank"><Word value={rank} /></td>
+  <td data-testid="row-player"><Word value={player} /></td>
+  <td data-testid="row-team"><Word value={team} /></td>
+  <td data-testid="row-position"><Word value={position} /></td>
+  <td data-testid="row-stat"><Word value={stat} /></td>
+</tr>
+
+<style>
+  tr.row-height-standard {
+    height: 40px;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+  }
+</style>
+```
+
+#### File: `apps/web/src/lib/components/Word.svelte` (Create if missing)
+
+```svelte
+<script>
+  export let value;
+</script>
+
+<span class="word">{value}</span>
+
+<style>
+  .word {
+    font-weight: 500;
+  }
+</style>
+```
+
+### 3. Verification Commands
+
+```bash
+# Install dependencies if not already present
+pnpm install
+
+# Run the specific test
+node --test apps/web/tests/board-structure.test.mjs
+
+# Run type check
+pnpm --filter web check
+```

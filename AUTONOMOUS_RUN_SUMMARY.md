@@ -88,20 +88,43 @@ Branch: `main`
 - Implemented dev-gated flap test route with controls for single flip, word flip, 30-cell storm, row-shift sound, and scenario runner.
 - Verification: `node --test apps/web/tests/flap-route.test.mjs`, full flap node test suite, and `pnpm --filter web check` (PASS).
 
+### P4-01 (RED → GREEN completed)
+
+- Added RED tests for shell wiring (`+layout` imports + shared nav/footer components).
+- Implemented global fixed `Nav.svelte`, shared `Footer.svelte`, and shell composition in root layout.
+- Verification: `node --test apps/web/tests/layout-shell.test.mjs` and `pnpm --filter web check` (PASS).
+
+### P4-02 (RED → GREEN completed)
+
+- Added RED tests for board header mode mapping, freshness hooks, and sound-toggle plumbing.
+- Implemented `Header.svelte` with status pills, live pulse mode class, fetches for `/api/season-state` + `/api/freshness`, and debug placeholder panel.
+- Verification: `node --test apps/web/tests/board-header.test.mjs` and `pnpm --filter web check` (PASS).
+
+### P4-03 (RED → GREEN completed)
+
+- Added RED tests for URL-synced tabs/stat picker and position dropdown outside-click behavior.
+- Implemented `ViewTabs.svelte` + `StatPicker.svelte` writing `view/sort/position` params via `goto`.
+- Verification: `node --test apps/web/tests/view-controls.test.mjs` and `pnpm --filter web check` (PASS).
+
+### P4-04 (RED → GREEN completed)
+
+- Added RED tests for board/row scaffold and flap word composition expectations.
+- Implemented `Board.svelte`, `Row.svelte`, and board page composition using `Header`, `ViewTabs`, `StatPicker`, and `Board` with 100-row placeholder path.
+- Verification: `node --test apps/web/tests/board-structure.test.mjs`, combined Phase 4 node tests, and `pnpm --filter web check` (PASS).
+
 ## Additional verification
 
-- `pytest apps/api/tests -q` (PASS, 25 passed)
 - `pnpm --filter web check` (PASS, warning-only)
-- `node --test apps/web/tests/flap-animation.test.mjs apps/web/tests/flap-word.test.mjs apps/web/tests/flap-sound.test.mjs apps/web/tests/flap-route.test.mjs` (PASS, 14 tests)
+- `node --test apps/web/tests/layout-shell.test.mjs apps/web/tests/board-header.test.mjs apps/web/tests/view-controls.test.mjs apps/web/tests/board-structure.test.mjs` (PASS, 8 tests)
 
 ## Artifacts updated
 
-- Packet docs: `orchestration/task-packets/P2-06*`, `P2-07*`, `P3-01*`, `P3-02*`, `P3-03*`, `P3-04*`, `P3-05*`
-- Run outputs: `orchestration/runs/P2-06*`, `P2-07*`, `P3-01*`, `P3-02*`, `P3-03*`, `P3-04*`, `P3-05*`
-- Task board: `orchestration/task-board.yaml` (P2-06, P2-07, P3-01..P3-05 marked `done`)
+- Packet docs: `orchestration/task-packets/P4-01*`, `P4-02*`, `P4-03*`, `P4-04*`
+- Run outputs: `orchestration/runs/P4-01*`, `P4-02*`, `P4-03*`, `P4-04*`
+- Task board: `orchestration/task-board.yaml` (P4-01..P4-04 marked `done`, phase focus set to 4)
 
 ## Assumptions used
 
-- Python/FastAPI implementation remains authoritative for Phase 2 API packets.
-- Player history endpoint supports hitter stats in this packet (`wRC+`, `OPS`); broader stat matrix can expand in later packets.
-- Existing web toolchain warning about missing `@types/node` is pre-existing and non-blocking for this packet.
+- Header polling interval fixed at 30s until SSE freshness wiring lands in Task 4.6.
+- View URL contract uses `view=hitters|pitchers|positions`, optional `position`, and `sort` stat key.
+- Existing web toolchain warning about missing `@types/node` remains pre-existing and non-blocking.
