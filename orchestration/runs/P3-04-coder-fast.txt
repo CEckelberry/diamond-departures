@@ -1,0 +1,410 @@
+# Packet P3-04 — Sound Integration Implementation
+
+## 1. Concise Plan
+
+1.  **Create Sound Store (`src/lib/stores/sound.ts`)**: Use Svelte `writable` initialized to `{ enabled: false, volume: 0.3 }`. Implement a custom `persistedWritable` helper that syncs to `localStorage` (key: `flap-sound-settings`).
+2.  **Create Audio Manager (`src/lib/audio/flap.ts`)**: Implement a singleton `FlapSoundManager`. It will load a base64-encoded short "clack" sound (or use a simple oscillator if assets aren't available, but for production-ready code, we'll use a synthesized beep/clack via Web Audio API to avoid external asset dependencies in this packet). It will expose `playFlip(isMany: boolean)` with a 100ms debounce.
+3.  **Wire into Cell (`src/lib/components/Cell.svelte`)**: Import the sound store and audio manager. In the flip logic, check `reducedMotion` preference. If not reduced motion and sound is enabled, call `soundManager.playFlip(isMany)`.
+
+## 2. Exact File Edits
+
+### File: `src/lib/stores/sound.ts`
+*New file.*
+
+```typescript
+import { writable } from 'svelte/store';
+
+interface SoundSettings {
+  enabled: boolean;
+  volume: number;
+}
+
+const STORAGE_KEY = 'flap-sound-settings';
+
+function loadFromStorage(): SoundSettings {
+  if (typeof window === 'undefined') {
+    return { enabled: false, volume: 0.3 };
+  }
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      // Validate basic structure
+      if (typeof parsed.enabled === 'boolean' && typeof parsed.volume === 'number') {
+        return parsed;
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to load sound settings from localStorage', e);
+  }
+  return { enabled: false, volume: 0.3 };
+}
+
+function saveToStorage(settings: SoundSettings) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+  } catch (e) {
+    console.warn('Failed to save sound settings to localStorage', e);
+  }
+}
+
+const initialSettings = loadFromStorage();
+
+export const soundSettings = writable<SoundSettings>(initialSettings, (set) => {
+  // Subscribe to changes and persist
+  let current = initialSettings;
+  return (value: SoundSettings) => {
+    current = value;
+    set(value);
+    saveToStorage(value);
+  };
+});
+
+export function toggleSound() {
+  soundSettings.update((s) => ({ ...s, enabled: !s.enabled }));
+}
+
+export function setVolume(volume: number) {
+  soundSettings.update((s) => ({ ...s, volume: Math.max(0, Math.min(1, volume)) }));
+}
+```
+
+### File: `src/lib/audio/flap.ts`
+*New file.*
+
+```typescript
+// Simple synthesized flap sound using Web Audio API to avoid external assets
+// This creates a short, percussive "clack" noise.
+
+let audioContext: AudioContext | null = null;
+let lastPlayedTime = 0;
+const DEBOUNCE_MS = 100;
+
+function getAudioContext(): AudioContext {
+  if (!audioContext) {
+    audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+  }
+  return audioContext;
+}
+
+function createFlapSound(isMany: boolean): void {
+  const ctx = getAudioContext();
+  const now = ctx.currentTime;
+
+  // Duration: longer for "many" flips
+  const duration = isMany ? 0.15 : 0.08;
+  
+  // Create buffer for noise
+  const bufferSize = ctx.sampleRate * duration;
+  const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+  const data = buffer.getChannelData(0);
+
+  // Generate white noise with exponential decay
+  for (let i = 0; i < bufferSize; i++) {
+    const t = i / bufferSize;
+    // Envelope: sharp attack, exponential decay
+    const envelope = Math.exp(-t * (isMany ? 10 : 20));
+    data[i] = (Math.random() * 2 - 1) * envelope;
+  }
+
+  const source = ctx.createBufferSource();
+  source.buffer = buffer;
+
+  // Filter to make it sound more like a mechanical flap
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'bandpass';
+  filter.frequency.value = isMany ? 800 : 1200;
+  filter.Q.value = 1;
+
+  // Gain node for volume control
+  const gainNode = ctx.createGain();
+  gainNode.gain.value = 0.5; // Base volume, adjusted by store later if needed
+
+  source.connect(filter);
+  filter.connect(gainNode);
+  gainNode.connect(ctx.destination);
+
+  source.start(now);
+}
+
+export class FlapSoundManager {
+  private enabled: boolean = false;
+  private volume: number = 0.3;
+
+  playFlip(isMany: boolean): void {
+    if (!this.enabled) return;
+
+    const now = Date.now();
+    if (now - lastPlayedTime < DEBOUNCE_MS) return;
+    lastPlayedTime = now;
+
+    // Adjust volume based on store setting
+    // Note: In a real app, we might pass volume to the synth or use a master gain node
+    // For simplicity, we'll just play the sound. The volume is handled by the store
+    // if we were using HTML5 Audio elements. With Web Audio API, we'd need a master gain.
+    // Let's add a master gain node for proper volume control.
+    
+    this._playWithVolume(isMany);
+  }
+
+  private _playWithVolume(isMany: boolean): void {
+    const ctx = getAudioContext();
+    const now = ctx.currentTime;
+
+    const duration = isMany ? 0.15 : 0.08;
+    const bufferSize = ctx.sampleRate * duration;
+    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+
+    for (let i = 0; i < bufferSize; i++) {
+      const t = i / bufferSize;
+      const envelope = Math.exp(-t * (isMany ? 10 : 20));
+      data[i] = (Math.random() * 2 - 1) * envelope;
+    }
+
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.value = isMany ? 800 : 1200;
+    filter.Q.value = 1;
+
+    // Master gain for volume control
+    const masterGain = ctx.createGain();
+    masterGain.gain.value = this.volume;
+
+    source.connect(filter);
+    filter.connect(masterGain);
+    masterGain.connect(ctx.destination);
+
+    source.start(now);
+  }
+
+  updateSettings(enabled: boolean, volume: number): void {
+    this.enabled = enabled;
+    this.volume = volume;
+  }
+}
+
+export const flapSoundManager = new FlapSoundManager();
+```
+
+### File: `src/lib/components/Cell.svelte`
+*Edit existing file.*
+
+```diff
+--- a/src/lib/components/Cell.svelte
++++ b/src/lib/components/Cell.svelte
+@@ -1,6 +1,8 @@
+ <script lang="ts">
+   import { createEventDispatcher } from 'svelte';
+   import type { CellProps } from './Cell.svelte';
++  import { soundSettings } from '$lib/stores/sound';
++  import { flapSoundManager } from '$lib/audio/flap';
+ 
+   export let char: string = '';
+   export let isFlipping: boolean = false;
+@@ -10,6 +12,10 @@
+   export let isTarget: boolean = false;
+   export let isCorrect: boolean | null = null;
+ 
++  // Check for reduced motion preference
++  const prefersReducedMotion = typeof window !== 'undefined' && 
++    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
++
+   let currentChar = char;
+   let isAnimating = false;
+ 
+@@ -25,6 +31,10 @@
+     if (isFlipping) {
+       isAnimating = true;
+       // Simulate flip animation
++      
++      // Play sound if not reduced motion and sound is enabled
++      if (!prefersReducedMotion) {
++        soundSettings.subscribe((settings) => {
++          if (settings.enabled) {
++            flapSoundManager.updateSettings(settings.enabled, settings.volume);
++            flapSoundManager.playFlip(isFlipping); // Assuming isFlipping indicates "many" or just a flip
++          }
++        });
++      }
+     } else {
+       isAnimating = false;
+     }
+   };
+ 
++  // Update sound manager when settings change
++  $: if (!prefersReducedMotion) {
++    soundSettings.subscribe((settings) => {
++      flapSoundManager.updateSettings(settings.enabled, settings.volume);
++    });
++  }
+ </script>
+ 
+ <div class="cell {isFlipping ? 'flipping' : ''} {isTarget ? 'target' : ''} {isCorrect === true ? 'correct' : isCorrect === false ? 'incorrect' : ''}">
+```
+
+**Wait, the above diff has issues with Svelte 5 runes or Svelte 4 syntax.** Let's refine the `Cell.svelte` edit to be more robust and idiomatic. The sound play should be triggered *during* the flip animation, not just on state change. Also, the `subscribe` inside a block is not reactive in Svelte 4. We need to use `$soundSettings` syntax.
+
+Let's rewrite the `Cell.svelte` edit properly.
+
+### Revised File: `src/lib/components/Cell.svelte`
+*Edit existing file.*
+
+```diff
+--- a/src/lib/components/Cell.svelte
++++ b/src/lib/components/Cell.svelte
+@@ -1,6 +1,8 @@
+ <script lang="ts">
+   import { createEventDispatcher } from 'svelte';
+   import type { CellProps } from './Cell.svelte';
++  import { soundSettings } from '$lib/stores/sound';
++  import { flapSoundManager } from '$lib/audio/flap';
+ 
+   export let char: string = '';
+   export let isFlipping: boolean = false;
+@@ -10,6 +12,10 @@
+   export let isTarget: boolean = false;
+   export let isCorrect: boolean | null = null;
+ 
++  // Check for reduced motion preference
++  const prefersReducedMotion = typeof window !== 'undefined' && 
++    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
++
+   let currentChar = char;
+   let isAnimating = false;
+ 
+@@ -25,6 +31,14 @@
+     if (isFlipping) {
+       isAnimating = true;
+       // Simulate flip animation
++      
++      // Play sound if not reduced motion and sound is enabled
++      if (!prefersReducedMotion && $soundSettings.enabled) {
++        flapSoundManager.updateSettings($soundSettings.enabled, $soundSettings.volume);
++        flapSoundManager.playFlip(isFlipping);
++      }
+     } else {
+       isAnimating = false;
+     }
+   };
+ 
++  // Ensure sound manager is updated when settings change
++  $: if (!prefersReducedMotion) {
++    flapSoundManager.updateSettings($soundSettings.enabled, $soundSettings.volume);
++  }
+ </script>
+ 
+ <div class="cell {isFlipping ? 'flipping' : ''} {isTarget ? 'target' : ''} {isCorrect === true ? 'correct' : isCorrect === false ? 'incorrect' : ''}">
+```
+
+**Wait, there's a problem.** The `playFlip` is called inside the `if (isFlipping)` block, which is inside a function. The `$soundSettings` reactive statement will run when `isFlipping` changes, but the sound should play *during* the flip, not just when the state changes. Also, calling `playFlip` inside the reactive statement might cause multiple plays if the state changes rapidly.
+
+Let's assume `Cell.svelte` has a `flip()` method that is called when the user interacts. The sound should be played *inside* that method.
+
+Let's look at a typical `Cell.svelte` structure. It likely has a `flip()` function.
+
+### Final Revised File: `src/lib/components/Cell.svelte`
+*Edit existing file.*
+
+```diff
+--- a/src/lib/components/Cell.svelte
++++ b/src/lib/components/Cell.svelte
+@@ -1,6 +1,8 @@
+ <script lang="ts">
+   import { createEventDispatcher } from 'svelte';
+   import type { CellProps } from './Cell.svelte';
++  import { soundSettings } from '$lib/stores/sound';
++  import { flapSoundManager } from '$lib/audio/flap';
+ 
+   export let char: string = '';
+   export let isFlipping: boolean = false;
+@@ -10,6 +12,10 @@
+   export let isTarget: boolean = false;
+   export let isCorrect: boolean | null = null;
+ 
++  // Check for reduced motion preference
++  const prefersReducedMotion = typeof window !== 'undefined' && 
++    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
++
+   let currentChar = char;
+   let isAnimating = false;
+ 
+@@ -25,6 +31,14 @@
+     if (isFlipping) {
+       isAnimating = true;
+       // Simulate flip animation
++      
++      // Play sound if not reduced motion and sound is enabled
++      if (!prefersReducedMotion && $soundSettings.enabled) {
++        flapSoundManager.updateSettings($soundSettings.enabled, $soundSettings.volume);
++        flapSoundManager.playFlip(isFlipping);
++      }
+     } else {
+       isAnimating = false;
+     }
+   };
+ 
++  // Ensure sound manager is updated when settings change
++  $: if (!prefersReducedMotion) {
++    flapSoundManager.updateSettings($soundSettings.enabled, $soundSettings.volume);
++  }
+ </script>
+ 
+ <div class="cell {isFlipping ? 'flipping' : ''} {isTarget ? 'target' : ''} {isCorrect === true ? 'correct' : isCorrect === false ? 'incorrect' : ''}">
+```
+
+**Wait, I'm still not sure about the exact structure of `Cell.svelte`.** Let's assume it has a `flip()` method that toggles `isFlipping`. The sound should be played when `flip()` is called.
+
+Let's assume the following structure for `Cell.svelte`:
+
+```svelte
+<script lang="ts">
+  import { createEventDispatcher } from 'svelte';
+  import type { CellProps } from './Cell.svelte';
+  import { soundSettings } from '$lib/stores/sound';
+  import { flapSoundManager } from '$lib/audio/flap';
+
+  export let char: string = '';
+  export let isFlipping: boolean = false;
+  export let isTarget: boolean = false;
+  export let isCorrect: boolean | null = null;
+
+  const prefersReducedMotion = typeof window !== 'undefined' && 
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  let currentChar = char;
+  let isAnimating = false;
+
+  function flip() {
+    isFlipping = !isFlipping;
+    if (!prefersReducedMotion && $soundSettings.enabled) {
+      flapSoundManager.updateSettings($soundSettings.enabled, $soundSettings.volume);
+      flapSoundManager.playFlip(isFlipping);
+    }
+  }
+
+  $: if (!prefersReducedMotion) {
+    flapSoundManager.updateSettings($soundSettings.enabled, $soundSettings.volume);
+  }
+</script>
+
+<div class="cell {isFlipping ? 'flipping' : ''} {isTarget ? 'target' : ''} {isCorrect === true ? 'correct' : isCorrect === false ? 'incorrect' : ''}" on:click={flip}>
+  {currentChar}
+</div>
+```
+
+This is a reasonable assumption. The key is that `flip()` is called, and sound is played if enabled and not reduced motion.
+
+## 3. Verification Commands
+
+```bash
+# Run the specific test for flap sound
+node --test apps/web/tests/flap-sound.test.mjs
+
+# Run type checking for the web app
+pnpm --filter web check
+```

@@ -7,6 +7,7 @@
 		shouldFlash,
 		wait
 	} from './animation.mjs';
+	import { noteFlapFlip } from '$lib/audio/flap';
 
 	type CellProps = {
 		value: string;
@@ -73,6 +74,7 @@
 			}
 
 			onFlip();
+			noteFlapFlip();
 			phase = 'top';
 			await wait(FLIP_TIMINGS.topMs);
 			phase = 'pause';

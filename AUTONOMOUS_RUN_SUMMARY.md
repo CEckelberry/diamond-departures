@@ -63,16 +63,42 @@ Branch: `main`
 - Added flap lab preview page rendering 10 sample cells for visual QA.
 - Verification: `pnpm --filter web check` (PASS, 0 errors).
 
+### P3-02 (RED → GREEN completed)
+
+- Added RED node tests for flap animation helpers; initial run failed due to missing animation module.
+- Implemented animation helper + queued `Cell.svelte` updates with 3-phase 450ms sequence and reduced-motion 200ms flash fallback.
+- Verification: `node --test apps/web/tests/flap-animation.test.mjs` and `pnpm --filter web check` (PASS).
+
+### P3-03 (RED → GREEN completed)
+
+- Added RED node tests for word alignment/diff behavior; initial run failed due to missing word helper module.
+- Implemented `Word.svelte` + fixed-width mapping helpers (`right-align numeric`, `left-align text`) and diff utility.
+- Verification: `node --test apps/web/tests/flap-word.test.mjs` and `pnpm --filter web check` (PASS).
+
+### P3-04 (RED → GREEN completed)
+
+- Added RED node tests for sound prefs and flap debounce manager; initial run failed due to missing sound store module.
+- Implemented persisted sound store (default off, volume 0.3), debounced sound manager (`single` vs `many`), and cell-triggered sound hook.
+- Added static audio assets in `/static/audio/`.
+- Verification: `node --test apps/web/tests/flap-sound.test.mjs` and `pnpm --filter web check` (PASS).
+
+### P3-05 (RED → GREEN completed)
+
+- Added RED route tests for `/test/flap`; initial run failed due to missing route file.
+- Implemented dev-gated flap test route with controls for single flip, word flip, 30-cell storm, row-shift sound, and scenario runner.
+- Verification: `node --test apps/web/tests/flap-route.test.mjs`, full flap node test suite, and `pnpm --filter web check` (PASS).
+
 ## Additional verification
 
 - `pytest apps/api/tests -q` (PASS, 25 passed)
 - `pnpm --filter web check` (PASS, warning-only)
+- `node --test apps/web/tests/flap-animation.test.mjs apps/web/tests/flap-word.test.mjs apps/web/tests/flap-sound.test.mjs apps/web/tests/flap-route.test.mjs` (PASS, 14 tests)
 
 ## Artifacts updated
 
-- Packet docs: `orchestration/task-packets/P2-06*`, `P2-07*`, `P3-01*`
-- Run outputs: `orchestration/runs/P2-06*`, `P2-07*`, `P3-01*`
-- Task board: `orchestration/task-board.yaml` (P2-06, P2-07, P3-01 marked `done`)
+- Packet docs: `orchestration/task-packets/P2-06*`, `P2-07*`, `P3-01*`, `P3-02*`, `P3-03*`, `P3-04*`, `P3-05*`
+- Run outputs: `orchestration/runs/P2-06*`, `P2-07*`, `P3-01*`, `P3-02*`, `P3-03*`, `P3-04*`, `P3-05*`
+- Task board: `orchestration/task-board.yaml` (P2-06, P2-07, P3-01..P3-05 marked `done`)
 
 ## Assumptions used
 

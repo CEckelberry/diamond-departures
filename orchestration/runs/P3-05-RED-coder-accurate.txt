@@ -1,0 +1,66 @@
+### 1. Concise Plan
+
+1.  **Create Test File**: Create `apps/web/tests/flap-route.test.mjs`.
+2.  **Implement Checks**:
+    *   Import the test page object (assuming a standard Playwright/PageObject pattern or direct DOM interaction).
+    *   Verify the route `/test/flap` loads successfully.
+    *   Assert existence of specific control IDs: `single`, `word`, `storm`, `row-shift`.
+    *   Assert presence of a dev-flag gating mechanism (e.g., a specific class, data attribute, or disabled state indicating development-only access).
+3.  **Ensure Failing State**: The prompt asks for "failing checks". I will implement the assertions against a hypothetical current state where these elements might be missing or the route is unguarded, ensuring the test fails until the implementation is complete. *Self-correction*: Since I don't have the existing codebase structure, I will create a robust test file that imports standard testing utilities and asserts against expected DOM structures. If the elements don't exist yet, the test will fail as requested.
+
+### 2. Exact File Edits
+
+**File: `apps/web/tests/flap-route.test.mjs`**
+
+```javascript
+import { test, expect } from '@playwright/test';
+
+test.describe('Flap Component Test Page', () => {
+  test.beforeEach(async ({ page }) => {
+    // Navigate to the flap test route
+    await page.goto('/test/flap');
+  });
+
+  test('should load the flap test page', async ({ page }) => {
+    // Expect the page title or a specific marker to confirm route loading
+    await expect(page.locator('h1')).toContainText('Flap Component Tests');
+  });
+
+  test('should render all control surface elements', async ({ page }) => {
+    // Check for specific control IDs as per scope
+    const controls = ['single', 'word', 'storm', 'row-shift'];
+    
+    for (const id of controls) {
+      await expect(page.locator(`#${id}`)).toBeVisible({ timeout: 5000 });
+    }
+  });
+
+  test('should enforce dev-flag gating', async ({ page }) => {
+    // Assert that the component or page has a dev-gating indicator.
+    // This could be a specific data attribute, class, or disabled state.
+    // Assuming a common pattern: data-dev-gated="true" or similar.
+    
+    // Option A: Check for a specific gating wrapper element
+    const gatingWrapper = page.locator('[data-dev-gating="active"]');
+    
+    // If the gating is not yet implemented, this assertion will fail.
+    await expect(gatingWrapper).toBeVisible();
+
+    // Option B: Verify that controls are disabled or hidden if dev flag is off
+    // (Assuming we are in a dev environment for this test suite)
+    // This check ensures the gating logic is present and active.
+    const isGated = await page.locator('[data-dev-gating="active"]').count() > 0;
+    expect(isGated).toBe(true);
+  });
+});
+```
+
+### 3. Verification Commands
+
+```bash
+# Run the specific test file to confirm it fails (as per "failing checks" requirement)
+node --test apps/web/tests/flap-route.test.mjs
+
+# Run the full check suite for the web app to ensure no syntax/import errors
+pnpm --filter web check
+```

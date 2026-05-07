@@ -50,6 +50,26 @@ Repo: `/home/roger/Documents/coding/cole-portfolio-apps/diamond-departures`
   - Implemented static split-flap single-cell visual and lab preview row.
   - Verification artifact: `orchestration/runs/P3-01-verify.md`.
 
+- **P3-02 (Task 3.2) — completed**
+  - Added RED node tests for animation timing + queue helper module and captured missing-module failure.
+  - Implemented 450ms single-cell flap animation with queued updates and reduced-motion flash fallback.
+  - Verification artifact: `orchestration/runs/P3-02-verify.md`.
+
+- **P3-03 (Task 3.3) — completed**
+  - Added RED node tests for word alignment/diff behavior and captured missing-module failure.
+  - Implemented `Word.svelte` plus helper functions for fixed-width mapping, right/left alignment, and per-cell diffs.
+  - Verification artifact: `orchestration/runs/P3-03-verify.md`.
+
+- **P3-04 (Task 3.4) — completed**
+  - Added RED node tests for persisted sound prefs and debounced sound manager.
+  - Implemented `stores/sound` persistence, `audio/flap` debounce manager, and `Cell.svelte` sound hook integration.
+  - Verification artifact: `orchestration/runs/P3-04-verify.md`.
+
+- **P3-05 (Task 3.5) — completed**
+  - Added RED route test asserting `/test/flap` page existence, IDs, and dev gating.
+  - Implemented dev-gated flap test page with controls for single/word/storm flips and row-shift sound trigger.
+  - Verification artifact: `orchestration/runs/P3-05-verify.md`.
+
 ## TDD evidence
 
 - P1-10 RED: missing `apps.ingest.app.positions` module import.
@@ -61,6 +81,10 @@ Repo: `/home/roger/Documents/coding/cole-portfolio-apps/diamond-departures`
 - P2-06 RED: `create_app` missing player reader injection args/endpoints.
 - P2-07 RED: `create_app` missing season/freshness reader injection args/endpoints.
 - P3-01 RED: web check failed due to missing `$lib/components/flap/Cell.svelte`.
+- P3-02 RED: node test failed due to missing `components/flap/animation.mjs`.
+- P3-03 RED: node test failed due to missing `components/flap/word.mjs`.
+- P3-04 RED: node test failed due to missing `stores/sound.mjs`.
+- P3-05 RED: node route test failed due to missing `/test/flap/+page.svelte`.
 - GREEN: all targeted suites passing after implementation.
 
 ## Validation commands run
@@ -76,6 +100,7 @@ Repo: `/home/roger/Documents/coding/cole-portfolio-apps/diamond-departures`
 - `.venv/bin/pytest apps/api/tests/test_status.py -q`
 - `.venv/bin/pytest apps/api/tests -q`
 - `pnpm --filter web check`
+- `node --test apps/web/tests/flap-animation.test.mjs apps/web/tests/flap-word.test.mjs apps/web/tests/flap-sound.test.mjs apps/web/tests/flap-route.test.mjs`
 
 ## Risks / follow-ups
 
