@@ -4,7 +4,7 @@ import logging
 from collections.abc import Callable
 
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from .board import (
     VALID_SORTS,
@@ -16,6 +16,7 @@ from .board import (
 )
 from .config import ApiSettings, load_settings
 from .logging import configure_logging
+from .sse import BoardSSEHub
 from .store import postgres_health_check
 
 
@@ -23,6 +24,8 @@ def create_app(
     settings: ApiSettings | None = None,
     db_health_check: Callable[[], bool] | None = None,
     board_reader: BoardReader | None = None,
+    sse_hub: BoardSSEHub | None = None,
+    sse_heartbeat_seconds: float = 30.0,
 ) -> FastAPI:
     resolved_settings = settings or load_settings()
     configure_logging(resolved_settings.log_level)
@@ -32,6 +35,8 @@ def create_app(
     logger = logging.getLogger("apps.api")
     checker = db_health_check or postgres_health_check(resolved_settings.database_url)
     board_loader = board_reader or in_memory_board_reader
+    hub = sse_hub or BoardSSEHub(heartbeat_seconds=sse_heartbeat_seconds)
+    app.state.sse_hub = hub
 
     @app.get("/api/health")
     def health() -> JSONResponse:
@@ -52,39 +57,63 @@ def create_app(
         view: str = Query(...),
         sort: str = Query(...),
     ) -> JSONResponse:
-        if view not in VALID_VIEWS:
-            raise HTTPException(status_code=400, detail=f"Invalid view '{view}'")
-        if sort not in VALID_SORTS:
-            raise HTTPException(status_code=400, detail=f"Invalid sort '{sort}'")
-
+        _validate_view_sort(view, sort)
         rows = board_loader(view, sort)[:100]
-        entries: list[dict[str, object]] = []
-        for row in rows:
-            refreshed_at = parse_refreshed_at(str(row["refreshed_at"]))
-            entries.append(
-                {
-                    "rank": row["rank"],
-                    "player": {
-                        "id": row["player_id"],
-                        "name": row["player_name"],
-                        "team_abbr": row["team_abbr"],
-                        "headshot_url": row["headshot_url"],
-                        "position": row["position"],
-                    },
-                    "stat_value": row["stat_value"],
-                    "freshness": {
-                        "timestamp": refreshed_at.isoformat(),
-                        "age_category": age_category(refreshed_at),
-                    },
-                }
-            )
-
         return JSONResponse(
             content={
                 "view": view,
                 "sort": sort,
-                "entries": entries,
+                "entries": _entries_from_rows(rows),
             }
         )
 
+    @app.get("/api/board/sse")
+    async def board_sse(
+        view: str = Query(...),
+        sort: str = Query(...),
+    ) -> StreamingResponse:
+        _validate_view_sort(view, sort)
+        rows = board_loader(view, sort)[:100]
+
+        return StreamingResponse(
+            hub.stream(view, sort, _entries_from_rows(rows)),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
+
     return app
+
+
+def _validate_view_sort(view: str, sort: str) -> None:
+    if view not in VALID_VIEWS:
+        raise HTTPException(status_code=400, detail=f"Invalid view '{view}'")
+    if sort not in VALID_SORTS:
+        raise HTTPException(status_code=400, detail=f"Invalid sort '{sort}'")
+
+
+def _entries_from_rows(rows: list[dict[str, object]]) -> list[dict[str, object]]:
+    entries: list[dict[str, object]] = []
+    for row in rows:
+        refreshed_at = parse_refreshed_at(str(row["refreshed_at"]))
+        entries.append(
+            {
+                "rank": row["rank"],
+                "player": {
+                    "id": row["player_id"],
+                    "name": row["player_name"],
+                    "team_abbr": row["team_abbr"],
+                    "headshot_url": row["headshot_url"],
+                    "position": row["position"],
+                },
+                "stat_value": row["stat_value"],
+                "freshness": {
+                    "timestamp": refreshed_at.isoformat(),
+                    "age_category": age_category(refreshed_at),
+                },
+            }
+        )
+    return entries

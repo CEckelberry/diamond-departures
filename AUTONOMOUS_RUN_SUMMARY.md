@@ -20,19 +20,30 @@ Branch: `main`
 - Implemented board endpoint with `view/sort` validation, top-100 response shaping, and freshness age categorization.
 - Verification: `pytest apps/api/tests/test_board.py -q` and `pytest apps/api/tests -q` (PASS).
 
-### P2-03 (RED → GREEN start completed)
+### P2-03 (RED → GREEN completed)
 - Added RED tests for startup load, safe reads, and invalidate refresh behavior in cache layer.
 - Implemented thread-safe `LeaderboardCache` with deep-copy snapshot semantics and key-level refresh.
 - Verification: `pytest apps/api/tests/test_cache.py -q` (PASS).
 
+### P2-04 (RED → GREEN completed)
+- Added RED tests for Pub/Sub message parsing, ACK/NACK behavior, and refresh-context logging.
+- Implemented `RefreshSubscriber` in `apps/api/app/pubsub.py` with single/batched target handling.
+- Verification: `pytest apps/api/tests/test_pubsub.py -q` (PASS).
+
+### P2-05 (RED → GREEN completed)
+- Added RED tests for SSE snapshot/delta/heartbeat and disconnect cleanup semantics.
+- Implemented `BoardSSEHub` and wired `/api/board/sse` endpoint in FastAPI app.
+- Fixed generator cleanup so connection registry is always released on stream close.
+- Verification: `pytest apps/api/tests/test_sse.py -q` (PASS).
+
 ## Additional verification
 - `pytest apps/ingest/tests -q` (PASS, 26 passed)
-- `pytest apps/api/tests -q` (PASS, 9 passed)
+- `pytest apps/api/tests -q` (PASS, 17 passed)
 
 ## Artifacts updated
-- Packet docs: `orchestration/task-packets/P1-10*`, `P2-01*`, `P2-02*`, `P2-03*`
-- Run outputs: `orchestration/runs/P1-10*`, `P2-01*`, `P2-02*`, `P2-03*`
-- Task board: `orchestration/task-board.yaml` (P1-10, P2-01, P2-02, P2-03 marked `done`)
+- Packet docs: `orchestration/task-packets/P1-10*`, `P2-01*`, `P2-02*`, `P2-03*`, `P2-04*`, `P2-05*`
+- Run outputs: `orchestration/runs/P1-10*`, `P2-01*`, `P2-02*`, `P2-03*`, `P2-04*`, `P2-05*`
+- Task board: `orchestration/task-board.yaml` (P1-10, P2-01..P2-05 marked `done`)
 
 ## Assumptions used
 - Python/FastAPI implementation is the active service stack for current packets.

@@ -1,0 +1,307 @@
+### 1. Concise Plan
+
+To implement the RED phase for SSE stream behavior, we will:
+1.  **Define the API Contract**: Create a `SSEHandler` class that manages connections, handles snapshot generation, delta publishing, and heartbeat scheduling.
+2.  **Implement the Endpoint**: Wire up the `GET /api/board/sse` route to instantiate the handler.
+3.  **Create Test Doubles**: Use in-process mocks for the board state and event bus to simulate snapshots and deltas without external brokers.
+4.  **Write Failing Tests**: Implement `test_sse_snapshot`, `test_sse_delta`, `test_sse_heartbeat`, and `test_sse_disconnect` using `pytest-asyncio` and a mock client to verify the stream behavior.
+
+### 2. Exact File Edits as Unified Diff
+
+#### `apps/api/sse_handler.py` (New File)
+```python
+"""SSE Handler for Board Stream."""
+import asyncio
+import json
+import logging
+from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
+
+
+class SSEHandler:
+    """Manages Server-Sent Events connections for a board view."""
+
+    def __init__(self, view: str, sort: str, board_state_provider):
+        self.view = view
+        self.sort = sort
+        self.board_state_provider = board_state_provider
+        self._writer: Optional[asyncio.StreamWriter] = None
+        self._snapshot_task: Optional[asyncio.Task] = None
+        self._heartbeat_task: Optional[asyncio.Task] = None
+        self._is_active = False
+        self._lock = asyncio.Lock()
+
+    async def start(self, writer: asyncio.StreamWriter) -> None:
+        """Start the SSE stream."""
+        async with self._lock:
+            if self._is_active:
+                return
+            self._is_active = True
+            self._writer = writer
+
+        # 1. Send immediate snapshot
+        await self._send_snapshot()
+
+        # 2. Start heartbeat
+        self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
+
+        logger.info(f"SSE stream started for view={self.view}, sort={self.sort}")
+
+    async def stop(self) -> None:
+        """Stop the SSE stream and clean up resources."""
+        async with self._lock:
+            if not self._is_active:
+                return
+            self._is_active = False
+            self._writer = None
+
+        if self._snapshot_task:
+            self._snapshot_task.cancel()
+        if self._heartbeat_task:
+            self._heartbeat_task.cancel()
+
+        logger.info(f"SSE stream stopped for view={self.view}, sort={self.sort}")
+
+    async def publish_delta(self, delta_data: Dict[str, Any]) -> None:
+        """Publish a delta event to the stream."""
+        if not self._is_active or not self._writer:
+            return
+        await self._send_event("delta", delta_data)
+
+    async def _send_snapshot(self) -> None:
+        """Send the initial snapshot event."""
+        if not self._is_active or not self._writer:
+            return
+        # Simulate fetching snapshot from board state provider
+        snapshot = self.board_state_provider.get_snapshot(self.view, self.sort)
+        await self._send_event("snapshot", snapshot)
+
+    async def _send_event(self, event_type: str, data: Any) -> None:
+        """Send a formatted SSE event."""
+        if not self._writer:
+            return
+        try:
+            payload = json.dumps({"event": event_type, "data": data})
+            message = f"event: {event_type}\ndata: {payload}\n\n"
+            self._writer.write(message.encode("utf-8"))
+            await self._writer.drain()
+        except Exception as e:
+            logger.error(f"Error sending SSE event: {e}")
+            await self.stop()
+
+    async def _heartbeat_loop(self) -> None:
+        """Send heartbeat events at a fixed cadence."""
+        cadence = 10  # seconds
+        while self._is_active:
+            await asyncio.sleep(cadence)
+            if self._is_active:
+                await self._send_event("heartbeat", {"timestamp": asyncio.get_event_loop().time()})
+```
+
+#### `apps/api/routes.py` (Edit)
+```diff
+--- a/apps/api/routes.py
++++ b/apps/api/routes.py
+@@ -1,6 +1,7 @@
+ """API Routes for Board Application."""
+ from fastapi import APIRouter, Request
+ from fastapi.responses import StreamingResponse
++from apps.api.sse_handler import SSEHandler
+ 
+ router = APIRouter()
+ 
+@@ -10,3 +11,25 @@ def health_check():
+     return {"status": "ok"}
+ 
+ 
++@router.get("/api/board/sse")
++async def board_sse(request: Request):
++    """SSE endpoint for board updates."""
++    view = request.query_params.get("view", "default")
++    sort = request.query_params.get("sort", "rank")
++    
++    # In a real app, this would come from dependency injection or config
++    from apps.api.test_doubles import MockBoardStateProvider
++    board_state_provider = MockBoardStateProvider()
++    
++    async def event_generator():
++        handler = SSEHandler(view=view, sort=sort, board_state_provider=board_state_provider)
++        reader, writer = await asyncio.open_connection("127.0.0.1", 8000) # Mock connection setup
++        # Note: In real implementation, this would use the actual request's transport
++        # For testing, we'll mock this in the test file
++        yield "event: error\ndata: {\"message\": \"Not implemented in production yet\"}\n\n"
++    
++    return StreamingResponse(event_generator(), media_type="text/event-stream")
+```
+
+#### `apps/api/test_doubles.py` (New File)
+```python
+"""Test Doubles for In-Process Testing."""
+import asyncio
+from typing import Any, Dict
+
+
+class MockBoardStateProvider:
+    """Mock provider for board state to avoid external dependencies."""
+    
+    def __init__(self):
+        self._snapshots = {
+            ("default", "rank"): {"boards": [{"id": 1, "name": "Test Board", "rank": 1}]},
+            ("default", "name"): {"boards": [{"id": 1, "name": "Test Board", "rank": 1}]},
+        }
+        self._deltas = []
+    
+    def get_snapshot(self, view: str, sort: str) -> Dict[str, Any]:
+        """Return a snapshot for the given view and sort."""
+        key = (view, sort)
+        if key in self._snapshots:
+            return self._snapshots[key]
+        return {"boards": []}
+    
+    def publish_delta(self, delta_data: Dict[str, Any]) -> None:
+        """Record a delta for later verification."""
+        self._deltas.append(delta_data)
+    
+    def get_deltas(self) -> list:
+        """Return all recorded deltas."""
+        return self._deltas
+    
+    def reset(self) -> None:
+        """Reset the mock state."""
+        self._deltas = []
+```
+
+#### `apps/api/tests/test_sse.py` (New File)
+```python
+"""Tests for SSE Stream Behavior."""
+import asyncio
+import json
+import pytest
+from unittest.mock import AsyncMock, MagicMock, patch
+from apps.api.sse_handler import SSEHandler
+from apps.api.test_doubles import MockBoardStateProvider
+
+
+@pytest.fixture
+def mock_board_state_provider():
+    """Provide a fresh mock board state provider."""
+    return MockBoardStateProvider()
+
+
+@pytest.fixture
+def mock_writer():
+    """Create a mock writer for SSE connections."""
+    writer = AsyncMock()
+    writer.write = AsyncMock()
+    writer.drain = AsyncMock()
+    return writer
+
+
+@pytest.mark.asyncio
+async def test_sse_snapshot(mock_board_state_provider, mock_writer):
+    """Test that GET /api/board/sse sends immediate snapshot event."""
+    handler = SSEHandler(
+        view="default",
+        sort="rank",
+        board_state_provider=mock_board_state_provider
+    )
+    
+    await handler.start(mock_writer)
+    
+    # Verify snapshot was sent
+    mock_writer.write.assert_called_once()
+    call_args = mock_writer.write.call_args[0][0]
+    assert b"event: snapshot" in call_args
+    assert b"data:" in call_args
+    
+    await handler.stop()
+
+
+@pytest.mark.asyncio
+async def test_sse_delta(mock_board_state_provider, mock_writer):
+    """Test that publishing a refreshed snapshot emits a delta event."""
+    handler = SSEHandler(
+        view="default",
+        sort="rank",
+        board_state_provider=mock_board_state_provider
+    )
+    
+    await handler.start(mock_writer)
+    
+    # Publish a delta
+    delta_data = {"changes": [{"id": 1, "rank": 2}]}
+    await handler.publish_delta(delta_data)
+    
+    # Verify delta was sent (second call after snapshot)
+    assert mock_writer.write.call_count == 2
+    second_call_args = mock_writer.write.call_args_list[1][0][0]
+    assert b"event: delta" in second_call_args
+    assert json.dumps(delta_data).encode() in second_call_args
+    
+    await handler.stop()
+
+
+@pytest.mark.asyncio
+async def test_sse_heartbeat(mock_board_state_provider, mock_writer):
+    """Test that idle connection emits heartbeat events on cadence."""
+    handler = SSEHandler(
+        view="default",
+        sort="rank",
+        board_state_provider=mock_board_state_provider
+    )
+    
+    await handler.start(mock_writer)
+    
+    # Wait for at least one heartbeat cycle (cadence is 10s, so we'll wait 11s)
+    await asyncio.sleep(11)
+    
+    # Verify heartbeat was sent (after snapshot and potentially delta if any)
+    assert mock_writer.write.call_count >= 2  # At least snapshot + heartbeat
+    
+    # Check for heartbeat event in the calls
+    heartbeat_found = False
+    for call_args in mock_writer.write.call_args_list:
+        if b"event: heartbeat" in call_args[0][0]:
+            heartbeat_found = True
+            break
+    
+    assert heartbeat_found, "Heartbeat event not found in stream"
+    
+    await handler.stop()
+
+
+@pytest.mark.asyncio
+async def test_sse_disconnect(mock_board_state_provider, mock_writer):
+    """Test that disconnect removes server-side connection registration."""
+    handler = SSEHandler(
+        view="default",
+        sort="rank",
+        board_state_provider=mock_board_state_provider
+    )
+    
+    await handler.start(mock_writer)
+    assert handler._is_active is True
+    
+    # Simulate disconnect
+    await handler.stop()
+    
+    assert handler._is_active is False
+    assert handler._writer is None
+    
+    # Verify no more events can be sent after stop
+    await handler.publish_delta({"test": "data"})
+    # Write count should not increase after stop
+    assert mock_writer.write.call_count == 1  # Only snapshot was sent before stop
+```
+
+### 3. Verification Commands
+
+```bash
+# Run the specific SSE tests to verify they fail initially (RED phase)
+.venv/bin/pytest apps/api/tests/test_sse.py -q
+
+# If tests pass, it means the implementation is complete (GREEN phase)
+# To verify the full test suite:
+.venv/bin/pytest apps/api/tests/ -q
+```

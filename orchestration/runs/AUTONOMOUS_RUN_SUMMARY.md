@@ -20,10 +20,20 @@ Repo: `/home/roger/Documents/coding/cole-portfolio-apps/diamond-departures`
   - Implemented board endpoint with response schema + freshness age categories.
   - Verification artifact: `orchestration/runs/P2-02-verify.md`.
 
-- **P2-03 (Task 2.3) — started and completed**
+- **P2-03 (Task 2.3) — completed**
   - Added cache RED tests for startup load, immutable reads, and key invalidation refresh.
   - Implemented thread-safe in-memory leaderboard cache.
   - Verification artifact: `orchestration/runs/P2-03-verify.md`.
+
+- **P2-04 (Task 2.4) — completed**
+  - Added RED tests for Pub/Sub payload parsing, ACK/NACK behavior, and logging context.
+  - Implemented `apps/api/app/pubsub.py` subscriber with single/batched refresh target handling.
+  - Verification artifact: `orchestration/runs/P2-04-verify.md`.
+
+- **P2-05 (Task 2.5) — completed**
+  - Added RED tests for SSE snapshot/delta/heartbeat and disconnect cleanup.
+  - Implemented `apps/api/app/sse.py` and wired `/api/board/sse` in app factory.
+  - Verification artifact: `orchestration/runs/P2-05-verify.md`.
 
 ## TDD evidence
 
@@ -31,6 +41,8 @@ Repo: `/home/roger/Documents/coding/cole-portfolio-apps/diamond-departures`
 - P2-01 RED: missing FastAPI and API app modules.
 - P2-02 RED: `create_app` missing board injection and route contract.
 - P2-03 RED: missing cache module import.
+- P2-04 RED: missing pubsub module import.
+- P2-05 RED: missing sse module import / failing stream contracts.
 - GREEN: all targeted suites passing after implementation.
 
 ## Validation commands run
@@ -40,10 +52,12 @@ Repo: `/home/roger/Documents/coding/cole-portfolio-apps/diamond-departures`
 - `.venv/bin/pytest apps/api/tests/test_health.py apps/api/tests/test_config.py -q`
 - `.venv/bin/pytest apps/api/tests/test_board.py -q`
 - `.venv/bin/pytest apps/api/tests/test_cache.py -q`
+- `.venv/bin/pytest apps/api/tests/test_pubsub.py -q`
+- `.venv/bin/pytest apps/api/tests/test_sse.py -q`
 - `.venv/bin/pytest apps/api/tests -q`
 
 ## Risks / follow-ups
 
 - API DB health check uses injectable callback; concrete Postgres probe still pending.
 - Board endpoint currently uses reader callback/in-memory path; SQL store integration pending later packets.
-- Cache is local-process only; Pub/Sub invalidation wiring pending Task 2.4.
+- Cache is local-process only; distributed multi-instance coherence strategy still pending.
