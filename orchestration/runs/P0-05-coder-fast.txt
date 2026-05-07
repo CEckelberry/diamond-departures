@@ -1,0 +1,148 @@
+(1) Concise plan
+1. Create `.github/workflows/` directory.
+2. Implement `.github/workflows/ci.yml` with:
+   - Triggers: `push`, `pull_request`.
+   - `dorny/paths-filter` action to detect changes in `src/`, `tests/`, `.github/`.
+   - Jobs: `lint`, `test`, `build`.
+   - `lint` job runs `actionlint` and linters (flake8/black) gated by path filter.
+   - `test` job runs pytest gated by path filter.
+   - `build` job runs build step gated by path filter.
+   - Proper `needs` dependencies.
+3. Implement `.github/workflows/README.md` documenting secrets and job behavior.
+4. Ensure `tests/ci/test_workflow_scaffold.py` can parse the YAML and validate structure (assuming standard test expectations for scaffold tasks).
+
+(2) Exact file edits as unified diff
+
+```diff
+diff --git a/.github/workflows/README.md b/.github/workflows/README.md
+new file mode 100644
+index 0000000..1234567
+--- /dev/null
++++ b/.github/workflows/README.md
+@@ -0,0 +1,15 @@
++# CI Workflow Documentation
++
++## Overview
++This workflow automates linting, testing, and building the project on push and pull request events.
++
++## Secrets
++No custom secrets are required for this scaffold. Standard GitHub tokens are used.
++
++## Jobs
++- **lint**: Runs `actionlint` on workflow files, plus Python linting (flake8/black) if source files changed.
++- **test**: Runs pytest suite if test or source files changed.
++- **build**: Builds the project artifact if source files changed.
++
++## Path Filtering
++Uses `dorny/paths-filter` to gate jobs based on changes in `src/`, `tests/`, and `.github/`.
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+new file mode 100644
+index 0000000..abcdefg
+--- /dev/null
++++ b/.github/workflows/ci.yml
+@@ -0,0 +1,65 @@
++name: CI Scaffold
++
++on:
++  push:
++    branches: [ main ]
++  pull_request:
++    branches: [ main ]
++
++jobs:
++  paths-filter:
++    runs-on: ubuntu-latest
++    outputs:
++      src: ${{ steps.filter.outputs.src }}
++      tests: ${{ steps.filter.outputs.tests }}
++      workflows: ${{ steps.filter.outputs.workflows }}
++    steps:
++      - uses: actions/checkout@v4
++      - name: Filter paths
++        id: filter
++        uses: dorny/paths-filter@v3
++        with:
++          filters: |
++            src:
++              - 'src/**'
++            tests:
++              - 'tests/**'
++            workflows:
++              - '.github/**'
++
++  lint:
++    needs: paths-filter
++    if: ${{ needs.paths-filter.outputs.src == 'true' || needs.paths-filter.outputs.tests == 'true' || needs.paths-filter.outputs.workflows == 'true' }}
++    runs-on: ubuntu-latest
++    steps:
++      - uses: actions/checkout@v4
++      
++      - name: Run actionlint
++        uses: rhysd/actionlint@v1
++      
++      - name: Setup Python
++        uses: actions/setup-python@v5
++        with:
++          python-version: '3.10'
++      
++      - name: Install linters
++        run: pip install flake8 black
++      
++      - name: Run flake8
++        if: ${{ needs.paths-filter.outputs.src == 'true' || needs.paths-filter.outputs.tests == 'true' }}
++        run: flake8 src/ tests/
++      
++      - name: Run black check
++        if: ${{ needs.paths-filter.outputs.src == 'true' || needs.paths-filter.outputs.tests == 'true' }}
++        run: black --check src/ tests/
++
++  test:
++    needs: paths-filter
++    if: ${{ needs.paths-filter.outputs.src == 'true' || needs.paths-filter.outputs.tests == 'true' }}
++    runs-on: ubuntu-latest
++    steps:
++      - uses: actions/checkout@v4
++      
++      - name: Setup Python
++        uses: actions/setup-python@v5
++        with:
++          python-version: '3.10'
++      
++      - name: Install dependencies
++        run: pip install pytest
++      
++      - name: Run tests
++        run: pytest tests/
++
++  build:
++    needs: [paths-filter, lint, test]
++    if: ${{ needs.paths-filter.outputs.src == 'true' }}
++    runs-on: ubuntu-latest
++    steps:
++      - uses: actions/checkout@v4
++      
++      - name: Setup Python
++        uses: actions/setup-python@v5
++        with:
++          python-version: '3.10'
++      
++      - name: Build project
++        run: python -m build
+```
+
+(3) Verification commands
+
+```bash
+# 1. Run the specific unit tests for the scaffold
+python3 -m unittest tests/ci/test_workflow_scaffold.py
+
+# 2. Install actionlint if not present (macOS example)
+brew install actionlint
+# Or for Linux:
+# wget https://github.com/rhysd/actionlint/releases/download/v1.6.27/actionlint_1.6.27_linux_amd64.tar.gz
+# tar xzf actionlint_1.6.27_linux_amd64.tar.gz
+# sudo mv actionlint /usr/local/bin/
+
+# 3. Run actionlint on the workflow file
+actionlint .github/workflows/ci.yml
+```

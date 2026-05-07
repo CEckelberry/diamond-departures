@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      api: ${{ steps.filter.outputs.api }}
+      ingest: ${{ steps.filter.outputs.ingest }}
+      web: ${{ steps.filter.outputs.web }}
+      stats: ${{ steps.filter.outputs.stats }}
+      workflows: ${{ steps.filter.outputs.workflows }}
+      tests: ${{ steps.filter.outputs.tests }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            api:
+              - 'apps/api/**'
+            ingest:
+              - 'apps/ingest/**'
+            web:
+              - 'apps/web/**'
+            stats:
+              - 'packages/stats/**'
+            workflows:
+              - '.github/workflows/**'
+            tests:
+              - 'tests/**'
+
+  lint:
+    runs-on: ubuntu-latest
+    needs: changes
+    if: ${{ needs.changes.outputs.api == 'true' || needs.changes.outputs.ingest == 'true' || needs.changes.outputs.web == 'true' || needs.changes.outputs.stats == 'true' || needs.changes.outputs.workflows == 'true' || needs.changes.outputs.tests == 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: actionlint
+        uses: raven-actions/actionlint@v2
+      - name: setup python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: python syntax check
+        run: python -m compileall apps tests
+
+  test:
+    runs-on: ubuntu-latest
+    needs: [changes, lint]
+    if: ${{ needs.changes.outputs.api == 'true' || needs.changes.outputs.ingest == 'true' || needs.changes.outputs.stats == 'true' || needs.changes.outputs.tests == 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: setup python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: install test deps
+        run: pip install pyyaml
+      - name: run tests
+        run: python -m unittest discover -s tests
+
+  build:
+    runs-on: ubuntu-latest
+    needs: [changes, lint]
+    if: ${{ needs.changes.outputs.api == 'true' || needs.changes.outputs.ingest == 'true' || needs.changes.outputs.web == 'true' || needs.changes.outputs.stats == 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - name: install deps
+        run: pnpm install --frozen-lockfile
+      - name: build workspace (best effort scaffold)
+        run: pnpm -r --if-present run build
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [lint, test, build]
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' && false }}
+    steps:
+      - name: deploy placeholder
+        run: echo "deploy disabled until phase 7"

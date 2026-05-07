@@ -1,0 +1,161 @@
+### 1. Concise Plan
+
+To achieve the RED state for Task 0.4, we will implement a TDD-compliant acceptance test suite.
+
+1.  **Directory Setup**: Create `tests/devstack/` to house the new test module.
+2.  **Test Implementation**: Create `test_compose_acceptance.py`.
+    *   Use `yaml` library to parse `docker-compose.yml`.
+    *   Assert presence of specific services (`db`, `db-init`, `mlb-mock`, `api`, `ingest`, `web`).
+    *   Assert port mappings for `db` (5432), `mlb-mock` (8090), and `web` (5173).
+    *   Assert `db` image is `postgres:18-alpine`.
+    *   Use `subprocess` to verify `Makefile` targets (`dev`, `dev-clean`) exist.
+3.  **Verification**: Run the tests against the current repository state. Since the prompt implies we are starting from scratch or a non-compliant state, and specifically asks for RED state, we will ensure the tests are strict enough to fail if the config is missing or incorrect. *Note: If the current `docker-compose.yml` already matches these specs, the tests will pass (GREEN). To guarantee RED as requested, I will assume the current state does not yet have these specific constraints enforced or the files are missing/empty, but the code provided will be the strict acceptance criteria.*
+
+### 2. Exact File Edits
+
+**File: `tests/devstack/__init__.py`**
+```python
+# tests/devstack/__init__.py
+```
+
+**File: `tests/devstack/test_compose_acceptance.py`**
+```python
+# tests/devstack/test_compose_acceptance.py
+import os
+import subprocess
+import unittest
+import yaml
+
+
+class TestComposeAcceptance(unittest.TestCase):
+    """Acceptance tests for Task 0.4: Local Dev Compose."""
+
+    def setUp(self):
+        self.compose_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+            "docker-compose.yml"
+        )
+        self.makefile_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+            "Makefile"
+        )
+        with open(self.compose_path, "r") as f:
+            self.compose_data = yaml.safe_load(f)
+
+    def test_required_services_exist(self):
+        """Compose must include db, db-init, mlb-mock, api, ingest, web."""
+        required_services = [
+            "db",
+            "db-init",
+            "mlb-mock",
+            "api",
+            "ingest",
+            "web",
+        ]
+        for service in required_services:
+            self.assertIn(
+                service,
+                self.compose_data.get("services", {}),
+                f"Service '{service}' is missing from docker-compose.yml"
+            )
+
+    def test_db_port_mapping(self):
+        """DB service must map host port 5432."""
+        services = self.compose_data.get("services", {})
+        db_config = services.get("db", {})
+        ports = db_config.get("ports", [])
+        # Check for exact mapping "5432:5432" or similar
+        found = False
+        for port in ports:
+            if isinstance(port, str) and port.startswith("5432:"):
+                found = True
+                break
+            elif isinstance(port, dict) and port.get("published") == 5432:
+                found = True
+                break
+        self.assertTrue(found, "DB service must expose host port 5432")
+
+    def test_mlb_mock_port_mapping(self):
+        """MLB-Mock service must map host port 8090."""
+        services = self.compose_data.get("services", {})
+        mlb_config = services.get("mlb-mock", {})
+        ports = mlb_config.get("ports", [])
+        found = False
+        for port in ports:
+            if isinstance(port, str) and port.startswith("8090:"):
+                found = True
+                break
+            elif isinstance(port, dict) and port.get("published") == 8090:
+                found = True
+                break
+        self.assertTrue(found, "MLB-Mock service must expose host port 8090")
+
+    def test_web_port_mapping(self):
+        """Web service must map host port 5173."""
+        services = self.compose_data.get("services", {})
+        web_config = services.get("web", {})
+        ports = web_config.get("ports", [])
+        found = False
+        for port in ports:
+            if isinstance(port, str) and port.startswith("5173:"):
+                found = True
+                break
+            elif isinstance(port, dict) and port.get("published") == 5173:
+                found = True
+                break
+        self.assertTrue(found, "Web service must expose host port 5173")
+
+    def test_db_image(self):
+        """DB service must use postgres:18-alpine."""
+        services = self.compose_data.get("services", {})
+        db_config = services.get("db", {})
+        image = db_config.get("image", "")
+        self.assertEqual(
+            image,
+            "postgres:18-alpine",
+            "DB service must use image 'postgres:18-alpine'"
+        )
+
+    def test_makefile_dev_target(self):
+        """Makefile must contain 'dev' target."""
+        with open(self.makefile_path, "r") as f:
+            content = f.read()
+        self.assertIn("dev:", content, "Makefile must define 'dev' target")
+
+    def test_makefile_dev_clean_target(self):
+        """Makefile must contain 'dev-clean' target."""
+        with open(self.makefile_path, "r") as f:
+            content = f.read()
+        self.assertIn("dev-clean:", content, "Makefile must define 'dev-clean' target")
+
+
+if __name__ == "__main__":
+    unittest.main()
+```
+
+### 3. Verification Commands
+
+**1. Run Tests (Expect RED/Failure if config is missing/incorrect):**
+```bash
+python3 -m unittest tests/devstack/test_compose_acceptance.py -v
+```
+
+**2. Verify File Structure:**
+```bash
+ls -la tests/devstack/
+```
+
+### Notes for GREEN Implementation
+
+1.  **Update `docker-compose.yml`**:
+    *   Ensure services `db`, `db-init`, `mlb-mock`, `api`, `ingest`, `web` are defined.
+    *   Set `db` image to `postgres:18-alpine`.
+    *   Map ports: `db` -> `5432:5432`, `mlb-mock` -> `8090:8090`, `web` -> `5173:5173`.
+2.  **Update `Makefile`**:
+    *   Add `dev:` target (likely calling `docker compose up`).
+    *   Add `dev-clean:` target (likely calling `docker compose down -v`).
+3.  **Re-run Tests**:
+    ```bash
+    python3 -m unittest tests/devstack/test_compose_acceptance.py -v
+    ```
+    All tests should now pass (GREEN).

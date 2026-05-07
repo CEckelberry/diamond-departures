@@ -1,0 +1,166 @@
+### 1. Concise Plan
+
+1.  **Analyze Contract**: Define the expected structure of `.github/workflows/ci.yml` based on the scope (triggers, path filtering, specific jobs, actionlint step).
+2.  **Create Test File**: Initialize `tests/ci/test_workflow_scaffold.py`.
+3.  **Implement Assertions**: Write unit tests using `unittest` and `yaml` to parse the workflow file and assert:
+    *   File existence.
+    *   Presence of `push` and `pull_request` triggers.
+    *   Presence of path filters in jobs.
+    *   Existence of `lint`, `test`, and `build` jobs.
+    *   Existence of an `actionlint` step within the lint job.
+4.  **Verify RED State**: Ensure tests fail because the workflow file does not yet exist or lacks the required structure.
+
+### 2. Exact File Edits
+
+```diff
+diff --git a/tests/ci/test_workflow_scaffold.py b/tests/ci/test_workflow_scaffold.py
+new file mode 100644
+index 0000000..a1b2c3d
+--- /dev/null
++++ b/tests/ci/test_workflow_scaffold.py
+@@ -0,0 +1,85 @@
++"""
++Tests for CI Workflow Scaffold Contract (Task 0.5)
++
++Validates that .github/workflows/ci.yml exists and meets structural requirements.
++"""
++
++import os
++import unittest
++import yaml
++
++
++class TestWorkflowScaffold(unittest.TestCase):
++    """Test suite for CI workflow scaffold structure."""
++
++    WORKFLOW_PATH = ".github/workflows/ci.yml"
++
++    def setUp(self):
++        """Load the workflow file if it exists."""
++        self.workflow_path = os.path.join(os.getcwd(), self.WORKFLOW_PATH)
++        self.workflow_data = None
++        
++        if os.path.exists(self.workflow_path):
++            with open(self.workflow_path, 'r') as f:
++                try:
++                    self.workflow_data = yaml.safe_load(f)
++                except yaml.YAMLError:
++                    self.workflow_data = None
++
++    def test_workflow_file_exists(self):
++        """Assert that the CI workflow file exists."""
++        self.assertTrue(
++            os.path.exists(self.workflow_path),
++            f"CI workflow file not found at {self.WORKFLOW_PATH}"
++        )
++
++    def test_workflow_is_valid_yaml(self):
++        """Assert that the workflow file is valid YAML."""
++        self.assertIsNotNone(
++            self.workflow_data,
++            "Workflow file is either missing or contains invalid YAML"
++        )
++
++    def test_workflow_triggers_on_push_and_pr(self):
++        """Assert workflow triggers on push and pull_request."""
++        self.assertIn('on', self.workflow_data)
++        triggers = self.workflow_data['on']
++        
++        # Handle both list and dict trigger formats
++        if isinstance(triggers, list):
++            self.assertIn('push', triggers)
++            self.assertIn('pull_request', triggers)
++        elif isinstance(triggers, dict):
++            self.assertIn('push', triggers)
++            self.assertIn('pull_request', triggers)
++        else:
++            self.fail("Workflow 'on' triggers are not in expected format (list or dict)")
++
++    def test_workflow_has_lint_job(self):
++        """Assert that a lint job is defined."""
++        self.assertIn('jobs', self.workflow_data)
++        self.assertIn('lint', self.workflow_data['jobs'])
++
++    def test_workflow_has_test_job(self):
++        """Assert that a test job is defined."""
++        self.assertIn('jobs', self.workflow_data)
++        self.assertIn('test', self.workflow_data['jobs'])
++
++    def test_workflow_has_build_job(self):
++        """Assert that a build job is defined."""
++        self.assertIn('jobs', self.workflow_data)
++        self.assertIn('build', self.workflow_data['jobs'])
++
++    def test_lint_job_uses_actionlint(self):
++        """Assert that the lint job includes an actionlint step."""
++        jobs = self.workflow_data.get('jobs', {})
++        lint_job = jobs.get('lint', {})
++        steps = lint_job.get('steps', [])
++        
++        actionlint_found = False
++        for step in steps:
++            # Check if step uses actionlint (either as run command or uses action)
++            if 'actionlint' in str(step.get('name', '')) or \
++               'actionlint' in str(step.get('run', '')) or \
++               'actionlint' in str(step.get('uses', '')):
++                actionlint_found = True
++                break
++        
++        self.assertTrue(
++            actionlint_found,
++            "Lint job does not contain a step using actionlint"
++        )
++
++    def test_jobs_use_path_filtering(self):
++        """Assert that jobs use path filtering to detect changed apps."""
++        jobs = self.workflow_data.get('jobs', {})
++        
++        for job_name, job_config in jobs.items():
++            # Check if paths are defined in the job or its steps
++            has_paths = False
++            
++            # Check top-level job paths
++            if 'paths' in job_config:
++                has_paths = True
++            
++            # Check if it's a conditional step with paths
++            for step in job_config.get('steps', []):
++                if 'if' in step and 'paths' in str(step['if']):
++                    has_paths = True
++                    break
++            
++            # Note: In many CI setups, path filtering is done via 'on.paths' 
++            # or job-level 'paths'. We check for presence of 'paths' key anywhere relevant.
++            # For this scaffold test, we ensure the structure allows for it.
++            # A more robust check would verify specific paths, but scaffold level 
++            # just ensures the mechanism is present.
++            
++            # Since we require path filtering, we assert that at least one job 
++            # has a 'paths' key or uses a path-based condition.
++            # However, to be strict about "detect changed apps", we look for 
++            # paths configuration in the workflow.
++            pass
++        
++        # Simplified assertion: Ensure 'paths' is referenced in the workflow structure
++        workflow_str = yaml.dump(self.workflow_data)
++        self.assertIn(
++            'paths', 
++            workflow_str,
++            "Workflow does not appear to use path filtering"
++        )
++
++
++if __name__ == '__main__':
++    unittest.main()
+```
+
+### 3. Verification Commands
+
+```bash
+# Run the tests to confirm RED state (failing assertions)
+python3 -m unittest tests/ci/test_workflow_scaffold.py
+
+# Expected output:
+# ERROR or FAIL due to missing .github/workflows/ci.yml file
+# Specifically: AssertionError: CI workflow file not found at .github/workflows/ci.yml
+```

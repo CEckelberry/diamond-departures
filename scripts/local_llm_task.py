@@ -15,10 +15,30 @@ def main() -> None:
     parser.add_argument("--model", default="coder-fast")
     parser.add_argument("--task-file", required=True)
     parser.add_argument("--out", required=True)
-    parser.add_argument("--timeout", type=int, default=600)
+    parser.add_argument("--timeout", type=int, default=900)
+    parser.add_argument("--temperature", type=float, default=None)
+    parser.add_argument("--top-p", type=float, default=None)
+    parser.add_argument("--max-tokens", type=int, default=None)
+    parser.add_argument(
+        "--profile",
+        choices=["impl", "test", "plan"],
+        default="impl",
+        help="Preset sampling profile when explicit sampling args are omitted.",
+    )
     args = parser.parse_args()
 
     task_text = pathlib.Path(args.task_file).read_text(encoding="utf-8")
+
+    profile_defaults = {
+        "impl": {"temperature": 0.25, "top_p": 0.92, "max_tokens": 4500},
+        "test": {"temperature": 0.35, "top_p": 0.95, "max_tokens": 6000},
+        "plan": {"temperature": 0.30, "top_p": 0.94, "max_tokens": 8000},
+    }
+    chosen = profile_defaults[args.profile]
+    temperature = args.temperature if args.temperature is not None else chosen["temperature"]
+    top_p = args.top_p if args.top_p is not None else chosen["top_p"]
+    max_tokens = args.max_tokens if args.max_tokens is not None else chosen["max_tokens"]
+
     payload = {
         "model": args.model,
         "messages": [
@@ -31,9 +51,9 @@ def main() -> None:
             },
             {"role": "user", "content": task_text},
         ],
-        "temperature": 0.15,
-        "top_p": 0.9,
-        "max_tokens": 3000,
+        "temperature": temperature,
+        "top_p": top_p,
+        "max_tokens": max_tokens,
         "stream": False,
     }
 
