@@ -1,0 +1,64 @@
+@import 'tailwindcss';
+@import '@fontsource/inter';
+@import '@fontsource/instrument-serif';
+@import '@fontsource/jetbrains-mono';
+
+:root {
+	--board-bg: #0e0820;
+	--cell-bg: #26215c;
+	--cell-edge: rgba(0, 0, 0, 0.4);
+	--cell-text: #fac775;
+	--cell-text-dim: #9d7c49;
+	--rank-text: rgba(255, 255, 255, 0.4);
+	--row-up: #5dcaa5;
+	--row-down: #ed93b1;
+	--row-new: #f4c0d1;
+	--chrome-bg: #120a29;
+	--chrome-text: #f8f5ff;
+	font-family: 'Inter', system-ui, sans-serif;
+}
+
+:root[data-theme='light'] {
+	--chrome-bg: #f7f3ff;
+	--chrome-text: #140e2f;
+}
+
+body {
+	margin: 0;
+	background: var(--board-bg);
+	color: var(--chrome-text);
+}
+
+.chrome {
+	padding: 0.75rem 1rem;
+	background: var(--chrome-bg);
+	border-bottom: 1px solid color-mix(in oklab, var(--chrome-text) 20%, transparent);
+}
+
+.theme-toggle {
+	font-family: 'JetBrains Mono', monospace;
+}
+
+.flap-cell {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 2.25rem;
+	height: 2.5rem;
+	background: var(--cell-bg);
+	color: var(--cell-text);
+	font-family: 'JetBrains Mono', monospace;
+	font-weight: 700;
+	border-radius: 0.25rem;
+	position: relative;
+}
+
+.flap-cell::before {
+	content: '';
+	position: absolute;
+	left: 0;
+	right: 0;
+	top: 50%;
+	height: 1px;
+	background: var(--cell-edge);
+}

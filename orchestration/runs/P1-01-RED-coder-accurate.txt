@@ -1,0 +1,198 @@
+### 1. Concise Plan
+
+1.  **Directory Setup**: Create the necessary directory structure for the test package (`packages/stats/hitting/tests/`).
+2.  **Test Implementation**: Write `test_basic.py` using `pytest`.
+    *   Import the target module functions (which do not exist yet, ensuring RED state).
+    *   Define fixtures or inline data for hand-verified sample values (e.g., standard AB, H, BB, SO, 2B, 3B, HR counts).
+    *   Create test cases for AVG, OBP, SLG, OPS, ISO, and BABIP.
+    *   Include specific tests for edge cases: zero at-bats (division by zero) and zero hits (for BABIP denominator checks if applicable, though BABIP usually uses AB - SF - BB - HR).
+3.  **Verification**: Run `pytest` to confirm the tests fail with `ModuleNotFoundError` or `ImportError`, establishing the RED state.
+
+### 2. Exact File Edits as Unified Diff
+
+```diff
+diff --git a/packages/stats/hitting/tests/__init__.py b/packages/stats/hitting/tests/__init__.py
+new file mode 100644
+index 0000000..e69de29
+--- /dev/null
++++ b/packages/stats/hitting/tests/__init__.py
+@@ -0,0 +1 @@
++# Test package for hitting stats
+diff --git a/packages/stats/hitting/tests/test_basic.py b/packages/stats/hitting/tests/test_basic.py
+new file mode 100644
+index 0000000..8a7b2c3
+--- /dev/null
++++ b/packages/stats/hitting/tests/test_basic.py
+@@ -0,0 +1,156 @@
++"""
++Tests for hitting statistics formulas.
++
++Goal: TDD approach. These tests are expected to FAIL (RED) until implementation exists.
++"""
++
++import pytest
++
++# Import the functions to be tested.
++# These imports will fail initially, creating the RED state.
++from packages.stats.hitting.core import (
++    calculate_avg,
++    calculate_obp,
++    calculate_slg,
++    calculate_ops,
++    calculate_iso,
++    calculate_babip,
++)
++
++
++# Hand-verified sample data table
++# Format: (AB, H, BB, SO, 2B, 3B, HR, SF, Expected_AVG, Expected_OBP, Expected_SLG, Expected_OPS, Expected_ISO, Expected_BABIP)
++# Note: BABIP = (H - HR) / (AB - BB - SO - HR)
++
++SAMPLE_CASES = [
++    # Case 1: Standard Player
++    {
++        "ab": 500,
++        "h": 150,
++        "bb": 60,
++        "so": 100,
++        "2b": 30,
++        "3b": 5,
++        "hr": 20,
++        "sf": 5,
++        # AVG = 150/500 = 0.300
++        # OBP = (150+60+5)/(500+60+5) = 215/565 ≈ 0.38053
++        # SLG = (150 + 30 + 10 + 60)/500 = 250/500 = 0.500
++        # OPS = 0.300 + 0.500 = 0.800
++        # ISO = SLG - AVG = 0.500 - 0.300 = 0.200
++        # BABIP = (150-20)/(500-60-100-20) = 130/320 = 0.40625
++        "exp_avg": 0.300,
++        "exp_obp": 0.3805309734513274,
++        "exp_slg": 0.500,
++        "exp_ops": 0.800,
++        "exp_iso": 0.200,
++        "exp_babip": 0.40625,
++    },
++    # Case 2: Zero At-Bats (Edge Case)
++    {
++        "ab": 0,
++        "h": 0,
++        "bb": 0,
++        "so": 0,
++        "2b": 0,
++        "3b": 0,
++        "hr": 0,
++        "sf": 0,
++        "exp_avg": 0.0,
++        "exp_obp": 0.0,
++        "exp_slg": 0.0,
++        "exp_ops": 0.0,
++        "exp_iso": 0.0,
++        "exp_babip": 0.0,
++    },
++    # Case 3: Perfect Game (All Hits)
++    {
++        "ab": 10,
++        "h": 10,
++        "bb": 0,
++        "so": 0,
++        "2b": 0,
++        "3b": 0,
++        "hr": 0,
++        "sf": 0,
++        # AVG = 1.0
++        # OBP = 1.0
++        # SLG = 1.0
++        # OPS = 2.0
++        # ISO = 0.0
++        # BABIP = 10/10 = 1.0
++        "exp_avg": 1.0,
++        "exp_obp": 1.0,
++        "exp_slg": 1.0,
++        "exp_ops": 2.0,
++        "exp_iso": 0.0,
++        "exp_babip": 1.0,
++    },
++]
++
++
++class TestHittingStats:
++    """Tests for hitting statistics calculations."""
++
++    @pytest.mark.parametrize("case", SAMPLE_CASES)
++    def test_avg(self, case):
++        """Test Average calculation."""
++        result = calculate_avg(case["ab"], case["h"])
++        assert result == pytest.approx(case["exp_avg"], rel=1e-9)
++
++    @pytest.mark.parametrize("case", SAMPLE_CASES)
++    def test_obp(self, case):
++        """Test On-Base Percentage calculation."""
++        result = calculate_obp(
++            case["ab"], case["h"], case["bb"], case["sf"]
++        )
++        assert result == pytest.approx(case["exp_obp"], rel=1e-9)
++
++    @pytest.mark.parametrize("case", SAMPLE_CASES)
++    def test_slg(self, case):
++        """Test Slugging Percentage calculation."""
++        result = calculate_slg(
++            case["ab"], case["h"], case["2b"], case["3b"], case["hr"]
++        )
++        assert result == pytest.approx(case["exp_slg"], rel=1e-9)
++
++    @pytest.mark.parametrize("case", SAMPLE_CASES)
++    def test_ops(self, case):
++        """Test OPS calculation (AVG + SLG)."""
++        # Note: Some implementations calculate OPS directly from components.
++        # Here we test the dedicated function if it exists, otherwise rely on avg/slg tests.
++        # Assuming a dedicated function exists for this packet scope.
++        result = calculate_ops(
++            case["ab"], case["h"], case["bb"], case["sf"],
++            case["2b"], case["3b"], case["hr"]
++        )
++        assert result == pytest.approx(case["exp_ops"], rel=1e-9)
++
++    @pytest.mark.parametrize("case", SAMPLE_CASES)
++    def test_iso(self, case):
++        """Test Isolated Power calculation (SLG - AVG)."""
++        result = calculate_iso(
++            case["ab"], case["h"], case["2b"], case["3b"], case["hr"]
++        )
++        assert result == pytest.approx(case["exp_iso"], rel=1e-9)
++
++    @pytest.mark.parametrize("case", SAMPLE_CASES)
++    def test_babip(self, case):
++        """Test Batting Average on Balls In Play calculation."""
++        result = calculate_babip(
++            case["ab"], case["h"], case["bb"], case["so"], case["hr"]
++        )
++        assert result == pytest.approx(case["exp_babip"], rel=1e-9)
++
++    def test_zero_denominator_guard_avg(self):
++        """Ensure AVG handles zero AB without crashing."""
++        # This test verifies the guard clause in calculate_avg
++        result = calculate_avg(0, 0)
++        assert result == 0.0
++
++    def test_zero_denominator_guard_babip(self):
++        """Ensure BABIP handles zero denominator without crashing."""
++        # Denominator = AB - BB - SO - HR. If all are 0, denom is 0.
++        result = calculate_babip(0, 0, 0, 0, 0)
++        assert result == 0.0
+```
+
+### 3. Verification Commands
+
+```bash
+# 1. Ensure directory structure exists
+mkdir -p packages/stats/hitting/tests
+
+# 2. Run the tests (Expected to FAIL with Import Error)
+pytest packages/stats/hitting/tests/test_basic.py -v
+
+# Expected Output Snippet:
+# ImportError: cannot import name 'calculate_avg' from 'packages.stats.hitting.core'
+# ...
+# FAILED packages/stats/hitting/tests/test_basic.py::TestHittingStats::test_avg[case0]
+# RED STATE CONFIRMED
+```

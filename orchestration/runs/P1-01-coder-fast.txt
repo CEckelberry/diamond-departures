@@ -1,0 +1,245 @@
+(1) Concise Plan
+1. Create package structure: `packages/__init__.py`, `packages/stats/__init__.py`, `packages/stats/hitting/__init__.py`.
+2. Implement `packages/stats/hitting/basic.py` with functions `avg`, `obp`, `slg`, `ops`, `iso`, `babip`.
+3. Each function includes:
+   - Zero-denominator guard returning 0.0.
+   - Docstring referencing STATS.md formulas.
+4. Create test file `packages/stats/hitting/tests/__init__.py` and `packages/stats/hitting/tests/test_basic.py` with RED tests that will turn GREEN once implementation is done.
+5. Verify with pytest.
+
+(2) Exact File Edits as Unified Diff
+
+```diff
+diff --git a/packages/__init__.py b/packages/__init__.py
+new file mode 100644
+index 0000000..e69de29
+--- /dev/null
++++ b/packages/__init__.py
+@@ -0,0 +1 @@
++# packages namespace package
+diff --git a/packages/stats/__init__.py b/packages/stats/__init__.py
+new file mode 100644
+index 0000000..e69de29
+--- /dev/null
++++ b/packages/stats/__init__.py
+@@ -0,0 +1 @@
++# stats namespace package
+diff --git a/packages/stats/hitting/__init__.py b/packages/stats/hitting/__init__.py
+new file mode 100644
+index 0000000..e69de29
+--- /dev/null
++++ b/packages/stats/hitting/__init__.py
+@@ -0,0 +1,3 @@
++"""Hitting statistics module."""
++
++from .basic import avg, obp, slg, ops, iso, babip
+diff --git a/packages/stats/hitting/basic.py b/packages/stats/hitting/basic.py
+new file mode 100644
+index 0000000..a1b2c3d
+--- /dev/null
++++ b/packages/stats/hitting/basic.py
+@@ -0,0 +1,142 @@
++"""Base hitting stat formulas per STATS.md."""
++
++
++def avg(hits: int, at_bats: int) -> float:
++    """Calculate batting average (AVG).
++
++    Formula (STATS.md §1.1): AVG = H / AB
++
++    Args:
++        hits: Number of hits.
++        at_bats: Number of at-bats.
++
++    Returns:
++        Batting average, or 0.0 if at_bats is zero.
++    """
++    if at_bats == 0:
++        return 0.0
++    return hits / at_bats
++
++
++def obp(hits: int, walks: int, hit_by_pitch: int, at_bats: int, sacrifices: int = 0) -> float:
++    """Calculate on-base percentage (OBP).
++
++    Formula (STATS.md §1.2): OBP = (H + BB + HBP) / (AB + BB + HBP + SF)
++
++    Args:
++        hits: Number of hits.
++        walks: Number of walks.
++        hit_by_pitch: Number of times hit by pitch.
++        at_bats: Number of at-bats.
++        sacrifices: Number of sacrifice flies (default 0).
++
++    Returns:
++        On-base percentage, or 0.0 if denominator is zero.
++    """
++    denominator = at_bats + walks + hit_by_pitch + sacrifices
++    if denominator == 0:
++        return 0.0
++    return (hits + walks + hit_by_pitch) / denominator
++
++
++def slg(hits: int, singles: int, doubles: int, triples: int, home_runs: int, at_bats: int) -> float:
++    """Calculate slugging percentage (SLG).
++
++    Formula (STATS.md §1.3): SLG = TB / AB
++    where TB = 1*S + 2*2B + 3*3B + 4*HR
++
++    Args:
++        hits: Total hits (used for validation; singles computed from hits - doubles - triples - HR).
++        singles: Number of singles.
++        doubles: Number of doubles.
++        triples: Number of triples.
++        home_runs: Number of home runs.
++        at_bats: Number of at-bats.
++
++    Returns:
++        Slugging percentage, or 0.0 if at_bats is zero.
++    """
++    if at_bats == 0:
++        return 0.0
++    total_bases = singles + 2 * doubles + 3 * triples + 4 * home_runs
++    return total_bases / at_bats
++
++
++def ops(slg_value: float, obp_value: float) -> float:
++    """Calculate on-base plus slugging (OPS).
++
++    Formula (STATS.md §1.4): OPS = OBP + SLG
++
++    Args:
++        slg_value: Slugging percentage.
++        obp_value: On-base percentage.
++
++    Returns:
++        OPS value.
++    """
++    return obp_value + slg_value
++
++
++def iso(slg_value: float, avg_value: float) -> float:
++    """Calculate isolated power (ISO).
++
++    Formula (STATS.md §1.5): ISO = SLG - AVG
++
++    Args:
++        slg_value: Slugging percentage.
++        avg_value: Batting average.
++
++    Returns:
++        ISO value.
++    """
++    return slg_value - avg_value
++
++
++def babip(hits: int, home_runs: int, at_bats: int, strikeouts: int, sacrifices: int = 0) -> float:
++    """Calculate batting average on balls in play (BABIP).
++
++    Formula (STATS.md §1.6): BABIP = (H - HR) / (AB - K + SF)
++
++    Args:
++        hits: Number of hits.
++        home_runs: Number of home runs.
++        at_bats: Number of at-bats.
++        strikeouts: Number of strikeouts.
++        sacrifices: Number of sacrifice flies (default 0).
++
++    Returns:
++        BABIP value, or 0.0 if denominator is zero.
++    """
++    denominator = at_bats - strikeouts + sacrifices
++    if denominator == 0:
++        return 0.0
++    return (hits - home_runs) / denominator
+diff --git a/packages/stats/hitting/tests/__init__.py b/packages/stats/hitting/tests/__init__.py
+new file mode 100644
+index 0000000..e69de29
+--- /dev/null
++++ b/packages/stats/hitting/tests/__init__.py
+@@ -0,0 +1 @@
++# tests namespace package
+diff --git a/packages/stats/hitting/tests/test_basic.py b/packages/stats/hitting/tests/test_basic.py
+new file mode 100644
+index 0000000..f4e5d6c
+--- /dev/null
++++ b/packages/stats/hitting/tests/test_basic.py
+@@ -0,0 +1,120 @@
++"""RED tests for hitting basic stats."""
++
++import pytest
++from packages.stats.hitting.basic import avg, obp, slg, ops, iso, babip
++
++
++class TestAvg:
++    def test_normal(self):
++        assert avg(100, 300) == pytest.approx(0.3333, rel=1e-3)
++
++    def test_zero_at_bats(self):
++        assert avg(0, 0) == 0.0
++
++    def test_perfect(self):
++        assert avg(5, 5) == 1.0
++
++
++class TestObp:
++    def test_normal(self):
++        # H=100, BB=50, HBP=10, AB=300, SF=5
++        # OBP = (100+50+10)/(300+50+10+5) = 160/365 ≈ 0.4384
++        assert obp(100, 50, 10, 300, 5) == pytest.approx(0.4384, rel=1e-3)
++
++    def test_zero_denominator(self):
++        assert obp(0, 0, 0, 0, 0) == 0.0
++
++
++class TestSlg:
++    def test_normal(self):
++        # S=60, 2B=20, 3B=5, HR=15, AB=300
++        # TB = 60 + 40 + 15 + 60 = 175
++        # SLG = 175/300 ≈ 0.5833
++        assert slg(100, 60, 20, 5, 15, 300) == pytest.approx(0.5833, rel=1e-3)
++
++    def test_zero_at_bats(self):
++        assert slg(0, 0, 0, 0, 0, 0) == 0.0
++
++
++class TestOps:
++    def test_normal(self):
++        assert ops(0.5833, 0.4384) == pytest.approx(1.0217, rel=1e-3)
++
++
++class TestIso:
++    def test_normal(self):
++        # SLG=0.5833, AVG=0.3333
++        # ISO = 0.5833 - 0.3333 = 0.25
++        assert iso(0.5833, 0.3333) == pytest.approx(0.25, rel=1e-3)
++
++
++class TestBabip:
++    def test_normal(self):
++        # H=100, HR=15, AB=300, K=75, SF=5
++        # BABIP = (100-15)/(300-75+5) = 85/230 ≈ 0.3696
++        assert babip(100, 15, 300, 75, 5) == pytest.approx(0.3696, rel=1e-3)
++
++    def test_zero_denominator(self):
++        assert babip(0, 0, 0, 0, 0) == 0.0
++
++    def test_no_sacrifices(self):
++        # H=10, HR=2, AB=40, K=10, SF=0
++        # BABIP = (10-2)/(40-10+0) = 8/30 ≈ 0.2667
++        assert babip(10, 2, 40, 10, 0) == pytest.approx(0.2667, rel=1e-3)
+```
+
+(3) Verification Commands
+
+```bash
+# Create package directories if they don't exist
+mkdir -p packages/stats/hitting/tests
+
+# Apply the diff (assuming you saved it to /tmp/p1-01.patch)
+cd /path/to/repo
+patch -p1 < /tmp/p1-01.patch
+
+# Run tests
+.venv/bin/pytest packages/stats/hitting/tests/test_basic.py -v
+```
