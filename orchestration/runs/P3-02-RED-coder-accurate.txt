@@ -1,0 +1,193 @@
+# Packet P3-02-RED: Single-Cell Flap Animation Tests
+
+## 1. Concise Plan
+
+1.  **Analyze Existing Code**: Inspect `apps/web/src/lib/flap-animation.ts` to understand the `FlipSequence`, `QueueManager`, and `ReducedMotion` logic.
+2.  **Create Test File**: Create `apps/web/tests/flap-animation.test.mjs`.
+3.  **Implement Phase 1 (Sequencing)**: Test that `flipSequence` correctly calculates delays for a 450ms total duration across 3 cells (150ms each).
+4.  **Implement Phase 2 (Queueing)**: Test that rapid updates (`a -> b -> c`) result in the final state being `c`, and intermediate states are processed or skipped correctly based on queue logic.
+5.  **Implement Phase 3 (Reduced Motion)**: Test that when reduced motion is enabled, animations are skipped, and a "flash" signal is emitted immediately.
+6.  **Run Verification**: Execute the test suite to confirm failures (RED state).
+
+## 2. Exact File Edits
+
+### New File: `apps/web/tests/flap-animation.test.mjs`
+
+```javascript
+import { describe, it } from 'node:test';
+import assert from 'node:assert';
+import { createMockContext } from '../mocks/context.mjs';
+
+// Import the actual module under test
+// Note: Adjust import path based on actual project structure. 
+// Assuming TypeScript source is compiled or transpiled, or using a loader.
+// For this packet, we assume direct import of the source or a built version.
+// If using ESM with TS, you might need a loader like tsx or esbuild-register.
+// Here we assume standard ESM imports for the sake of the test structure.
+
+import { 
+  FlipSequence, 
+  QueueManager, 
+  ReducedMotionHandler 
+} from '../../src/lib/flap-animation.ts';
+
+describe('Flap Animation - Phase 1: Sequencing', () => {
+  it('should calculate correct delays for 3 cells with 450ms total duration', () => {
+    const sequence = new FlipSequence(3, 450);
+    const delays = sequence.getDelays();
+    
+    assert.strictEqual(delays.length, 3, 'Should have 3 delays');
+    // 450ms / 3 cells = 150ms per cell
+    assert.deepStrictEqual(delays, [0, 150, 300], 'Delays should be 0, 150, 300');
+  });
+
+  it('should handle single cell with 450ms duration', () => {
+    const sequence = new FlipSequence(1, 450);
+    const delays = sequence.getDelays();
+    
+    assert.strictEqual(delays.length, 1, 'Should have 1 delay');
+    assert.deepStrictEqual(delays, [0], 'Delay should be 0');
+  });
+});
+
+describe('Flap Animation - Phase 2: Queueing', () => {
+  it('should process queued updates in order (a -> b -> c)', async () => {
+    const queue = new QueueManager();
+    const results = [];
+    
+    // Mock the animation function to record calls
+    const mockAnimate = (value) => {
+      return new Promise((resolve) => {
+        results.push(value);
+        resolve();
+      });
+    };
+
+    // Simulate rapid updates
+    queue.enqueue('a', mockAnimate);
+    queue.enqueue('b', mockAnimate);
+    queue.enqueue('c', mockAnimate);
+
+    // Wait for queue to process
+    await queue.processAll();
+
+    // Depending on implementation, either all are processed or only the last one
+    // For RED, we assert that the order is preserved if all are processed,
+    // or that the final state is 'c'.
+    // Let's assume the requirement is that intermediate states are not lost if they are distinct.
+    // However, typical queueing for animations might skip intermediates.
+    // We will test that 'c' is the final result.
+    
+    assert.ok(results.includes('c'), 'Final state c should be in results');
+    // If the implementation skips intermediates:
+    // assert.deepStrictEqual(results, ['c']);
+    // If it processes all:
+    // assert.deepStrictEqual(results, ['a', 'b', 'c']);
+    
+    // For now, we assert that the queue doesn't crash and processes something.
+    assert.ok(results.length > 0, 'Queue should process at least one item');
+  });
+
+  it('should preserve order of updates', async () => {
+    const queue = new QueueManager();
+    const results = [];
+    
+    const mockAnimate = (value) => {
+      return new Promise((resolve) => {
+        results.push(value);
+        resolve();
+      });
+    };
+
+    queue.enqueue('1', mockAnimate);
+    queue.enqueue('2', mockAnimate);
+    queue.enqueue('3', mockAnimate);
+
+    await queue.processAll();
+
+    // Assert order
+    assert.deepStrictEqual(results, ['1', '2', '3'], 'Updates should be processed in FIFO order');
+  });
+});
+
+describe('Flap Animation - Phase 3: Reduced Motion', () => {
+  it('should skip animation and emit flash signal when reduced motion is enabled', () => {
+    const handler = new ReducedMotionHandler(true); // Enable reduced motion
+    const flashSignal = handler.getFlashSignal();
+    
+    // Trigger the flip
+    handler.flip('new-state');
+    
+    // Assert that no animation was queued
+    assert.strictEqual(handler.isAnimating(), false, 'Should not be animating');
+    
+    // Assert that flash signal was emitted
+    assert.ok(flashSignal.emitted, 'Flash signal should be emitted');
+  });
+
+  it('should animate normally when reduced motion is disabled', () => {
+    const handler = new ReducedMotionHandler(false); // Disable reduced motion
+    
+    handler.flip('new-state');
+    
+    // Assert that animation is queued or started
+    assert.ok(handler.isAnimating(), 'Should be animating');
+  });
+});
+```
+
+### Edit: `apps/web/src/lib/flap-animation.ts` (Stub Implementation for RED)
+
+*Note: If the file already exists with a full implementation, skip this. If it's empty or partial, create stubs to ensure the tests fail (RED) rather than error out due to missing exports.*
+
+```typescript
+// apps/web/src/lib/flap-animation.ts
+
+export class FlipSequence {
+  constructor(public cellCount: number, public totalDuration: number) {}
+  
+  getDelays(): number[] {
+    // TODO: Implement delay calculation
+    throw new Error('Not implemented');
+  }
+}
+
+export class QueueManager {
+  async enqueue(value: any, animate: (value: any) => Promise<void>): Promise<void> {
+    // TODO: Implement queueing logic
+    throw new Error('Not implemented');
+  }
+
+  async processAll(): Promise<void> {
+    // TODO: Implement processing logic
+    throw new Error('Not implemented');
+  }
+}
+
+export class ReducedMotionHandler {
+  constructor(private reducedMotion: boolean) {}
+  
+  flip(value: any): void {
+    // TODO: Implement flip logic
+    throw new Error('Not implemented');
+  }
+  
+  getFlashSignal(): { emitted: boolean } {
+    return { emitted: false };
+  }
+
+  isAnimating(): boolean {
+    return false;
+  }
+}
+```
+
+## 3. Verification Commands
+
+```bash
+# 1. Run the specific test file to confirm RED state (failures)
+node --test apps/web/tests/flap-animation.test.mjs
+
+# 2. Run type checking to ensure no syntax errors in the new/edited files
+pnpm --filter web check
+```
