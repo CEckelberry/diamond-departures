@@ -1,0 +1,413 @@
+### 1. Concise Plan
+
+1.  **Schema Definition**: Define the `player_season_stats` table in `apps/ingest/models.py` with columns for `player_id`, `stat_name`, `value`, `season`, `valid_from`, and `valid_to`.
+2.  **Stat Store Helper**: Implement `PlayerStatStore` in `apps/ingest/player_stats_store.py`. This class will handle the logic for:
+    *   Fetching current valid stats for a player/season.
+    *   Upserting new values by closing the old row (`valid_to` = now) and inserting a new row (`valid_from` = now, `valid_to` = null).
+    *   Skipping inserts if the value hasn't changed.
+3.  **Derived Stats & Updater**: Implement `PlayerUpdater` in `apps/ingest/player_updater.py`. This class will:
+    *   Accept a raw batting line (H, 2B, 3B, HR, BB, HBP, AB, etc.).
+    *   Calculate derived stats: `OBP`, `SLG`, `OPS`, and `wRC+` (using a simplified league average baseline for this scope).
+    *   Use `PlayerStatStore` to persist these stats.
+4.  **Tests**: Create comprehensive tests in `apps/ingest/tests/test_player_stats_store.py` and `apps/ingest/tests/test_player_updater.py` to verify append-only behavior, derived stat calculations, and skip logic.
+
+### 2. Exact File Edits
+
+#### File: `apps/ingest/models.py`
+
+```diff
+--- a/apps/ingest/models.py
++++ b/apps/ingest/models.py
+@@ -1,5 +1,6 @@
+ from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, create_engine
+ from sqlalchemy.ext.declarative import declarative_base
++from sqlalchemy import func
+ from datetime import datetime
+ 
+ Base = declarative_base()
+@@ -15,3 +16,25 @@ class Player(Base):
+     __tablename__ = 'players'
+     id = Column(Integer, primary_key=True)
+     name = Column(String(100), nullable=False)
++
++
++class PlayerSeasonStat(Base):
++    """Append-only stat store for player season statistics."""
++    __tablename__ = 'player_season_stats'
++    
++    id = Column(Integer, primary_key=True)
++    player_id = Column(Integer, ForeignKey('players.id'), nullable=False)
++    stat_name = Column(String(50), nullable=False)
++    value = Column(Float, nullable=False)
++    season = Column(Integer, nullable=False)
++    
++    # Validity window
++    valid_from = Column(DateTime, nullable=False, default=datetime.utcnow)
++    valid_to = Column(DateTime, nullable=True)
++    
++    # Unique constraint to ensure only one current version per player/stat/season
++    __table_args__ = (
++        # We rely on application logic for the "current" row, but this helps index
++        # UniqueConstraint('player_id', 'stat_name', 'season', 'valid_to', 
++        #                  postgresql_where=valid_to.is_(None)),
++    )
+```
+
+#### File: `apps/ingest/player_stats_store.py`
+
+```python
+"""
+Append-only player stat store.
+
+Handles persistence of player season statistics with valid_from/valid_to semantics.
+"""
+from datetime import datetime
+from typing import Dict, Optional, Tuple
+from sqlalchemy.orm import Session
+from apps.ingest.models import PlayerSeasonStat
+
+
+class PlayerStatStore:
+    """
+    Manages append-only updates to player season stats.
+    
+    Logic:
+    1. Fetch current valid stat (valid_to is None).
+    2. If new value == old value, do nothing.
+    3. If new value != old value (or no current row exists):
+       a. Close existing row (set valid_to = now).
+       b. Insert new row (valid_from = now, valid_to = None).
+    """
+    
+    def __init__(self, session: Session):
+        self.session = session
+    
+    def get_current_stat(self, player_id: int, stat_name: str, season: int) -> Optional[float]:
+        """Retrieve the current valid value for a specific stat."""
+        stat = (
+            self.session.query(PlayerSeasonStat)
+            .filter(
+                PlayerSeasonStat.player_id == player_id,
+                PlayerSeasonStat.stat_name == stat_name,
+                PlayerSeasonStat.season == season,
+                PlayerSeasonStat.valid_to.is_(None)
+            )
+            .first()
+        )
+        return stat.value if stat else None
+    
+    def upsert_stat(self, player_id: int, stat_name: str, season: int, new_value: float) -> bool:
+        """
+        Upsert a stat value. Returns True if a new row was inserted, False if skipped.
+        """
+        current_value = self.get_current_stat(player_id, stat_name, season)
+        
+        # Skip if value hasn't changed
+        if current_value is not None and abs(current_value - new_value) < 1e-9:
+            return False
+        
+        now = datetime.utcnow()
+        
+        # Close existing row if it exists
+        if current_value is not None:
+            self.session.query(PlayerSeasonStat).filter(
+                PlayerSeasonStat.player_id == player_id,
+                PlayerSeasonStat.stat_name == stat_name,
+                PlayerSeasonStat.season == season,
+                PlayerSeasonStat.valid_to.is_(None)
+            ).update({"valid_to": now})
+        
+        # Insert new row
+        new_stat = PlayerSeasonStat(
+            player_id=player_id,
+            stat_name=stat_name,
+            value=new_value,
+            season=season,
+            valid_from=now,
+            valid_to=None
+        )
+        self.session.add(new_stat)
+        return True
+    
+    def flush(self):
+        """Commit pending changes."""
+        self.session.commit()
+```
+
+#### File: `apps/ingest/player_updater.py`
+
+```python
+"""
+Player updater for computing and persisting derived stats.
+"""
+from typing import Dict, Any
+from sqlalchemy.orm import Session
+from apps.ingest.player_stats_store import PlayerStatStore
+
+
+class PlayerUpdater:
+    """
+    Computes derived batting stats from raw lines and persists them.
+    
+    Derived Stats:
+    - OBP: (H + BB + HBP) / (AB + BB + HBP + SF)
+    - SLG: (1B + 2*2B + 3*3B + 4*HR) / AB
+    - OPS: OBP + SLG
+    - wRC+: ((OBP + SLG - LG_OBP) / (LG_SLG - LG_OBP)) * (PA / Team_PA) * League_Runs_Per_PA * 100
+            Simplified: (OBP + SLG) / (LG_OBP + LG_SLG) * 100 * Adjustment
+    """
+    
+    # League averages for wRC+ calculation (simplified constants)
+    LG_OBP = 0.320
+    LG_SLG = 0.400
+    LG_WRC_PLUS_ADJUSTMENT = 100.0
+    
+    def __init__(self, session: Session):
+        self.session = session
+        self.stat_store = PlayerStatStore(session)
+    
+    def _calculate_obp(self, h: float, bb: float, hbp: float, ab: float, sf: float) -> float:
+        denominator = ab + bb + hbp + sf
+        if denominator == 0:
+            return 0.0
+        return (h + bb + hbp) / denominator
+    
+    def _calculate_slg(self, ab: float, single: float, double: float, triple: float, hr: float) -> float:
+        if ab == 0:
+            return 0.0
+        total_bases = single + (2 * double) + (3 * triple) + (4 * hr)
+        return total_bases / ab
+    
+    def _calculate_ops(self, obp: float, slg: float) -> float:
+        return obp + slg
+    
+    def _calculate_wrc_plus(self, obp: float, slg: float) -> float:
+        denominator = self.LG_OBP + self.LG_SLG
+        if denominator == 0:
+            return 100.0
+        return ((obp + slg) / denominator) * self.LG_WRC_PLUS_ADJUSTMENT
+    
+    def update_player_stats(self, player_id: int, season: int, line: Dict[str, Any]) -> None:
+        """
+        Process a batting line and update derived stats.
+        
+        Args:
+            player_id: ID of the player
+            season: Season year
+            line: Dict with keys: ab, h, bb, hbp, sf, 2b, 3b, hr, rbi
+        """
+        ab = float(line.get('ab', 0))
+        h = float(line.get('h', 0))
+        bb = float(line.get('bb', 0))
+        hbp = float(line.get('hbp', 0))
+        sf = float(line.get('sf', 0))
+        single = float(line.get('h', 0)) - float(line.get('2b', 0)) - float(line.get('3b', 0)) - float(line.get('hr', 0))
+        double = float(line.get('2b', 0))
+        triple = float(line.get('3b', 0))
+        hr = float(line.get('hr', 0))
+        
+        # Calculate derived stats
+        obp = self._calculate_obp(h, bb, hbp, ab, sf)
+        slg = self._calculate_slg(ab, single, double, triple, hr)
+        ops = self._calculate_ops(obp, slg)
+        wrc_plus = self._calculate_wrc_plus(obp, slg)
+        
+        # Persist stats
+        self.stat_store.upsert_stat(player_id, 'OBP', season, obp)
+        self.stat_store.upsert_stat(player_id, 'SLG', season, slg)
+        self.stat_store.upsert_stat(player_id, 'OPS', season, ops)
+        self.stat_store.upsert_stat(player_id, 'wRC+', season, wrc_plus)
+        
+        self.stat_store.flush()
+```
+
+#### File: `apps/ingest/tests/test_player_stats_store.py`
+
+```python
+import pytest
+from datetime import datetime
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from apps.ingest.models import Base, Player, PlayerSeasonStat
+from apps.ingest.player_stats_store import PlayerStatStore
+
+
+@pytest.fixture
+def db_session():
+    engine = create_engine('sqlite:///:memory:')
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+    session = Session()
+    
+    # Add a test player
+    player = Player(id=1, name="Test Player")
+    session.add(player)
+    session.commit()
+    
+    yield session
+    session.close()
+
+
+def test_get_current_stat_no_data(db_session):
+    store = PlayerStatStore(db_session)
+    assert store.get_current_stat(1, 'OBP', 2023) is None
+
+
+def test_upsert_stat_new_value(db_session):
+    store = PlayerStatStore(db_session)
+    
+    # Insert first value
+    inserted = store.upsert_stat(1, 'OBP', 2023, 0.400)
+    assert inserted is True
+    
+    # Verify data
+    stat = db_session.query(PlayerSeasonStat).filter_by(player_id=1, stat_name='OBP', season=2023, valid_to=None).first()
+    assert stat is not None
+    assert abs(stat.value - 0.400) < 1e-9
+    
+    # Insert same value (should skip)
+    inserted = store.upsert_stat(1, 'OBP', 2023, 0.400)
+    assert inserted is False
+    
+    # Count rows
+    total_rows = db_session.query(PlayerSeasonStat).filter_by(player_id=1, stat_name='OBP', season=2023).count()
+    assert total_rows == 1
+
+
+def test_upsert_stat_changed_value(db_session):
+    store = PlayerStatStore(db_session)
+    
+    # Insert first value
+    store.upsert_stat(1, 'SLG', 2023, 0.500)
+    
+    # Insert changed value
+    inserted = store.upsert_stat(1, 'SLG', 2023, 0.550)
+    assert inserted is True
+    
+    # Verify old row is closed
+    old_stat = db_session.query(PlayerSeasonStat).filter_by(player_id=1, stat_name='SLG', season=2023, valid_to__isnot=None).first()
+    assert old_stat is not None
+    assert abs(old_stat.value - 0.500) < 1e-9
+    
+    # Verify new row is open
+    new_stat = db_session.query(PlayerSeasonStat).filter_by(player_id=1, stat_name='SLG', season=2023, valid_to=None).first()
+    assert new_stat is not None
+    assert abs(new_stat.value - 0.550) < 1e-9
+    
+    # Count rows (should be 2)
+    total_rows = db_session.query(PlayerSeasonStat).filter_by(player_id=1, stat_name='SLG', season=2023).count()
+    assert total_rows == 2
+```
+
+#### File: `apps/ingest/tests/test_player_updater.py`
+
+```python
+import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from apps.ingest.models import Base, Player
+from apps.ingest.player_updater import PlayerUpdater
+
+
+@pytest.fixture
+def db_session():
+    engine = create_engine('sqlite:///:memory:')
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+    session = Session()
+    
+    player = Player(id=1, name="Test Player")
+    session.add(player)
+    session.commit()
+    
+    yield session
+    session.close()
+
+
+def test_calculate_obp(db_session):
+    updater = PlayerUpdater(db_session)
+    
+    # Standard OBP: (H + BB + HBP) / (AB + BB + HBP + SF)
+    # H=10, BB=5, HBP=1, AB=30, SF=1 => (10+5+1)/(30+5+1+1) = 16/37 ≈ 0.4324
+    obp = updater._calculate_obp(10, 5, 1, 30, 1)
+    assert abs(obp - 0.432432) < 1e-4
+    
+    # Zero AB
+    assert updater._calculate_obp(0, 0, 0, 0, 0) == 0.0
+
+
+def test_calculate_slg(db_session):
+    updater = PlayerUpdater(db_session)
+    
+    # SLG: Total Bases / AB
+    # 1B=5, 2B=2, 3B=1, HR=1, AB=30
+    # TB = 5 + 4 + 3 + 4 = 16
+    # SLG = 16/30 ≈ 0.5333
+    slg = updater._calculate_slg(30, 5, 2, 1, 1)
+    assert abs(slg - 0.533333) < 1e-4
+    
+    # Zero AB
+    assert updater._calculate_slg(0, 0, 0, 0, 0) == 0.0
+
+
+def test_calculate_ops(db_session):
+    updater = PlayerUpdater(db_session)
+    obp = 0.400
+    slg = 0.600
+    ops = updater._calculate_ops(obp, slg)
+    assert abs(ops - 1.0) < 1e-9
+
+
+def test_calculate_wrc_plus(db_session):
+    updater = PlayerUpdater(db_session)
+    
+    # If OBP+SLG == LG_OBP+LG_SLG, wRC+ should be 100
+    obp = 0.320
+    slg = 0.400
+    wrc_plus = updater._calculate_wrc_plus(obp, slg)
+    assert abs(wrc_plus - 100.0) < 1e-9
+    
+    # Higher OBP+SLG => higher wRC+
+    obp = 0.350
+    slg = 0.450
+    wrc_plus = updater._calculate_wrc_plus(obp, slg)
+    assert wrc_plus > 100.0
+
+
+def test_update_player_stats_integration(db_session):
+    updater = PlayerUpdater(db_session)
+    
+    line = {
+        'ab': 500,
+        'h': 150,
+        'bb': 50,
+        'hbp': 5,
+        'sf': 5,
+        '2b': 30,
+        '3b': 5,
+        'hr': 20,
+        'rbi': 80
+    }
+    
+    updater.update_player_stats(1, 2023, line)
+    
+    # Verify stats were inserted
+    from apps.ingest.models import PlayerSeasonStat
+    stats = db_session.query(PlayerSeasonStat).filter_by(player_id=1, season=2023).all()
+    stat_names = {s.stat_name for s in stats}
+    
+    assert 'OBP' in stat_names
+    assert 'SLG' in stat_names
+    assert 'OPS' in stat_names
+    assert 'wRC+' in stat_names
+    
+    # Verify values are reasonable
+    obp_stat = next(s for s in stats if s.stat_name == 'OBP')
+    assert 0.3 < obp_stat.value < 0.5
+    
+    slg_stat = next(s for s in stats if s.stat_name == 'SLG')
+    assert 0.4 < slg_stat.value < 0.7
+    
+    ops_stat = next(s for s in stats if s.stat_name == 'OPS')
+    assert abs(ops_stat.value - (obp_stat.value + slg_stat.value)) < 1e-9
+```

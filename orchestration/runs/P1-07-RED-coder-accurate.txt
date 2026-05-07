@@ -1,0 +1,225 @@
+# Packet P1-07-RED — Implementation Plan
+
+## 1. Concise Plan
+
+This task implements the **RED** phase for player stat updates. We will create two test files to verify the logic of `PlayerStatStore` and `PlayerUpdater`.
+
+**Architecture & Logic Assumptions:**
+*   **Storage**: `PlayerStatStore` uses a `stats` table with columns: `player_id`, `stat_name`, `season`, `value`, `valid_from`, `valid_to`.
+*   **Append-Only Upsert**: When updating a stat, if a current row exists (`valid_to IS NULL`), it is closed (`valid_to = NOW()`). A new row is inserted with `valid_from = NOW()` and `valid_to IS NULL`.
+*   **No-Op Optimization**: If the new value equals the current value, no DB write occurs.
+*   **Derived Stats**: `OPS` (On-base Plus Slugging) and `wRC+` (Weighted Runs Created Plus) are computed from base stats (e.g., `OBP`, `SLG`). The updater triggers computation for these derived stats when base stats change.
+
+**Files to Create:**
+1.  `apps/ingest/tests/test_player_stats_store.py`: Unit tests for the append-only upsert logic and no-op detection.
+2.  `apps/ingest/tests/test_player_updater.py`: Integration-style tests for the updater, verifying derived stat writes.
+
+**Dependencies:**
+*   `pytest`
+*   `unittest.mock` (for deterministic time and DB mocking)
+*   Internal modules: `apps.ingest.store.player_stats`, `apps.ingest.updater.player_updater`
+
+## 2. Exact File Edits
+
+### File 1: `apps/ingest/tests/test_player_stats_store.py`
+
+```python
+"""
+Tests for PlayerStatStore append-only upsert logic.
+"""
+import pytest
+from datetime import datetime, timedelta
+from unittest.mock import MagicMock, patch
+from apps.ingest.store.player_stats import PlayerStatStore
+
+
+class TestPlayerStatStoreUpsert:
+    """Test append-only upsert behavior."""
+
+    @patch('apps.ingest.store.player_stats.PlayerStatStore._get_current_row')
+    @patch('apps.ingest.store.player_stats.PlayerStatStore._close_current_row')
+    @patch('apps.ingest.store.player_stats.PlayerStatStore._insert_new_row')
+    def test_upsert_creates_new_row_when_no_current(self, mock_insert, mock_close, mock_get):
+        """If no current row exists, insert a new one without closing."""
+        mock_get.return_value = None
+        store = PlayerStatStore()
+        store.upsert_stat(player_id=1, stat_name='HR', season=2023, value=30)
+
+        mock_close.assert_not_called()
+        mock_insert.assert_called_once_with(
+            player_id=1,
+            stat_name='HR',
+            season=2023,
+            value=30,
+            valid_from=mock.ANY,
+            valid_to=None
+        )
+
+    @patch('apps.ingest.store.player_stats.PlayerStatStore._get_current_row')
+    @patch('apps.ingest.store.player_stats.PlayerStatStore._close_current_row')
+    @patch('apps.ingest.store.player_stats.PlayerStatStore._insert_new_row')
+    def test_upsert_closes_existing_and_inserts_new(self, mock_insert, mock_close, mock_get):
+        """If current row exists, close it and insert new."""
+        current_row = {
+            'player_id': 1,
+            'stat_name': 'HR',
+            'season': 2023,
+            'value': 20,
+            'valid_from': datetime(2023, 1, 1),
+            'valid_to': None
+        }
+        mock_get.return_value = current_row
+        store = PlayerStatStore()
+        store.upsert_stat(player_id=1, stat_name='HR', season=2023, value=30)
+
+        mock_close.assert_called_once_with(current_row)
+        mock_insert.assert_called_once_with(
+            player_id=1,
+            stat_name='HR',
+            season=2023,
+            value=30,
+            valid_from=mock.ANY,
+            valid_to=None
+        )
+
+    @patch('apps.ingest.store.player_stats.PlayerStatStore._get_current_row')
+    @patch('apps.ingest.store.player_stats.PlayerStatStore._close_current_row')
+    @patch('apps.ingest.store.player_stats.PlayerStatStore._insert_new_row')
+    def test_upsert_no_op_when_value_unchanged(self, mock_insert, mock_close, mock_get):
+        """If value is unchanged, do not insert or close."""
+        current_row = {
+            'player_id': 1,
+            'stat_name': 'HR',
+            'season': 2023,
+            'value': 30,
+            'valid_from': datetime(2023, 1, 1),
+            'valid_to': None
+        }
+        mock_get.return_value = current_row
+        store = PlayerStatStore()
+        store.upsert_stat(player_id=1, stat_name='HR', season=2023, value=30)
+
+        mock_close.assert_not_called()
+        mock_insert.assert_not_called()
+
+
+class TestPlayerStatStoreTimeHandling:
+    """Test deterministic time handling."""
+
+    @patch('apps.ingest.store.player_stats.PlayerStatStore._get_current_row')
+    @patch('apps.ingest.store.player_stats.PlayerStatStore._close_current_row')
+    @patch('apps.ingest.store.player_stats.PlayerStatStore._insert_new_row')
+    def test_valid_from_is_set_to_now(self, mock_insert, mock_close, mock_get):
+        """Ensure valid_from is set to the current time."""
+        mock_get.return_value = None
+        store = PlayerStatStore()
+        
+        with patch('apps.ingest.store.player_stats.datetime') as mock_dt:
+            mock_dt.now.return_value = datetime(2023, 10, 10, 12, 0, 0)
+            store.upsert_stat(player_id=1, stat_name='HR', season=2023, value=30)
+            
+            call_kwargs = mock_insert.call_args[1]
+            assert call_kwargs['valid_from'] == datetime(2023, 10, 10, 12, 0, 0)
+```
+
+### File 2: `apps/ingest/tests/test_player_updater.py`
+
+```python
+"""
+Tests for PlayerUpdater derived stat computation.
+"""
+import pytest
+from unittest.mock import MagicMock, patch
+from apps.ingest.updater.player_updater import PlayerUpdater
+
+
+class TestPlayerUpdaterDerivedStats:
+    """Test derived stat computation and writes."""
+
+    @patch('apps.ingest.updater.player_updater.PlayerUpdater._compute_derived_stats')
+    @patch('apps.ingest.updater.player_updater.PlayerUpdater._write_derived_stats')
+    def test_derived_stats_computed_on_base_stat_change(self, mock_write, mock_compute):
+        """When base stats change, derived stats should be computed and written."""
+        updater = PlayerUpdater()
+        
+        # Simulate base stat update
+        base_stats = {
+            'OBP': 0.350,
+            'SLG': 0.500
+        }
+        
+        # Mock the store's upsert method to trigger the updater logic
+        with patch.object(updater.store, 'upsert_stat') as mock_upsert:
+            # Simulate updating a base stat
+            updater.update_player_stats(player_id=1, stats=base_stats)
+            
+            # Verify that derived stats were computed
+            mock_compute.assert_called_once_with(1, base_stats)
+            
+            # Verify that derived stats were written
+            mock_write.assert_called_once()
+
+    @patch('apps.ingest.updater.player_updater.PlayerUpdater._compute_derived_stats')
+    @patch('apps.ingest.updater.player_updater.PlayerUpdater._write_derived_stats')
+    def test_derived_stats_include_ops_and_wrc_plus(self, mock_write, mock_compute):
+        """Ensure derived stats include OPS and wRC+."""
+        updater = PlayerUpdater()
+        
+        base_stats = {
+            'OBP': 0.350,
+            'SLG': 0.500
+        }
+        
+        # Mock compute to return expected derived stats
+        mock_compute.return_value = {
+            'OPS': 0.850,
+            'wRC+': 120
+        }
+        
+        with patch.object(updater.store, 'upsert_stat'):
+            updater.update_player_stats(player_id=1, stats=base_stats)
+            
+            # Verify compute was called with correct base stats
+            mock_compute.assert_called_once_with(1, base_stats)
+            
+            # Verify write was called with derived stats
+            mock_write.assert_called_once()
+            write_call_args = mock_write.call_args[0]
+            assert len(write_call_args) == 2
+            player_id, derived_stats = write_call_args
+            assert player_id == 1
+            assert 'OPS' in derived_stats
+            assert 'wRC+' in derived_stats
+            assert derived_stats['OPS'] == 0.850
+            assert derived_stats['wRC+'] == 120
+
+    @patch('apps.ingest.updater.player_updater.PlayerUpdater._compute_derived_stats')
+    @patch('apps.ingest.updater.player_updater.PlayerUpdater._write_derived_stats')
+    def test_no_derived_stats_when_no_base_stat_change(self, mock_write, mock_compute):
+        """If no base stats change, derived stats should not be computed."""
+        updater = PlayerUpdater()
+        
+        # Simulate no change in base stats
+        with patch.object(updater.store, 'upsert_stat') as mock_upsert:
+            # Mock upsert to return False (no change)
+            mock_upsert.return_value = False
+            
+            base_stats = {
+                'OBP': 0.350,
+                'SLG': 0.500
+            }
+            
+            updater.update_player_stats(player_id=1, stats=base_stats)
+            
+            # Verify that derived stats were NOT computed
+            mock_compute.assert_not_called()
+            mock_write.assert_not_called()
+```
+
+## 3. Verification Commands
+
+Run the following command to execute the tests:
+
+```bash
+.venv/bin/pytest apps/ingest/tests/test_player_stats_store.py apps/ingest/tests/test_player_updater.py -q
+```

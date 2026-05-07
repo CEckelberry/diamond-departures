@@ -1,0 +1,172 @@
+(1) Concise Plan
+1.  **Analyze Dependencies**: Inspect `apps/ingest/models.py` and `apps/ingest/services.py` to understand the `Player`, `LeaderboardEntry`, and materialization logic.
+2.  **Create Test File**: Create `apps/ingest/tests/test_leaderboards.py`.
+3.  **Implement Fixture**: Use `pytest-django` (or standard Django test client/fixtures if no DB) to create in-memory `Player` and `Stat` objects. *Assumption*: The project uses Django ORM. I will write tests using `django.test.TestCase` style assertions but structured for pytest.
+4.  **Test Case 1 (Mapping)**: Verify that updating a specific stat (e.g., `hits`) on a player updates the correct `(view_key, sort_stat)` tuple in the leaderboard materialization table.
+5.  **Test Case 2 (Materialization/Top-100)**: Create >100 players with varying stats. Trigger materialization. Assert that exactly 100 rows exist for the view, ordered correctly, and ties are broken deterministically (e.g., by player ID).
+6.  **Test Case 3 (Position Filter)**: Create players with different positions (SS, OF, etc.). Create a leaderboard view filtered by `position='SS'`. Verify that non-SS players do not appear in the materialized results for that view.
+7.  **Run Verification**: Execute the specific pytest command.
+
+(2) Exact File Edits as Unified Diff
+
+```diff
+diff --git a/apps/ingest/tests/test_leaderboards.py b/apps/ingest/tests/test_leaderboards.py
+new file mode 100644
+index 0000000..1234567
+--- /dev/null
++++ b/apps/ingest/tests/test_leaderboards.py
+@@ -0,0 +1,150 @@
++"""
++P1-08-RED: Leaderboard materialization tests.
++
++Verifies:
++1. Mapping updated stats to impacted (view_key, sort_stat) combos.
++2. Materialization replacing a combo with exactly top-100 ordered rows.
++3. Position-filtered views include only eligible players.
++"""
++import pytest
++from django.test import TestCase
++from apps.ingest.models import Player, Stat, LeaderboardView, LeaderboardEntry
++from apps.ingest.services import materialize_leaderboard
++
++
++class TestLeaderboardMaterialization(TestCase):
++    """Tests for leaderboard materialization logic."""
++
++    def setUp(self):
++        """Create base players and views."""
++        # Create 105 players with deterministic stats
++        self.players = []
++        for i in range(105):
++            player = Player.objects.create(
++                name=f"Player {i}",
++                position="SS" if i < 50 else "OF",  # First 50 are SS, rest OF
++                jersey_number=i
++            )
++            self.players.append(player)
++            # Assign stats: hits = i * 10 (so Player 104 has highest hits)
++            Stat.objects.create(
++                player=player,
++                stat_type="hits",
++                value=i * 10
++            )
++
++        # Create a leaderboard view for "Hits"
++        self.view_hits = LeaderboardView.objects.create(
++            name="Top Hits",
++            sort_stat="hits",
++            order_by="desc",
++            limit=100,
++            position_filter=None  # No position filter
++        )
++
++        # Create a leaderboard view for "Hits" filtered to SS
++        self.view_hits_ss = LeaderboardView.objects.create(
++            name="Top Hits SS",
++            sort_stat="hits",
++            order_by="desc",
++            limit=100,
++            position_filter="SS"  # Only Shortstops
++        )
++
++    def test_mapping_updated_stats_to_impacted_combos(self):
++        """Test 1: Updating a stat updates the correct (view_key, sort_stat) combo."""
++        # Initial materialization
++        materialize_leaderboard(self.view_hits.id)
++        
++        # Verify initial state: Player 104 should be top
++        entry = LeaderboardEntry.objects.get(view=self.view_hits, rank=1)
++        self.assertEqual(entry.player, self.players[104])
++        self.assertEqual(entry.stat_value, 1040)
++
++        # Update a player's stat (Player 0 gets 2000 hits)
++        stat = Stat.objects.get(player=self.players[0], stat_type="hits")
++        stat.value = 2000
++        stat.save()
++
++        # Re-materialize
++        materialize_leaderboard(self.view_hits.id)
++
++        # Verify Player 0 is now top
++        entry = LeaderboardEntry.objects.get(view=self.view_hits, rank=1)
++        self.assertEqual(entry.player, self.players[0])
++        self.assertEqual(entry.stat_value, 2000)
++
++    def test_materialization_replaces_combo_with_top_100(self):
++        """Test 2: Materialization replaces existing entries with exactly top-100."""
++        # Materialize initially
++        materialize_leaderboard(self.view_hits.id)
++        
++        # Count entries
++        initial_count = LeaderboardEntry.objects.filter(view=self.view_hits).count()
++        self.assertEqual(initial_count, 100)
++
++        # Add more players (simulate new data) - though in-memory fixture is static,
++        # we can test by deleting and re-materializing or just checking count after update
++        # Let's test determinism: Create a tie scenario
++        
++        # Reset: Player 103 and 104 have 1030 and 1040. 
++        # Let's make Player 103 have 1040 hits too (tie)
++        stat_103 = Stat.objects.get(player=self.players[103], stat_type="hits")
++        stat_103.value = 1040
++        stat_103.save()
++        
++        materialize_leaderboard(self.view_hits.id)
++        
++        # Check top 2 ranks
++        entry_1 = LeaderboardEntry.objects.get(view=self.view_hits, rank=1)
++        entry_2 = LeaderboardEntry.objects.get(view=self.view_hits, rank=2)
++        
++        # Both have 1040. Deterministic tie-breaker: lower player ID (Player 103) should be first?
++        # Or higher? Let's assume standard SQL: ORDER BY hits DESC, player_id ASC
++        # Player 103 ID is smaller than 104. So 103 should be rank 1.
++        self.assertEqual(entry_1.player, self.players[103])
++        self.assertEqual(entry_2.player, self.players[104])
++        
++        # Ensure exactly 100 entries
++        final_count = LeaderboardEntry.objects.filter(view=self.view_hits).count()
++        self.assertEqual(final_count, 100)
++
++    def test_position_filtered_views_include_only_eligible_players(self):
++        """Test 3: Position-filtered views include only eligible players."""
++        # Materialize the SS-only view
++        materialize_leaderboard(self.view_hits_ss.id)
++        
++        # Get all entries for this view
++        entries = LeaderboardEntry.objects.filter(view=self.view_hits_ss).order_by('rank')
++        
++        # All players in the view must be SS
++        for entry in entries:
++            self.assertEqual(entry.player.position, "SS")
++            
++        # Verify that non-SS players (like Player 104) are NOT in this view
++        non_ss_player = self.players[104]
++        exists = LeaderboardEntry.objects.filter(
++            view=self.view_hits_ss, 
++            player=non_ss_player
++        ).exists()
++        self.assertFalse(exists)
++        
++        # Verify that an SS player (like Player 0) IS in this view
++        ss_player = self.players[0]
++        exists = LeaderboardEntry.objects.filter(
++            view=self.view_hits_ss, 
++            player=ss_player
++        ).exists()
++        self.assertTrue(exists)
+```
+
+(3) Verification Commands
+
+```bash
+# Ensure virtual environment is active and dependencies are installed
+source .venv/bin/activate
+pip install -e ".[dev]"  # Assuming dev extras include pytest, django, etc.
+
+# Run the specific test file
+.venv/bin/pytest apps/ingest/tests/test_leaderboards.py -q
+
+# If tests fail due to missing models/services, adjust imports in test file accordingly
+# Common issue: LeaderboardEntry or materialize_leaderboard might not exist yet.
+# If they don't exist, the tests will fail at import time, which is expected for RED phase.
+```
