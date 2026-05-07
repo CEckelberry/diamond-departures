@@ -1,0 +1,11 @@
+{
+  "name": "diamond-departures",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Diamond Departures monorepo scaffold",
+  "license": "MIT",
+  "scripts": {
+    "dev": "make dev"
+  },
+  "packageManager": "pnpm@10.12.1"
+}
