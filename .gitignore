@@ -32,3 +32,7 @@ coverage.html
 *.log
 npm-debug.log*
 pnpm-debug.log*
+
+# agent runtime artifacts
+.crew/
+__pycache__/
