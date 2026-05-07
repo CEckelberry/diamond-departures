@@ -1,0 +1,261 @@
+### 1. Concise Plan
+
+1.  **Define Constants & Enums**: Create `PositionCategory` (Pitcher, Non-Pitcher) and `QualificationStatus` enums in `apps/ingest/constants.py`.
+2.  **Implement Classification Logic**: Create `apps/ingest/position_classifier.py` to map raw position strings/numbers to categories.
+3.  **Implement Qualification Engine**: Create `apps/ingest/qualification_engine.py` to evaluate eligibility based on appearance counts and handle state transitions (`just_qualified_at`).
+4.  **Write Tests**: Create `apps/ingest/tests/test_positions.py` covering classification edge cases and qualification logic.
+5.  **Verify**: Run the specified pytest commands.
+
+### 2. Exact File Edits
+
+#### File: `apps/ingest/constants.py`
+```python
+--- a/apps/ingest/constants.py
++++ b/apps/ingest/constants.py
+@@ -0,0 +1,15 @@
++from enum import Enum
++
++
++class PositionCategory(Enum):
++    PITCHER = "PITCHER"
++    NON_PITCHER = "NON_PITCHER"
++
++
++class QualificationStatus(Enum):
++    NOT_QUALIFIED = "NOT_QUALIFIED"
++    QUALIFIED = "QUALIFIED"
++    JUST_QUALIFIED = "JUST_QUALIFIED"
++
++
++# Minimum appearances to be considered qualified for a position
++MIN_APPEARANCES = 1
+```
+
+#### File: `apps/ingest/position_classifier.py`
+```python
+--- /dev/null
++++ b/apps/ingest/position_classifier.py
+@@ -0,0 +1,35 @@
++from apps.ingest.constants import PositionCategory
++
++# Standard pitcher positions
++PITCHER_POSITIONS = {"P", "SP", "RP", "CL", "BP"}
++
++# Standard non-pitcher positions
++NON_PITCHER_POSITIONS = {
++    "1B", "2B", "3B", "SS", "OF", "LF", "CF", "RF", "DH", "C", "UT", "MI"
++}
++
++
++def classify_position(position_code: str) -> PositionCategory:
++    """
++    Classify a position code into Pitcher or Non-Pitcher.
++    
++    Args:
++        position_code: The raw position string (e.g., 'P', '1B', 'C')
++        
++    Returns:
++        PositionCategory enum value
++    """
++    if not position_code:
++        return PositionCategory.NON_PITCHER
++        
++    normalized = position_code.strip().upper()
++    
++    if normalized in PITCHER_POSITIONS:
++        return PositionCategory.PITCHER
++        
++    if normalized in NON_PITCHER_POSITIONS:
++        return PositionCategory.NON_PITCHER
++        
++    # Default to non-pitcher for unknown positions unless explicitly pitcher
++    return PositionCategory.NON_PITCHER
+```
+
+#### File: `apps/ingest/qualification_engine.py`
+```python
+--- /dev/null
++++ b/apps/ingest/qualification_engine.py
+@@ -0,0 +1,65 @@
++from datetime import datetime
++from typing import Optional
++
++from apps.ingest.constants import QualificationStatus, MIN_APPEARANCES
++
++
++class QualificationState:
++    """Tracks qualification status for a player-position pair."""
++    
++    def __init__(self, position: str, appearances: int = 0):
++        self.position = position
++        self.appearances = appearances
++        self.status = QualificationStatus.NOT_QUALIFIED
++        self.just_qualified_at: Optional[datetime] = None
++        self.last_qualified_at: Optional[datetime] = None
++
++    def update_appearances(self, count: int, current_time: datetime) -> bool:
++        """
++        Update appearance count and check for qualification transition.
++        
++        Args:
++            count: Number of new appearances to add
++            current_time: Current timestamp for qualification tracking
++            
++        Returns:
++            True if status changed to JUST_QUALIFIED, False otherwise
++        """
++        old_status = self.status
++        self.appearances += count
++        
++        if self.appearances >= MIN_APPEARANCES and old_status != QualificationStatus.QUALIFIED:
++            self.status = QualificationStatus.JUST_QUALIFIED
++            self.just_qualified_at = current_time
++            self.last_qualified_at = current_time
++            return True
++        elif self.appearances >= MIN_APPEARANCES:
++            self.status = QualificationStatus.QUALIFIED
++            self.last_qualified_at = current_time
++            return False
++        else:
++            self.status = QualificationStatus.NOT_QUALIFIED
++            return False
++
++    def reset(self):
++        """Reset state for a new season or context."""
++        self.appearances = 0
++        self.status = QualificationStatus.NOT_QUALIFIED
++        self.just_qualified_at = None
++        self.last_qualified_at = None
++
++
++class QualificationEngine:
++    """Manages qualification states for player-position pairs."""
++    
++    def __init__(self):
++        self.states: dict[str, QualificationState] = {}
++        
++    def get_state(self, player_id: str, position: str) -> QualificationState:
++        """Get or create qualification state for a player-position pair."""
++        key = f"{player_id}:{position}"
++        if key not in self.states:
++            self.states[key] = QualificationState(position=position)
++        return self.states[key]
++        
++    def update_qualification(self, player_id: str, position: str, 
++                            count: int, current_time: datetime) -> bool:
++        """Update qualification status for a player-position pair."""
++        state = self.get_state(player_id, position)
++        return state.update_appearances(count, current_time)
+```
+
+#### File: `apps/ingest/tests/test_positions.py`
+```python
+--- /dev/null
++++ b/apps/ingest/tests/test_positions.py
+@@ -0,0 +1,85 @@
++import pytest
++from datetime import datetime
++
++from apps.ingest.position_classifier import classify_position, PositionCategory
++from apps.ingest.qualification_engine import QualificationEngine, QualificationStatus
++
++
++class TestPositionClassifier:
++    def test_pitcher_positions(self):
++        """Test classification of standard pitcher positions."""
++        for pos in ["P", "SP", "RP", "CL", "BP"]:
++            assert classify_position(pos) == PositionCategory.PITCHER
++            
++    def test_non_pitcher_positions(self):
++        """Test classification of standard non-pitcher positions."""
++        for pos in ["1B", "2B", "3B", "SS", "OF", "LF", "CF", "RF", "DH", "C", "UT", "MI"]:
++            assert classify_position(pos) == PositionCategory.NON_PITCHER
++            
++    def test_case_insensitivity(self):
++        """Test that classification is case-insensitive."""
++        assert classify_position("p") == PositionCategory.PITCHER
++        assert classify_position("1b") == PositionCategory.NON_PITCHER
++        
++    def test_whitespace_handling(self):
++        """Test that whitespace is trimmed."""
++        assert classify_position(" P ") == PositionCategory.PITCHER
++        assert classify_position(" 1B ") == PositionCategory.NON_PITCHER
++        
++    def test_empty_position(self):
++        """Test handling of empty position strings."""
++        assert classify_position("") == PositionCategory.NON_PITCHER
++        assert classify_position(None) == PositionCategory.NON_PITCHER
++        
++    def test_unknown_position(self):
++        """Test handling of unknown position codes."""
++        assert classify_position("XYZ") == PositionCategory.NON_PITCHER
++
++
++class TestQualificationEngine:
++    @pytest.fixture
++    def engine(self):
++        return QualificationEngine()
++        
++    def test_initial_state_not_qualified(self, engine):
++        """Test initial qualification status."""
++        state = engine.get_state("player1", "1B")
++        assert state.status == QualificationStatus.NOT_QUALIFIED
++        assert state.appearances == 0
++        
++    def test_qualification_after_minimum_appearances(self, engine):
++        """Test qualification after reaching minimum appearances."""
++        now = datetime.now()
++        engine.update_qualification("player1", "1B", 1, now)
++        
++        state = engine.get_state("player1", "1B")
++        assert state.status == QualificationStatus.JUST_QUALIFIED
++        assert state.appearances == 1
++        assert state.just_qualified_at == now
++        
++    def test_qualification_status_transition(self, engine):
++        """Test transition from JUST_QUALIFIED to QUALIFIED."""
++        now1 = datetime.now()
++        now2 = datetime.now()
++        
++        # First appearance triggers JUST_QUALIFIED
++        engine.update_qualification("player1", "1B", 1, now1)
++        state = engine.get_state("player1", "1B")
++        assert state.status == QualificationStatus.JUST_QUALIFIED
++        
++        # Second appearance transitions to QUALIFIED
++        engine.update_qualification("player1", "1B", 1, now2)
++        assert state.status == QualificationStatus.QUALIFIED
++        assert state.just_qualified_at == now1
++        assert state.last_qualified_at == now2
++        
++    def test_multiple_players_independent(self, engine):
++        """Test that different players have independent states."""
++        now = datetime.now()
++        engine.update_qualification("player1", "1B", 1, now)
++        engine.update_qualification("player2", "1B", 0, now)
++        
++        state1 = engine.get_state("player1", "1B")
++        state2 = engine.get_state("player2", "1B")
++        
++        assert state1.status == QualificationStatus.JUST_QUALIFIED
++        assert state2.status == QualificationStatus.NOT_QUALIFIED
++        
++    def test_reset_state(self, engine):
++        """Test resetting qualification state."""
++        now = datetime.now()
++        engine.update_qualification("player1", "1B", 1, now)
++        
++        state = engine.get_state("player1", "1B")
++        state.reset()
++        
++        assert state.appearances == 0
++        assert state.status == QualificationStatus.NOT_QUALIFIED
++        assert state.just_qualified_at is None
+```
+
+### 3. Verification Commands
+
+```bash
+.venv/bin/pytest apps/ingest/tests/test_positions.py -q
+.venv/bin/pytest apps/ingest/tests -q
+```

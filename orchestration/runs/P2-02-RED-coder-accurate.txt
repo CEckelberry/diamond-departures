@@ -1,0 +1,153 @@
+### 1. Concise Plan
+
+To satisfy the RED phase of Task 2.2, we will implement the test suite `apps/api/tests/test_board.py`. Since the production code does not yet exist (or is incomplete), these tests will initially fail.
+
+**Strategy:**
+1.  **Setup**: Use `pytest` fixtures to create a `TestClient` for the FastAPI application.
+2.  **Mocking**: Mock the database/repository layer (`apps.api.services.leaderboard_service`) to return deterministic data without hitting a real DB.
+3.  **Tests**:
+    *   `test_get_board_valid_view_sort`: Validates `GET /api/board?view=hitters&sort=wRC+` returns status 200, max 100 items, and correct metadata structure.
+    *   `test_get_board_invalid_view`: Validates that an unknown `view` parameter returns HTTP 400 with a specific error message.
+    *   `test_get_board_invalid_sort`: Validates that an unknown `sort` parameter returns HTTP 400 with a specific error message.
+    *   `test_get_board_freshness_object`: Validates the response includes a `freshness` object with `timestamp` and `age_category`.
+
+### 2. Exact File Edits
+
+**File: `apps/api/tests/test_board.py`**
+
+```python
+import pytest
+from fastapi.testclient import TestClient
+from unittest.mock import patch, MagicMock
+from datetime import datetime, timezone
+
+# Import the app instance (assuming standard FastAPI structure)
+from apps.api.main import app
+
+client = TestClient(app)
+
+
+@pytest.fixture
+def mock_leaderboard_service():
+    """Mock the leaderboard service to avoid DB access."""
+    with patch("apps.api.services.leaderboard_service.get_board_data") as mock_service:
+        # Define a deterministic response for valid queries
+        mock_response = {
+            "players": [
+                {
+                    "id": 1,
+                    "name": "Player One",
+                    "team": "Team A",
+                    "wrc_plus": 150.0,
+                    "metadata": {"position": "OF", "age": 25}
+                },
+                {
+                    "id": 2,
+                    "name": "Player Two",
+                    "team": "Team B",
+                    "wrc_plus": 140.0,
+                    "metadata": {"position": "SS", "age": 30}
+                }
+            ],
+            "freshness": {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "age_category": "live"
+            }
+        }
+        mock_service.return_value = mock_response
+        yield mock_service
+
+
+class TestBoardEndpoint:
+    """Tests for GET /api/board endpoint."""
+
+    def test_get_board_valid_view_sort(self, mock_leaderboard_service):
+        """
+        Goal 1: GET /api/board?view=hitters&sort=wRC+ returns <=100 ranked entries with player metadata.
+        """
+        response = client.get("/api/board", params={"view": "hitters", "sort": "wRC+"})
+        
+        assert response.status_code == 200
+        data = response.json()
+        
+        # Check structure
+        assert "players" in data
+        assert "freshness" in data
+        
+        # Check count constraint
+        assert len(data["players"]) <= 100
+        assert len(data["players"]) > 0  # Ensure mock returned data
+        
+        # Check metadata presence
+        for player in data["players"]:
+            assert "id" in player
+            assert "name" in player
+            assert "metadata" in player
+
+    def test_get_board_invalid_view(self, mock_leaderboard_service):
+        """
+        Goal 2: Invalid view returns 400 with clear error.
+        """
+        response = client.get("/api/board", params={"view": "invalid_view"})
+        
+        assert response.status_code == 400
+        data = response.json()
+        assert "detail" in data
+        # Check for a clear error message regarding the view parameter
+        assert "view" in data["detail"].lower() or "invalid" in data["detail"].lower()
+
+    def test_get_board_invalid_sort(self, mock_leaderboard_service):
+        """
+        Goal 3: Invalid sort returns 400 with clear error.
+        """
+        response = client.get("/api/board", params={"view": "hitters", "sort": "invalid_sort"})
+        
+        assert response.status_code == 400
+        data = response.json()
+        assert "detail" in data
+        # Check for a clear error message regarding the sort parameter
+        assert "sort" in data["detail"].lower() or "invalid" in data["detail"].lower()
+
+    def test_get_board_freshness_object(self, mock_leaderboard_service):
+        """
+        Goal 4: Freshness object includes timestamp and age category.
+        """
+        response = client.get("/api/board", params={"view": "hitters", "sort": "wRC+"})
+        
+        assert response.status_code == 200
+        data = response.json()
+        
+        freshness = data.get("freshness")
+        assert freshness is not None
+        
+        assert "timestamp" in freshness
+        assert "age_category" in freshness
+        
+        # Validate age_category values
+        valid_categories = ["live", "recent", "stale", "old"]
+        assert freshness["age_category"] in valid_categories
+        
+        # Validate timestamp format (ISO 8601)
+        try:
+            datetime.fromisoformat(freshness["timestamp"])
+        except ValueError:
+            pytest.fail("Timestamp is not in valid ISO 8601 format")
+```
+
+### 3. Verification Commands
+
+Run the following commands to verify the RED state (tests exist and fail as expected because the production code is not yet implemented):
+
+```bash
+# Ensure virtual environment is active
+source .venv/bin/activate
+
+# Run the specific test file
+.pytest apps/api/tests/test_board.py -q
+
+# Expected Output:
+# FFFF
+# 4 failed in X.XXs
+# (Specifically, errors related to "No route found" or "ImportError" depending on current app state, 
+# but confirming the test structure is valid and the endpoint behavior is not yet implemented correctly.)
+```

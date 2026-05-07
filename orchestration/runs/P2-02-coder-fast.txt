@@ -1,0 +1,236 @@
+### 1. Concise Plan
+
+1.  **Define Protocol**: Create `apps/api/boards/store.py` defining the `BoardStore` ABC with `get_top_100` and `get_freshness_age`.
+2.  **Implement Store**: Create `apps/api/boards/memory_store.py` implementing the ABC using in-memory data structures (suitable for tests).
+3.  **Implement Handler**: Create `apps/api/boards/handler.py` containing the FastAPI dependency/logic to fetch data, validate freshness, and return the payload.
+4.  **Wire Endpoint**: Update `apps/api/app.py` to mount the board router at `/api/board`.
+5.  **Tests**: Create `apps/api/tests/test_board.py` to verify the endpoint, store, and validation logic.
+
+### 2. Exact File Edits
+
+#### New File: `apps/api/boards/__init__.py`
+```python
+# apps/api/boards/__init__.py
+from .store import BoardStore
+from .memory_store import InMemoryBoardStore
+
+__all__ = ["BoardStore", "InMemoryBoardStore"]
+```
+
+#### New File: `apps/api/boards/store.py`
+```python
+# apps/api/boards/store.py
+from abc import ABC, abstractmethod
+from typing import List, Dict, Any
+
+
+class BoardStore(ABC):
+    @abstractmethod
+    async def get_top_100(self) -> List[Dict[str, Any]]:
+        """Retrieve the top 100 leaderboard entries."""
+        ...
+
+    @abstractmethod
+    async def get_freshness_age(self) -> int:
+        """Return the age of the leaderboard data in seconds."""
+        ...
+```
+
+#### New File: `apps/api/boards/memory_store.py`
+```python
+# apps/api/boards/memory_store.py
+import time
+from typing import List, Dict, Any
+
+from .store import BoardStore
+
+
+class InMemoryBoardStore(BoardStore):
+    def __init__(self, data: List[Dict[str, Any]] | None = None, freshness_age: int = 0):
+        self._data = data or []
+        self._freshness_age = freshness_age
+
+    async def get_top_100(self) -> List[Dict[str, Any]]:
+        return self._data[:100]
+
+    async def get_freshness_age(self) -> int:
+        return self._freshness_age
+```
+
+#### New File: `apps/api/boards/handler.py`
+```python
+# apps/api/boards/handler.py
+from fastapi import APIRouter, Depends, HTTPException
+from typing import List, Dict, Any
+
+from .store import BoardStore
+
+router = APIRouter()
+
+
+def get_board_store() -> BoardStore:
+    """Dependency to inject the board store."""
+    # In a real app, this would be injected via DI container.
+    # For this packet, we assume the app factory wires this up or
+    # we rely on a global singleton for simplicity in tests.
+    # However, to make it testable and clean, we'll define a default
+    # that can be overridden.
+    from .memory_store import InMemoryBoardStore
+    return InMemoryBoardStore()
+
+
+@router.get("/api/board")
+async def get_leaderboard(store: BoardStore = Depends(get_board_store)):
+    """
+    GET /api/board
+    Returns top 100 leaderboard and freshness info.
+    """
+    top_100 = await store.get_top_100()
+    freshness_age = await store.get_freshness_age()
+
+    # Categorize freshness
+    if freshness_age < 60:
+        freshness_category = "fresh"
+    elif freshness_age < 3600:
+        freshness_category = "stale"
+    else:
+        freshness_category = "very_stale"
+
+    return {
+        "leaderboard": top_100,
+        "freshness": {
+            "age_seconds": freshness_age,
+            "category": freshness_category
+        }
+    }
+```
+
+#### New File: `apps/api/tests/test_board.py`
+```python
+# apps/api/tests/test_board.py
+import pytest
+from fastapi.testclient import TestClient
+
+from apps.api.app import create_app
+from apps.api.boards.memory_store import InMemoryBoardStore
+from apps.api.boards.handler import get_board_store
+
+
+# Mock the dependency injection for testing
+original_get_board_store = None
+
+def mock_get_board_store():
+    return InMemoryBoardStore(
+        data=[{"rank": i, "score": 1000 - i} for i in range(1, 101)],
+        freshness_age=30
+    )
+
+
+@pytest.fixture(autouse=True)
+def inject_mock_store(monkeypatch):
+    global original_get_board_store
+    import apps.api.boards.handler as handler_module
+    original_get_board_store = handler_module.get_board_store
+    monkeypatch.setattr(handler_module, "get_board_store", mock_get_board_store)
+    yield
+    handler_module.get_board_store = original_get_board_store
+
+
+@pytest.fixture
+def client():
+    app = create_app()
+    with TestClient(app) as test_client:
+        yield test_client
+
+
+def test_get_leaderboard_success(client):
+    response = client.get("/api/board")
+    assert response.status_code == 200
+    data = response.json()
+    
+    assert "leaderboard" in data
+    assert "freshness" in data
+    assert len(data["leaderboard"]) == 100
+    assert data["freshness"]["age_seconds"] == 30
+    assert data["freshness"]["category"] == "fresh"
+
+
+def test_get_leaderboard_stale(client, monkeypatch):
+    def mock_stale_store():
+        return InMemoryBoardStore(
+            data=[{"rank": i, "score": 1000 - i} for i in range(1, 101)],
+            freshness_age=1800  # 30 minutes
+        )
+    
+    import apps.api.boards.handler as handler_module
+    monkeypatch.setattr(handler_module, "get_board_store", mock_stale_store)
+    
+    response = client.get("/api/board")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["freshness"]["category"] == "stale"
+
+
+def test_get_leaderboard_very_stale(client, monkeypatch):
+    def mock_very_stale_store():
+        return InMemoryBoardStore(
+            data=[{"rank": i, "score": 1000 - i} for i in range(1, 101)],
+            freshness_age=7200  # 2 hours
+        )
+    
+    import apps.api.boards.handler as handler_module
+    monkeypatch.setattr(handler_module, "get_board_store", mock_very_stale_store)
+    
+    response = client.get("/api/board")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["freshness"]["category"] == "very_stale"
+
+
+def test_get_leaderboard_empty(client, monkeypatch):
+    def mock_empty_store():
+        return InMemoryBoardStore(
+            data=[],
+            freshness_age=0
+        )
+    
+    import apps.api.boards.handler as handler_module
+    monkeypatch.setattr(handler_module, "get_board_store", mock_empty_store)
+    
+    response = client.get("/api/board")
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["leaderboard"]) == 0
+```
+
+#### Edit: `apps/api/app.py`
+```python
+# apps/api/app.py
+from fastapi import FastAPI
+from .boards.handler import router as board_router
+
+def create_app() -> FastAPI:
+    app = FastAPI(title="Leaderboard API")
+    
+    # Wire board endpoint
+    app.include_router(board_router)
+    
+    return app
+
+# For direct execution
+app = create_app()
+```
+
+### 3. Verification Commands
+
+```bash
+# Ensure venv is active and dependencies are installed
+source .venv/bin/activate
+pip install -e ".[dev]" 2>/dev/null || true
+
+# Run specific board tests
+.venv/bin/pytest apps/api/tests/test_board.py -q
+
+# Run all API tests to ensure no regressions
+.venv/bin/pytest apps/api/tests -q
+```

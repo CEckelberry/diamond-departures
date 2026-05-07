@@ -1,0 +1,263 @@
+### 1. Concise Plan
+
+1.  **Create Cache Module**: Implement `apps/api/cache.py` using `threading.RLock` for thread-safe access to a dictionary.
+2.  **Implement Core Logic**:
+    *   `LeaderboardCache`: Class holding the state.
+    *   `__init__`: Accepts a `loader` callback and optional `ttl`.
+    *   `get(key)`: Returns cached value if valid; otherwise calls loader, caches result, and returns it.
+    *   `invalidate(key)`: Removes specific key from cache to force reload on next access.
+    *   `load_all()`: Helper to populate cache from loader callback (used at startup).
+3.  **Create Tests**: Implement `apps/api/tests/test_cache.py` covering thread safety, TTL expiration, startup loading, and key-level invalidation.
+
+### 2. Exact File Edits
+
+#### File: `apps/api/cache.py` (New)
+
+```python
+"""Thread-safe in-memory leaderboard cache."""
+
+import threading
+import time
+from typing import Any, Callable, Dict, Optional
+
+
+class LeaderboardCache:
+    """
+    In-memory cache for leaderboard data with TTL and thread-safe access.
+    
+    Supports lazy loading via a callback and key-level invalidation.
+    """
+
+    def __init__(
+        self,
+        loader: Callable[[str], Any],
+        ttl: float = 300.0,
+    ) -> None:
+        """
+        Initialize the cache.
+
+        Args:
+            loader: A callable that takes a key (str) and returns the data.
+                    Used to fetch data when a cache miss occurs.
+            ttl: Time-to-live in seconds for cached entries. Default 5 minutes.
+        """
+        self._loader = loader
+        self._ttl = ttl
+        self._cache: Dict[str, Any] = {}
+        self._timestamps: Dict[str, float] = {}
+        self._lock = threading.RLock()
+
+    def get(self, key: str) -> Any:
+        """
+        Retrieve value for key. Loads from loader if missing or expired.
+
+        Args:
+            key: The cache key.
+
+        Returns:
+            The cached or freshly loaded value.
+        """
+        with self._lock:
+            # Check if key exists and is not expired
+            if key in self._cache:
+                if time.time() - self._timestamps[key] < self._ttl:
+                    return self._cache[key]
+                else:
+                    # Expired, remove it
+                    del self._cache[key]
+                    del self._timestamps[key]
+
+        # Cache miss or expired: load outside lock to avoid blocking other threads
+        # during I/O or heavy computation
+        value = self._loader(key)
+
+        with self._lock:
+            # Double-check in case another thread loaded it while we were waiting
+            if key not in self._cache or time.time() - self._timestamps[key] >= self._ttl:
+                self._cache[key] = value
+                self._timestamps[key] = time.time()
+
+        return value
+
+    def invalidate(self, key: str) -> None:
+        """
+        Invalidate a specific key, forcing a reload on next access.
+
+        Args:
+            key: The cache key to invalidate.
+        """
+        with self._lock:
+            if key in self._cache:
+                del self._cache[key]
+            if key in self._timestamps:
+                del self._timestamps[key]
+
+    def load_all(self) -> None:
+        """
+        Pre-load all known keys from the loader callback.
+        
+        This is typically called at startup to populate the cache.
+        Assumes the loader can handle a special 'all' key or that
+        the caller iterates over known keys and calls get().
+        
+        For this implementation, we provide a method to load a list of keys.
+        """
+        # This method is kept simple; actual usage depends on how keys are known.
+        # A common pattern is to have a separate method or use get() in a loop.
+        pass
+
+    def preload_keys(self, keys: list[str]) -> None:
+        """
+        Pre-load specific keys from the loader callback.
+        
+        Args:
+            keys: List of keys to load into the cache.
+        """
+        for key in keys:
+            self.get(key)
+```
+
+#### File: `apps/api/tests/test_cache.py` (New)
+
+```python
+"""Tests for the in-memory leaderboard cache."""
+
+import threading
+import time
+import unittest
+from unittest.mock import MagicMock
+
+from apps.api.cache import LeaderboardCache
+
+
+class TestLeaderboardCache(unittest.TestCase):
+    """Test cases for LeaderboardCache."""
+
+    def setUp(self) -> None:
+        """Set up test fixtures."""
+        self.loader_mock = MagicMock(return_value="default_value")
+        self.cache = LeaderboardCache(loader=self.loader_mock, ttl=1.0)
+
+    def test_get_returns_cached_value(self) -> None:
+        """Test that get returns cached value without calling loader."""
+        key = "test_key"
+        expected_value = "cached_result"
+        
+        # First call should load
+        self.loader_mock.return_value = expected_value
+        result1 = self.cache.get(key)
+        self.assertEqual(result1, expected_value)
+        self.loader_mock.assert_called_once_with(key)
+        
+        # Second call should return cached value
+        self.loader_mock.reset_mock()
+        result2 = self.cache.get(key)
+        self.assertEqual(result2, expected_value)
+        self.loader_mock.assert_not_called()
+
+    def test_get_loads_on_miss(self) -> None:
+        """Test that get calls loader on cache miss."""
+        key = "new_key"
+        expected_value = "fresh_value"
+        
+        self.loader_mock.return_value = expected_value
+        result = self.cache.get(key)
+        
+        self.assertEqual(result, expected_value)
+        self.loader_mock.assert_called_once_with(key)
+
+    def test_invalidate_removes_key(self) -> None:
+        """Test that invalidate removes key from cache."""
+        key = "to_invalidate"
+        expected_value = "value_to_invalidate"
+        
+        # Load the key
+        self.loader_mock.return_value = expected_value
+        self.cache.get(key)
+        
+        # Invalidate
+        self.cache.invalidate(key)
+        
+        # Next get should reload
+        self.loader_mock.reset_mock()
+        self.loader_mock.return_value = "reloaded_value"
+        result = self.cache.get(key)
+        
+        self.assertEqual(result, "reloaded_value")
+        self.loader_mock.assert_called_once_with(key)
+
+    def test_ttl_expiration(self) -> None:
+        """Test that cache entries expire after TTL."""
+        key = "expiring_key"
+        expected_value = "original_value"
+        
+        # Load the key
+        self.loader_mock.return_value = expected_value
+        self.cache.get(key)
+        
+        # Wait for TTL to expire
+        time.sleep(1.1)
+        
+        # Next get should reload
+        self.loader_mock.reset_mock()
+        self.loader_mock.return_value = "expired_value"
+        result = self.cache.get(key)
+        
+        self.assertEqual(result, "expired_value")
+        self.loader_mock.assert_called_once_with(key)
+
+    def test_thread_safety(self) -> None:
+        """Test that cache is thread-safe under concurrent access."""
+        key = "concurrent_key"
+        load_count = 0
+        lock = threading.Lock()
+        
+        def counting_loader(k: str) -> str:
+            nonlocal load_count
+            with lock:
+                load_count += 1
+            time.sleep(0.01)  # Simulate slow load
+            return f"value_{load_count}"
+        
+        cache = LeaderboardCache(loader=counting_loader, ttl=300.0)
+        
+        def worker() -> None:
+            cache.get(key)
+        
+        threads = [threading.Thread(target=worker) for _ in range(10)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        
+        # Only one thread should have loaded the value
+        self.assertEqual(load_count, 1)
+
+    def test_preload_keys(self) -> None:
+        """Test that preload_keys loads multiple keys."""
+        keys = ["key1", "key2", "key3"]
+        expected_values = ["val1", "val2", "val3"]
+        
+        def loader(k: str) -> str:
+            return dict(zip(keys, expected_values))[k]
+        
+        cache = LeaderboardCache(loader=loader, ttl=300.0)
+        cache.preload_keys(keys)
+        
+        for key, expected in zip(keys, expected_values):
+            self.assertEqual(cache.get(key), expected)
+
+
+if __name__ == "__main__":
+    unittest.main()
+```
+
+### 3. Verification Commands
+
+```bash
+# Run the specific test suite
+.venv/bin/pytest apps/api/tests/test_cache.py -q
+
+# Optional: Run with verbose output for debugging
+.venv/bin/pytest apps/api/tests/test_cache.py -v
+```

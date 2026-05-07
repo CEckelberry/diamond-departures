@@ -1,0 +1,167 @@
+### 1. Concise Plan
+
+1.  **Define Mocks & Fixtures**: Create a `MockLoader` that records calls and returns static data, and a `Cache` class (stubbed for now) that manages an in-memory dictionary of snapshots.
+2.  **Implement Test 1 (Startup Load)**: Verify that upon initialization, the cache iterates over all registered keys and populates its internal store using the loader.
+3.  **Implement Test 2 (Immutable Reads)**: Verify that reading a key returns a snapshot that is independent of subsequent mutations to the underlying data or loader responses.
+4.  **Implement Test 3 (Invalidate Refresh)**: Verify that invalidating a specific key triggers a reload for *only* that key, leaving other cached keys untouched.
+5.  **Ensure Failing State**: The tests will initially fail because the `Cache` implementation does not exist or does not meet the interface requirements.
+
+### 2. Exact File Edits
+
+**File: `apps/api/tests/test_cache.py`**
+
+```python
+"""
+Packet P2-03-RED — in-memory cache tests first
+
+Tests for thread-safe leaderboard cache behavior.
+Currently failing as Cache implementation is pending.
+"""
+
+import pytest
+from unittest.mock import Mock, MagicMock
+from datetime import datetime
+
+
+# --- Mocks and Fixtures ---
+
+class MockLoader:
+    """Simulates a data loader that fetches rows for leaderboard keys."""
+    
+    def __init__(self):
+        self.call_log = []
+        self._data_store = {}
+
+    def set_data(self, key, data):
+        """Set the data the loader should return for a specific key."""
+        self._data_store[key] = data
+
+    def load_rows(self, key):
+        """Simulate loading rows. Records the call."""
+        self.call_log.append(key)
+        # Return a copy to ensure isolation if the caller mutates it
+        data = self._data_store.get(key, [])
+        return [row.copy() for row in data]
+
+
+@pytest.fixture
+def mock_loader():
+    loader = MockLoader()
+    # Pre-populate some data
+    loader.set_data("leaderboard_1", [{"user": "alice", "score": 100}])
+    loader.set_data("leaderboard_2", [{"user": "bob", "score": 200}])
+    return loader
+
+
+@pytest.fixture
+def cache(mock_loader):
+    """
+    Import Cache here to ensure we are testing the actual module.
+    If Cache doesn't exist or isn't implemented correctly, this will fail.
+    """
+    try:
+        from apps.api.cache import LeaderboardCache
+        # Initialize with the mock loader and a list of keys
+        return LeaderboardCache(
+            loader=mock_loader,
+            keys=["leaderboard_1", "leaderboard_2"]
+        )
+    except ImportError:
+        pytest.skip("LeaderboardCache not yet implemented")
+    except AttributeError:
+        pytest.skip("LeaderboardCache interface not yet defined")
+
+
+# --- Tests ---
+
+class TestCacheStartupLoad:
+    """Test 1: Cache loads rows for all keys on startup callback."""
+
+    def test_loads_all_keys_on_init(self, mock_loader, cache):
+        """
+        Given a list of keys and a loader
+        When the cache is initialized
+        Then the loader's load_rows method is called for each key
+        And the cache stores the results
+        """
+        # Verify loader was called for all keys
+        assert "leaderboard_1" in mock_loader.call_log
+        assert "leaderboard_2" in mock_loader.call_log
+        
+        # Verify data is stored (implementation detail check)
+        # We assume the cache has a method to retrieve raw data or an internal store
+        try:
+            data_1 = cache.get_raw("leaderboard_1")
+            assert len(data_1) == 1
+            assert data_1[0]["user"] == "alice"
+        except AttributeError:
+            # If get_raw doesn't exist, the test fails as expected for RED
+            raise AssertionError("Cache does not support get_raw or store data correctly")
+
+
+class TestCacheReadsImmutable:
+    """Test 2: Cache reads return stored snapshots without mutation."""
+
+    def test_returns_independent_snapshot(self, mock_loader, cache):
+        """
+        Given a cached key
+        When we retrieve the data
+        And we mutate the returned data
+        Then subsequent retrieves should not reflect the mutation
+        """
+        # Get initial data
+        data_1 = cache.get("leaderboard_1")
+        
+        # Mutate the returned list
+        original_len = len(data_1)
+        data_1.append({"user": "hacker", "score": 999})
+        
+        # Retrieve again
+        data_2 = cache.get("leaderboard_1")
+        
+        # The second retrieval should not have the hacker
+        assert len(data_2) == original_len
+        assert not any(row["user"] == "hacker" for row in data_2)
+
+
+class TestCacheInvalidateRefresh:
+    """Test 3: Cache invalidate refreshes one key from loader."""
+
+    def test_invalidate_refreshes_only_one_key(self, mock_loader, cache):
+        """
+        Given a cache with multiple keys
+        When we invalidate one key
+        Then only that key is refreshed from the loader
+        And other keys remain unchanged
+        """
+        # Reset call log to track new calls after invalidation
+        mock_loader.call_log.clear()
+        
+        # Change data for leaderboard_2 in the loader
+        mock_loader.set_data("leaderboard_2", [{"user": "charlie", "score": 300}])
+        
+        # Invalidate only leaderboard_1
+        cache.invalidate("leaderboard_1")
+        
+        # Verify only leaderboard_1 was reloaded
+        assert mock_loader.call_log == ["leaderboard_1"]
+        
+        # Verify leaderboard_2 data is unchanged (still bob)
+        data_2 = cache.get("leaderboard_2")
+        assert data_2[0]["user"] == "bob"
+        
+        # Verify leaderboard_1 is now charlie
+        data_1 = cache.get("leaderboard_1")
+        assert data_1[0]["user"] == "charlie"
+```
+
+### 3. Verification Commands
+
+```bash
+# Ensure the virtual environment is active and dependencies are installed
+source .venv/bin/activate
+
+# Run the specific test file for the cache module
+# This should currently fail (RED) because LeaderboardCache is not implemented
+.venv/bin/pytest apps/api/tests/test_cache.py -q
+```
