@@ -16,7 +16,21 @@ from .board import (
 )
 from .config import ApiSettings, load_settings
 from .logging import configure_logging
+from .players import (
+    VALID_HISTORY_STATS,
+    PlayerDetailReader,
+    PlayerHistoryReader,
+    in_memory_player_detail_reader,
+    in_memory_player_history_reader,
+)
 from .sse import BoardSSEHub
+from .status import (
+    VALID_SEASON_MODES,
+    FreshnessReader,
+    SeasonStateReader,
+    in_memory_freshness_reader,
+    in_memory_season_state_reader,
+)
 from .store import postgres_health_check
 
 
@@ -26,6 +40,10 @@ def create_app(
     board_reader: BoardReader | None = None,
     sse_hub: BoardSSEHub | None = None,
     sse_heartbeat_seconds: float = 30.0,
+    player_detail_reader: PlayerDetailReader | None = None,
+    player_history_reader: PlayerHistoryReader | None = None,
+    season_state_reader: SeasonStateReader | None = None,
+    freshness_reader: FreshnessReader | None = None,
 ) -> FastAPI:
     resolved_settings = settings or load_settings()
     configure_logging(resolved_settings.log_level)
@@ -36,6 +54,10 @@ def create_app(
     checker = db_health_check or postgres_health_check(resolved_settings.database_url)
     board_loader = board_reader or in_memory_board_reader
     hub = sse_hub or BoardSSEHub(heartbeat_seconds=sse_heartbeat_seconds)
+    detail_loader = player_detail_reader or in_memory_player_detail_reader
+    history_loader = player_history_reader or in_memory_player_history_reader
+    season_state_loader = season_state_reader or in_memory_season_state_reader
+    freshness_loader = freshness_reader or in_memory_freshness_reader
     app.state.sse_hub = hub
 
     @app.get("/api/health")
@@ -83,6 +105,48 @@ def create_app(
                 "Connection": "keep-alive",
                 "X-Accel-Buffering": "no",
             },
+        )
+
+    @app.get("/api/players/{player_id}")
+    def player_detail(player_id: int) -> JSONResponse:
+        detail = detail_loader(player_id)
+        if detail is None:
+            raise HTTPException(status_code=404, detail=f"Player '{player_id}' not found")
+        return JSONResponse(content=detail)
+
+    @app.get("/api/players/{player_id}/history")
+    def player_history(player_id: int, stat: str | None = Query(default=None)) -> JSONResponse:
+        if stat is None or stat not in VALID_HISTORY_STATS:
+            raise HTTPException(status_code=400, detail="Invalid stat")
+
+        history = history_loader(player_id, stat)
+        if history is None:
+            raise HTTPException(status_code=404, detail=f"Player '{player_id}' not found")
+
+        sorted_history = sorted(history, key=lambda row: str(row["timestamp"]))
+        return JSONResponse(
+            content={
+                "player_id": player_id,
+                "stat": stat,
+                "points": sorted_history,
+            }
+        )
+
+    @app.get("/api/season-state")
+    def season_state() -> JSONResponse:
+        payload = season_state_loader()
+        if payload.get("mode") not in VALID_SEASON_MODES:
+            raise HTTPException(status_code=500, detail="Invalid season mode")
+        return JSONResponse(
+            content=payload,
+            headers={"Cache-Control": "public, max-age=300"},
+        )
+
+    @app.get("/api/freshness")
+    def freshness() -> JSONResponse:
+        return JSONResponse(
+            content=freshness_loader(),
+            headers={"Cache-Control": "no-store"},
         )
 
     return app

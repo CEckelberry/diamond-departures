@@ -1,0 +1,177 @@
+### 1. Concise Plan
+
+To satisfy the RED phase of TDD for the player detail and history endpoints, we will:
+
+1.  **Create Test Infrastructure**: Define a `TestPlayerDetail` class in `apps/api/tests/test_players.py`.
+2.  **Implement Mocks**: Create a `MockPlayerRepository` that returns specific data structures for valid IDs and raises `ValueError` (or returns empty) for invalid IDs to simulate database lookups.
+3.  **Write Failing Tests**:
+    *   `test_get_player_detail_success`: Asserts 200 OK, checks structure of metadata, season totals, stat line, and recent games.
+    *   `test_get_player_history_success`: Asserts 200 OK, checks time-ordered points for a specific stat (e.g., 'points').
+    *   `test_get_unknown_player_returns_404`: Asserts 404 for both detail and history endpoints.
+    *   `test_get_history_missing_stat_returns_400`: Asserts 400 when the `stat` query parameter is missing.
+    *   `test_get_history_invalid_stat_returns_400`: Asserts 400 when an invalid stat key is requested.
+4.  **Ensure Failures**: Initially, these tests will fail because the endpoints do not exist or return 404/500 by default in the FastAPI app.
+
+### 2. Exact File Edits as Unified Diff
+
+```diff
+--- a/apps/api/tests/test_players.py
++++ b/apps/api/tests/test_players.py
+@@ -0,0 +1,100 @@
++"""
++Tests for Player Detail and History Endpoints (RED Phase)
++"""
++
++import pytest
++from fastapi.testclient import TestClient
++from apps.api.app import app
++from apps.api.services.player_service import PlayerService
++from apps.api.repositories.player_repository import PlayerRepository
++
++
++# Mock Repository for In-Process Testing
++class MockPlayerRepository(PlayerRepository):
++    """In-memory mock for player data."""
++
++    def __init__(self):
++        self.players = {
++            "1": {
++                "id": "1",
++                "name": "LeBron James",
++                "position": "SF",
++                "team": "LAL",
++                "season_totals": {
++                    "points": 25.0,
++                    "rebounds": 7.5,
++                    "assists": 10.0
++                },
++                "stat_line": {
++                    "points": 30,
++                    "rebounds": 8,
++                    "assists": 11
++                },
++                "recent_games": [
++                    {"date": "2023-10-01", "points": 30},
++                    {"date": "2023-10-03", "points": 28}
++                ]
++            },
++            "2": {
++                "id": "2",
++                "name": "Stephen Curry",
++                "position": "PG",
++                "team": "GSW",
++                "season_totals": {
++                    "points": 30.0,
++                    "rebounds": 5.0,
++                    "assists": 6.0
++                },
++                "stat_line": {
++                    "points": 35,
++                    "rebounds": 4,
++                    "assists": 7
++                },
++                "recent_games": [
++                    {"date": "2023-10-01", "points": 35},
++                    {"date": "2023-10-03", "points": 32}
++                ]
++            }
++        }
++        self.history = {
++            "1": [
++                {"date": "2023-09-01", "points": 20, "rebounds": 6, "assists": 8},
++                {"date": "2023-09-15", "points": 25, "rebounds": 7, "assists": 9},
++                {"date": "2023-10-01", "points": 30, "rebounds": 8, "assists": 11}
++            ],
++            "2": [
++                {"date": "2023-09-01", "points": 25, "rebounds": 4, "assists": 5},
++                {"date": "2023-09-15", "points": 30, "rebounds": 5, "assists": 6},
++                {"date": "2023-10-01", "points": 35, "rebounds": 4, "assists": 7}
++            ]
++        }
++
++    def get_player_by_id(self, player_id: str) -> dict | None:
++        return self.players.get(player_id)
++
++    def get_player_history(self, player_id: str, stat: str) -> list[dict]:
++        if player_id not in self.history:
++            return []
++        # Return only the requested stat and date, sorted by date
++        records = self.history[player_id]
++        return [
++            {"date": r["date"], stat: r[stat]}
++            for r in sorted(records, key=lambda x: x["date"])
++        ]
++
++
++# Override Dependency Injection for Tests
++@app.dependency_overrides
++def override_get_player_repository():
++    return MockPlayerRepository()
++
++
++client = TestClient(app)
++
++
++class TestPlayerDetailEndpoint:
++    """Tests for GET /api/players/{id}"""
++
++    def test_get_player_detail_success(self):
++        """Test successful retrieval of player detail."""
++        response = client.get("/api/players/1")
++        assert response.status_code == 200
++        data = response.json()
++        assert data["id"] == "1"
++        assert data["name"] == "LeBron James"
++        assert "season_totals" in data
++        assert "stat_line" in data
++        assert "recent_games" in data
++        assert len(data["recent_games"]) > 0
++
++    def test_get_unknown_player_returns_404(self):
++        """Test that unknown player ID returns 404."""
++        response = client.get("/api/players/999")
++        assert response.status_code == 404
++
++
++class TestPlayerHistoryEndpoint:
++    """Tests for GET /api/players/{id}/history"""
++
++    def test_get_player_history_success(self):
++        """Test successful retrieval of player history for a specific stat."""
++        response = client.get("/api/players/1/history?stat=points")
++        assert response.status_code == 200
++        data = response.json()
++        assert isinstance(data, list)
++        assert len(data) > 0
++        # Check that the stat key exists in each record
++        assert "points" in data[0]
++        # Check ordering (first entry should be earliest date)
++        assert data[0]["date"] == "2023-09-01"
++
++    def test_get_history_missing_stat_returns_400(self):
++        """Test that missing stat query parameter returns 400."""
++        response = client.get("/api/players/1/history")
++        assert response.status_code == 400
++
++    def test_get_history_invalid_stat_returns_400(self):
++        """Test that invalid stat query parameter returns 400."""
++        response = client.get("/api/players/1/history?stat=invalid_stat")
++        assert response.status_code == 400
++
++    def test_get_unknown_player_history_returns_404(self):
++        """Test that unknown player ID returns 404 for history endpoint."""
++        response = client.get("/api/players/999/history?stat=points")
++        assert response.status_code == 404
+```
+
+### 3. Verification Commands
+
+```bash
+# Run the specific test file to verify RED phase (tests should fail)
+.venv/bin/pytest apps/api/tests/test_players.py -q
+
+# Expected Output:
+# FFFF
+# 4 failed in X.XXs
+# (Specific failures will indicate missing endpoints or logic)
+```

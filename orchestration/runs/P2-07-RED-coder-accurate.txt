@@ -1,0 +1,153 @@
+### 1. Concise Plan
+
+1.  **Analyze Existing Structure**: Inspect `apps/api/tests/test_status.py` and the main application factory (`apps/api/app.py` or similar) to understand routing, dependency injection, and existing test fixtures.
+2.  **Implement Test Doubles**: Create in-memory mocks for the "Season State" service and "Freshness/Ingest" service within the test file or a dedicated `conftest.py` module. These mocks will return predefined JSON structures.
+3.  **Write Failing Tests**:
+    *   `test_get_season_state_returns_mode_next_game_season`: Asserts the JSON payload contains `mode`, `next_game_at`, and `current_season`.
+    *   `test_get_season_state_cache_headers`: Asserts `Cache-Control` header is `max-age=300, public` (or similar 5-min directive).
+    *   `test_get_freshness_returns_data`: Asserts the JSON payload contains `ingest_runs`, `schema_drift`, and `per_stat_freshness`.
+    *   `test_get_freshness_no_store_cache`: Asserts `Cache-Control` header is `no-store`.
+4.  **Verify**: Run `pytest` to confirm tests fail (assertions not met or endpoints missing) before implementation.
+
+### 2. Exact File Edits as Unified Diff
+
+```diff
+diff --git a/apps/api/tests/test_status.py b/apps/api/tests/test_status.py
+new file mode 100644
+index 0000000..1234567
+--- /dev/null
++++ b/apps/api/tests/test_status.py
+@@ -0,0 +1,85 @@
++"""
++Tests for transparency endpoints: /api/season-state and /api/freshness.
++RED-only start: Tests are expected to fail until implementation is complete.
++"""
++
++import pytest
++from unittest.mock import MagicMock, patch
++
++# In-process test doubles
++MOCK_SEASON_STATE = {
++    "mode": "live",
++    "next_game_at": "2023-10-25T19:00:00Z",
++    "current_season": 2023
++}
++
++MOCK_FRESHNESS_DATA = {
++    "ingest_runs": [
++        {"id": "run-1", "status": "success", "completed_at": "2023-10-24T10:00:00Z"}
++    ],
++    "schema_drift": False,
++    "per_stat_freshness": {
++        "points": {"last_updated": "2023-10-24T10:00:00Z"},
++        "rebounds": {"last_updated": "2023-10-24T09:55:00Z"}
++    }
++}
++
++
++@pytest.fixture
++def client(app):
++    """Provide a test client for the FastAPI/Flask app."""
++    return app.test_client()
++
++
++class TestSeasonStateEndpoint:
++    """Tests for GET /api/season-state"""
++
++    @patch('apps.api.services.season_service.get_season_state', return_value=MOCK_SEASON_STATE)
++    def test_get_season_state_returns_mode_next_game_season(self, mock_service, client):
++        """
++        Test 1: GET /api/season-state returns mode, next_game_at, and current_season.
++        """
++        response = client.get('/api/season-state')
++        assert response.status_code == 200
++        data = response.get_json()
++        
++        # Assert specific keys exist and have expected types/values
++        assert "mode" in data, "Response missing 'mode' key"
++        assert "next_game_at" in data, "Response missing 'next_game_at' key"
++        assert "current_season" in data, "Response missing 'current_season' key"
++        
++        assert data["mode"] == "live"
++        assert data["next_game_at"] == "2023-10-25T19:00:00Z"
++        assert data["current_season"] == 2023
++
++    @patch('apps.api.services.season_service.get_season_state', return_value=MOCK_SEASON_STATE)
++    def test_get_season_state_cache_headers(self, mock_service, client):
++        """
++        Test 2: GET /api/season-state sets cache headers for 5-minute caching.
++        """
++        response = client.get('/api/season-state')
++        assert response.status_code == 200
++        
++        # Assert Cache-Control header includes max-age=300 (5 minutes)
++        cache_control = response.headers.get('Cache-Control', '')
++        assert 'max-age=300' in cache_control, f"Expected 'max-age=300' in Cache-Control, got: {cache_control}"
++        # Optional: Assert public if required by spec
++        assert 'public' in cache_control, f"Expected 'public' in Cache-Control, got: {cache_control}"
++
++
++class TestFreshnessEndpoint:
++    """Tests for GET /api/freshness"""
++
++    @patch('apps.api.services.freshness_service.get_freshness_data', return_value=MOCK_FRESHNESS_DATA)
++    def test_get_freshness_returns_data(self, mock_service, client):
++        """
++        Test 3: GET /api/freshness returns ingest runs, schema drift, and per-stat freshness summary.
++        """
++        response = client.get('/api/freshness')
++        assert response.status_code == 200
++        data = response.get_json()
++        
++        # Assert specific keys exist
++        assert "ingest_runs" in data, "Response missing 'ingest_runs' key"
++        assert "schema_drift" in data, "Response missing 'schema_drift' key"
++        assert "per_stat_freshness" in data, "Response missing 'per_stat_freshness' key"
++        
++        # Assert structure of ingest_runs
++        assert isinstance(data["ingest_runs"], list)
++        assert len(data["ingest_runs"]) > 0
++        
++        # Assert schema_drift is boolean
++        assert isinstance(data["schema_drift"], bool)
++
++    @patch('apps.api.services.freshness_service.get_freshness_data', return_value=MOCK_FRESHNESS_DATA)
++    def test_get_freshness_no_store_cache(self, mock_service, client):
++        """
++        Test 4: GET /api/freshness sets Cache-Control: no-store.
++        """
++        response = client.get('/api/freshness')
++        assert response.status_code == 200
++        
++        # Assert Cache-Control header is exactly 'no-store' or contains it
++        cache_control = response.headers.get('Cache-Control', '')
++        assert 'no-store' in cache_control, f"Expected 'no-store' in Cache-Control, got: {cache_control}"
++        # Optional: Ensure no other caching directives interfere
++        assert 'max-age' not in cache_control, f"Unexpected 'max-age' in Cache-Control for freshness endpoint: {cache_control}"
+diff --git a/apps/api/app.py b/apps/api/app.py
+index 1234567..abcdefg 100644
+--- a/apps/api/app.py
++++ b/apps/api/app.py
+@@ -1,5 +1,6 @@
+ from fastapi import FastAPI
++from fastapi.responses import JSONResponse
+ 
+ app = FastAPI()
+ 
++# TODO: Implement /api/season-state and /api/freshness endpoints
++# These tests are currently failing because the endpoints do not exist.
+```
+
+### 3. Verification Commands
+
+```bash
+# Ensure virtual environment is activated
+source .venv/bin/activate
+
+# Run the specific test file to verify failures (RED phase)
+.venv/bin/pytest apps/api/tests/test_status.py -q
+
+# Expected Output:
+# FFFF
+# 4 failed in X.XXs
+```
