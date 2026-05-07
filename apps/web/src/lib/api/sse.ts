@@ -3,9 +3,18 @@ type SnapshotPayload = {
 	sort: string;
 	entries: Array<{
 		rank: number;
-		player: { id: number; name: string; team_abbr: string; headshot_url: string; position: string };
+		player: {
+			id: number;
+			name: string;
+			team_abbr: string;
+			headshot_url: string;
+			position: string;
+		};
 		stat_value: number;
-		freshness: { timestamp: string; age_category: 'live' | 'recent' | 'stale' | 'old' };
+		freshness: {
+			timestamp: string;
+			age_category: "live" | "recent" | "stale" | "old";
+		};
 	}>;
 };
 
@@ -26,8 +35,12 @@ type StreamHandlers = {
 	onError?: (error: Event) => void;
 };
 
-export function openBoardStream(view: string, sort: string, handlers: StreamHandlers): () => void {
-	if (typeof window === 'undefined') {
+export function openBoardStream(
+	view: string,
+	sort: string,
+	handlers: StreamHandlers,
+): () => void {
+	if (typeof window === "undefined") {
 		return () => {};
 	}
 
@@ -45,11 +58,15 @@ export function openBoardStream(view: string, sort: string, handlers: StreamHand
 
 		source.addEventListener('snapshot', (event) => {
 			attempts = 0;
-			handlers.onSnapshot(JSON.parse((event as MessageEvent).data) as SnapshotPayload);
+			handlers.onSnapshot(
+				JSON.parse((event as MessageEvent).data) as SnapshotPayload,
+			);
 		});
 
 		source.addEventListener('delta', (event) => {
-			handlers.onDelta(JSON.parse((event as MessageEvent).data) as DeltaPayload);
+			handlers.onDelta(
+				JSON.parse((event as MessageEvent).data) as DeltaPayload,
+			);
 		});
 
 		source.onerror = (event) => {

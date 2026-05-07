@@ -10,7 +10,7 @@ export type BoardEntry = {
 	stat_value: number;
 	freshness: {
 		timestamp: string;
-		age_category: 'live' | 'recent' | 'stale' | 'old';
+		age_category: "live" | "recent" | "stale" | "old";
 	};
 };
 
