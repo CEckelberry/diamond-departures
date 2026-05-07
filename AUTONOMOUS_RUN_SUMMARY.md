@@ -42,19 +42,40 @@ Branch: `main`
 - Fixed generator cleanup so connection registry is always released on stream close.
 - Verification: `pytest apps/api/tests/test_sse.py -q` (PASS).
 
+### P2-06 (RED → GREEN completed)
+
+- Added RED tests for `/api/players/{id}` and `/api/players/{id}/history` contract, 404 handling, and stat validation.
+- Implemented injectable player detail/history readers and both player endpoints in `apps/api/app/main.py`.
+- Added deterministic history point ordering by timestamp.
+- Verification: `pytest apps/api/tests/test_players.py -q` (PASS).
+
+### P2-07 (RED → GREEN completed)
+
+- Added RED tests for `/api/season-state` and `/api/freshness` response schema + cache headers.
+- Implemented status readers and endpoints with cache behavior (`public, max-age=300` / `no-store`).
+- Added season mode validation guard (`live|between|off-game|off-season`).
+- Verification: `pytest apps/api/tests/test_status.py -q` (PASS).
+
+### P3-01 (RED → GREEN completed)
+
+- Added RED compile check via flap lab route importing missing `Cell.svelte`.
+- Implemented `Cell.svelte` static split-flap single-cell visual (top half, 1px hairline, bottom half, token-based colors) with required props.
+- Added flap lab preview page rendering 10 sample cells for visual QA.
+- Verification: `pnpm --filter web check` (PASS, 0 errors).
+
 ## Additional verification
 
-- `pytest apps/ingest/tests -q` (PASS, 26 passed)
-- `pytest apps/api/tests -q` (PASS, 17 passed)
+- `pytest apps/api/tests -q` (PASS, 25 passed)
+- `pnpm --filter web check` (PASS, warning-only)
 
 ## Artifacts updated
 
-- Packet docs: `orchestration/task-packets/P1-10*`, `P2-01*`, `P2-02*`, `P2-03*`, `P2-04*`, `P2-05*`
-- Run outputs: `orchestration/runs/P1-10*`, `P2-01*`, `P2-02*`, `P2-03*`, `P2-04*`, `P2-05*`
-- Task board: `orchestration/task-board.yaml` (P1-10, P2-01..P2-05 marked `done`)
+- Packet docs: `orchestration/task-packets/P2-06*`, `P2-07*`, `P3-01*`
+- Run outputs: `orchestration/runs/P2-06*`, `P2-07*`, `P3-01*`
+- Task board: `orchestration/task-board.yaml` (P2-06, P2-07, P3-01 marked `done`)
 
 ## Assumptions used
 
-- Python/FastAPI implementation is the active service stack for current packets.
-- DB health check remains abstracted callback in this packet; direct Postgres connectivity wiring follows in later packet.
-- Hitter qualification threshold interpreted as `ceil(2.7 * team_games)` to align with whole-PA boundary tests.
+- Python/FastAPI implementation remains authoritative for Phase 2 API packets.
+- Player history endpoint supports hitter stats in this packet (`wRC+`, `OPS`); broader stat matrix can expand in later packets.
+- Existing web toolchain warning about missing `@types/node` is pre-existing and non-blocking for this packet.

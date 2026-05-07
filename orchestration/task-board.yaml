@@ -280,3 +280,40 @@ packets:
     verify:
       - "pytest apps/api/tests/test_sse.py -q"
       - "pytest apps/api/tests -q"
+
+  - id: P2-06
+    title: player detail endpoints
+    source_task: "Task 2.6"
+    owner: local-coder
+    status: done
+    files:
+      - apps/api/app/players.py
+      - apps/api/app/main.py
+      - apps/api/tests/test_players.py
+    verify:
+      - "pytest apps/api/tests/test_players.py -q"
+      - "pytest apps/api/tests -q"
+
+  - id: P2-07
+    title: season-state + freshness endpoints
+    source_task: "Task 2.7"
+    owner: local-coder
+    status: done
+    files:
+      - apps/api/app/status.py
+      - apps/api/app/main.py
+      - apps/api/tests/test_status.py
+    verify:
+      - "pytest apps/api/tests/test_status.py -q"
+      - "pytest apps/api/tests -q"
+
+  - id: P3-01
+    title: split-flap single-cell visual
+    source_task: "Task 3.1"
+    owner: local-coder
+    status: done
+    files:
+      - apps/web/src/lib/components/flap/Cell.svelte
+      - apps/web/src/routes/flap-lab/+page.svelte
+    verify:
+      - "pnpm --filter web check"

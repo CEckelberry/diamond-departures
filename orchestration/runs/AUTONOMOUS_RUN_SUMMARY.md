@@ -35,6 +35,21 @@ Repo: `/home/roger/Documents/coding/cole-portfolio-apps/diamond-departures`
   - Implemented `apps/api/app/sse.py` and wired `/api/board/sse` in app factory.
   - Verification artifact: `orchestration/runs/P2-05-verify.md`.
 
+- **P2-06 (Task 2.6) — completed**
+  - Added RED tests for player detail/history endpoints, 404 handling, and stat query validation.
+  - Implemented `apps/api/app/players.py`, endpoint wiring in `apps/api/app/main.py`, and endpoint tests.
+  - Verification artifact: `orchestration/runs/P2-06-verify.md`.
+
+- **P2-07 (Task 2.7) — completed**
+  - Added RED tests for season-state + freshness contracts and cache headers.
+  - Implemented `apps/api/app/status.py` and endpoint wiring in `apps/api/app/main.py`.
+  - Verification artifact: `orchestration/runs/P2-07-verify.md`.
+
+- **P3-01 (Task 3.1) — completed**
+  - Added RED compile check by importing missing flap `Cell.svelte` from a new flap lab route.
+  - Implemented static split-flap single-cell visual and lab preview row.
+  - Verification artifact: `orchestration/runs/P3-01-verify.md`.
+
 ## TDD evidence
 
 - P1-10 RED: missing `apps.ingest.app.positions` module import.
@@ -43,6 +58,9 @@ Repo: `/home/roger/Documents/coding/cole-portfolio-apps/diamond-departures`
 - P2-03 RED: missing cache module import.
 - P2-04 RED: missing pubsub module import.
 - P2-05 RED: missing sse module import / failing stream contracts.
+- P2-06 RED: `create_app` missing player reader injection args/endpoints.
+- P2-07 RED: `create_app` missing season/freshness reader injection args/endpoints.
+- P3-01 RED: web check failed due to missing `$lib/components/flap/Cell.svelte`.
 - GREEN: all targeted suites passing after implementation.
 
 ## Validation commands run
@@ -54,10 +72,14 @@ Repo: `/home/roger/Documents/coding/cole-portfolio-apps/diamond-departures`
 - `.venv/bin/pytest apps/api/tests/test_cache.py -q`
 - `.venv/bin/pytest apps/api/tests/test_pubsub.py -q`
 - `.venv/bin/pytest apps/api/tests/test_sse.py -q`
+- `.venv/bin/pytest apps/api/tests/test_players.py -q`
+- `.venv/bin/pytest apps/api/tests/test_status.py -q`
 - `.venv/bin/pytest apps/api/tests -q`
+- `pnpm --filter web check`
 
 ## Risks / follow-ups
 
 - API DB health check uses injectable callback; concrete Postgres probe still pending.
-- Board endpoint currently uses reader callback/in-memory path; SQL store integration pending later packets.
+- Board/player/status endpoints currently use injectable reader callbacks/in-memory defaults; DB-backed query integration still pending later packets.
 - Cache is local-process only; distributed multi-instance coherence strategy still pending.
+- Web check has warning-only missing `@types/node`; non-blocking for this packet but should be cleaned up later.
