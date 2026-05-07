@@ -12,15 +12,15 @@ async function load(path) {
 test("route load fetches /api/board with view and sort params", async () => {
 	const src = await load(pageLoadPath);
 	assert.match(src, /export\s+const\s+load\s*=/);
-	assert.match(src, /fetch\('\/api\/board\?/);
-	assert.match(src, /params\.set\('view'/);
-	assert.match(src, /params\.set\('sort'/);
+	assert.match(src, /fetch\((['"])\/api\/board\?/);
+	assert.match(src, /params\.set\((['"])view/);
+	assert.match(src, /params\.set\((['"])sort/);
 });
 
 test("+page consumes load data, passes rows into Board, and shows skeleton while loading", async () => {
 	const src = await load(pageViewPath);
 	assert.match(src, /let\s*\{\s*data\s*\}:\s*\{\s*data:/);
-	assert.match(src, /<Board\s+rows=\{boardRows\}/);
+	assert.match(src, /<Board\s+rows=\{(boardRows|filteredRows)\}/);
 	assert.match(src, /\{#if\s+isLoading\}/);
 	assert.match(src, /class=['"]board-skeleton['"]/);
 });

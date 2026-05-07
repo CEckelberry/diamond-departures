@@ -13,10 +13,10 @@ async function load(path) {
 test("SSE client opens /api/board/sse stream and handles snapshot + delta with reconnect", async () => {
 	const src = await load(sseApiPath);
 	assert.match(src, /export\s+function\s+openBoardStream/);
-	assert.match(src, /new\s+EventSource\('/);
+	assert.match(src, /new\s+EventSource\((['"])/);
 	assert.match(src, /\/api\/board\/sse\?/);
-	assert.match(src, /addEventListener\('snapshot'/);
-	assert.match(src, /addEventListener\('delta'/);
+	assert.match(src, /addEventListener\((['"])snapshot/);
+	assert.match(src, /addEventListener\((['"])delta/);
 	assert.match(src, /setTimeout\(/);
 	assert.match(src, /Math\.min\(/);
 });

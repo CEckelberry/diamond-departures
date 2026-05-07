@@ -1,0 +1,86 @@
+### 1. Concise Plan
+
+1.  **Update `+page.ts`**:
+    *   Import `ViewResolution` and `resolveView` from the existing view resolution module.
+    *   Update the `load` function to accept `params` (specifically `position`).
+    *   Instantiate `ViewResolution` with the API view and the selected position.
+    *   Call `resolveView()` to get the final view configuration.
+    *   Return the `selectedPosition` in the `data` payload so the component can access it.
+
+2.  **Update `+page.svelte`**:
+    *   Update the `PageData` interface to include `selectedPosition`.
+    *   Import necessary types (`BoardRow`, `ViewResolution`) if not already present.
+    *   Add logic to derive `filteredRows` from `boardRows`. If the current view is `positions` and `selectedPosition` is not `'all'`, filter `boardRows` to only include rows matching that position.
+    *   Pass `filteredRows` to the `Board` component.
+
+### 2. Exact File Edits (Unified Diff)
+
+```diff
+diff --git a/apps/web/src/routes/+page.svelte b/apps/web/src/routes/+page.svelte
+index 1a2b3c4..5d6e7f8 100644
+--- a/apps/web/src/routes/+page.svelte
++++ b/apps/web/src/routes/+page.svelte
+@@ -1,10 +1,12 @@
+ <script lang="ts">
+ 	import type { PageData } from './$types';
+ 	import Board from '$lib/components/Board.svelte';
++	import type { BoardRow } from '$lib/types/board';
++	import type { ViewResolution } from '$lib/types/view';
+ 
+ 	export let data: PageData;
+ 
+-	let boardRows: BoardRow[] = data.boardRows;
++	let { boardRows, selectedPosition }: PageData = $props();
+ 
++	// Derive filtered rows based on position filter
++	let filteredRows: BoardRow[] = $derived.by(() => {
++		if (data.viewResolution.view === 'positions' && selectedPosition !== 'all') {
++			return boardRows.filter(row => row.position === selectedPosition);
++		}
++		return boardRows;
++	});
+ </script>
+ 
+ <div class="container">
+-	<Board rows={boardRows} />
++	<Board rows={filteredRows} />
+ </div>
+diff --git a/apps/web/src/routes/+page.ts b/apps/web/src/routes/+page.ts
+index 9a8b7c6..5d4e3f2 100644
+--- a/apps/web/src/routes/+page.ts
++++ b/apps/web/src/routes/+page.ts
+@@ -1,8 +1,10 @@
+ import type { PageLoad } from './$types';
+ import { getBoardData } from '$lib/api/board';
++import { ViewResolution, resolveView } from '$lib/utils/viewResolution';
+ 
+ export const load: PageLoad = async ({ params }) => {
+-	const boardRows = await getBoardData();
++	const apiView = params.view || 'hitters';
++	const selectedPosition = params.position || 'all';
++	
++	const viewResolution = new ViewResolution(apiView, selectedPosition);
++	const resolved = resolveView(viewResolution);
+ 
+-	return { boardRows };
++	return { 
++		boardRows: await getBoardData(),
++		selectedPosition,
++		viewResolution: resolved
++	};
+ };
+```
+
+### 3. Verification Commands
+
+```bash
+# 1. Check for TypeScript compilation errors
+pnpm run check
+
+# 2. Run unit tests related to view resolution and board filtering
+pnpm test -- viewResolution
+pnpm test -- Board
+
+# 3. Verify the build succeeds
+pnpm build
+```

@@ -105,11 +105,29 @@ Repo: `/home/roger/Documents/coding/cole-portfolio-apps/diamond-departures`
   - Updated `apps/web/src/lib/components/board/Board.svelte` with keyed `playerId` rows + `animate:flip` wrappers.
   - Verification artifact: `orchestration/runs/P4-07-verify.md`.
 
+- **P5-01 (Task 5.1) — completed**
+  - Added RED tests for page/panel/board row selection wiring and panel shell states.
+  - Implemented `apps/web/src/lib/components/player/Panel.svelte` shell and selection callbacks in board row flow.
+  - Verification artifact: `orchestration/runs/P5-01-verify.md`.
+
+- **P5-02 (Task 5.2) — completed**
+  - Added RED tests for trend chart component and history fetch wiring in panel.
+  - Implemented `apps/web/src/lib/components/player/TrendChart.svelte` and panel history fetch with stat toggle.
+  - Verification artifact: `orchestration/runs/P5-02-verify.md`.
+
+- **P5-03 (Task 5.3) — completed**
+  - Added RED tests for position view resolution + filtered row rendering path.
+  - Updated `apps/web/src/routes/+page.ts` and `+page.svelte` for selected-position aware API mapping and client-side row filtering.
+  - Verification artifact: `orchestration/runs/P5-03-verify.md`.
+
 ## TDD evidence
 
 - P4-05 RED: board REST load tests failed (`+page.ts` missing, no data-driven board wiring).
 - P4-06 RED: SSE wiring tests failed (`sse.ts` and `board.ts` missing).
 - P4-07 RED: reshuffle animation tests failed (no FLIP/keyed rows/audio hook).
+- P5-01 RED: panel shell tests failed (missing panel component and row-selection wiring).
+- P5-02 RED: trend chart tests failed (missing history fetch + chart component).
+- P5-03 RED: position filter tests failed (no selected-position payload and no filtered rows path).
 - GREEN: all new packet suites pass after implementation.
 
 ## Validation commands run
@@ -117,11 +135,14 @@ Repo: `/home/roger/Documents/coding/cole-portfolio-apps/diamond-departures`
 - `node --test apps/web/tests/board-rest-load.test.mjs`
 - `node --test apps/web/tests/board-sse-wiring.test.mjs`
 - `node --test apps/web/tests/board-reshuffle-animation.test.mjs`
-- `node --test apps/web/tests/board-structure.test.mjs apps/web/tests/board-rest-load.test.mjs apps/web/tests/board-sse-wiring.test.mjs apps/web/tests/board-reshuffle-animation.test.mjs`
+- `node --test apps/web/tests/player-panel-shell.test.mjs`
+- `node --test apps/web/tests/player-trend-chart.test.mjs`
+- `node --test apps/web/tests/position-filtered-views.test.mjs`
+- `node --test apps/web/tests/view-controls.test.mjs apps/web/tests/board-structure.test.mjs apps/web/tests/board-rest-load.test.mjs apps/web/tests/board-sse-wiring.test.mjs apps/web/tests/board-reshuffle-animation.test.mjs apps/web/tests/player-panel-shell.test.mjs apps/web/tests/player-trend-chart.test.mjs apps/web/tests/position-filtered-views.test.mjs`
 - `pnpm --filter web check`
 
 ## Risks / follow-ups
 
-- Position dropdown values beyond `SS/OF/SP/RP` currently map to hitter default until backend view keys expand in Phase 5.
+- Position dropdown values beyond `SS/OF/SP/RP` now use hitters API base plus client-side row filtering by selected position.
 - REST-load sort fallback coerces unsupported UI sorts to backend-supported set to avoid 400s.
 - Web check has warning-only missing `@types/node`; non-blocking and pre-existing.

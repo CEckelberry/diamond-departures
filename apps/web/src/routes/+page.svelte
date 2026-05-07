@@ -25,11 +25,29 @@
 		};
 	};
 
-	let { data }: { data: { boardView: string; boardSort: string; entries: BoardEntryPayload[] } } = $props();
+	let {
+		data
+	}: {
+		data: {
+			boardView: string;
+			boardSort: string;
+			entries: BoardEntryPayload[];
+			selectedPosition: string;
+		};
+	} = $props();
 
 	const view = $derived($page.url.searchParams.get('view') ?? 'hitters');
 	const isLoading = $derived($navigating !== null);
 	const boardRows = $derived($boardRowsStore);
+	const selectedPosition = $derived(data.selectedPosition);
+	const filteredRows = $derived(
+		(() => {
+			if (view !== 'positions' || !selectedPosition || selectedPosition === 'all') {
+				return boardRows;
+			}
+			return boardRows.filter((row) => row.position === selectedPosition);
+		})()
+	);
 
 	let selectedPlayerId = $state<number | null>(null);
 	let stop = () => {};
@@ -71,7 +89,7 @@
 				<div class="skeleton-row"></div>
 			</div>
 		{:else}
-			<Board rows={boardRows} onselect={handleSelectPlayer} />
+			<Board rows={filteredRows} onselect={handleSelectPlayer} />
 		{/if}
 		<Panel selectedPlayerId={selectedPlayerId} />
 	</div>

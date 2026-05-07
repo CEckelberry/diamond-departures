@@ -131,6 +131,24 @@ Branch: `main`
 - Updated `Board.svelte` to animate row wrappers via `animate:flip`, key rows by `playerId`, and trigger `playRowShift()` on order changes.
 - Verification: `node --test apps/web/tests/board-reshuffle-animation.test.mjs` and `pnpm --filter web check` (PASS, warning-only).
 
+### P5-01 (RED → GREEN completed)
+
+- Added RED tests for player panel shell integration, page selection state, and board row select plumbing.
+- Implemented `Panel.svelte` shell plus clickable row selection flow (`Row.svelte` -> `Board.svelte` -> `+page.svelte`).
+- Verification: `node --test apps/web/tests/player-panel-shell.test.mjs` and `pnpm --filter web check` (PASS, warning-only).
+
+### P5-02 (RED → GREEN completed)
+
+- Added RED tests for player trend chart wiring and history endpoint fetch contract.
+- Implemented `TrendChart.svelte` SVG sparkline and panel history fetch (`/api/players/{id}/history?stat=...`) with stat toggle + loading/error handling.
+- Verification: `node --test apps/web/tests/player-trend-chart.test.mjs apps/web/tests/player-panel-shell.test.mjs` and `pnpm --filter web check` (PASS, warning-only).
+
+### P5-03 (RED → GREEN completed)
+
+- Added RED tests for position-mode view resolution and filtered-row rendering path.
+- Updated `+page.ts` to return `selectedPosition` alongside resolved API view and updated `+page.svelte` to derive `filteredRows` for `view=positions`.
+- Verification: `node --test apps/web/tests/position-filtered-views.test.mjs apps/web/tests/board-rest-load.test.mjs`, full Phase 4/5 node suite, and `pnpm --filter web check` (PASS, warning-only).
+
 ## Additional verification
 
 - `node --test apps/web/tests/board-structure.test.mjs apps/web/tests/board-rest-load.test.mjs apps/web/tests/board-sse-wiring.test.mjs apps/web/tests/board-reshuffle-animation.test.mjs` (PASS, 10 tests)
@@ -138,12 +156,12 @@ Branch: `main`
 
 ## Artifacts updated
 
-- Packet docs: `orchestration/task-packets/P4-05*`, `P4-06*`, `P4-07*`
-- Run outputs: `orchestration/runs/P4-05*`, `P4-06*`, `P4-07*`
-- Task board: `orchestration/task-board.yaml` (P4-05..P4-07 marked `done`, P5-01 queued `todo`)
+- Packet docs: `orchestration/task-packets/P4-05*`, `P4-06*`, `P4-07*`, `P5-01*`, `P5-02*`, `P5-03*`
+- Run outputs: `orchestration/runs/P4-05*`, `P4-06*`, `P4-07*`, `P5-01*`, `P5-02*`, `P5-03*`
+- Task board: `orchestration/task-board.yaml` (P5-01..P5-03 marked `done`)
 
 ## Assumptions used
 
 - REST load maps unsupported UI sorts to API-supported defaults (`wRC+` for hitters, `ERA` for pitchers).
-- Position tab currently maps to supported API subviews (`SS/OF/SP/RP`) and falls back to hitters for other positions until Phase 5 expands backend view keys.
+- Position tab maps `SS/OF/SP/RP` to backend subviews and applies client-side filtering for other position values while using hitters API base.
 - Existing web toolchain warning about missing `@types/node` remains pre-existing and non-blocking.

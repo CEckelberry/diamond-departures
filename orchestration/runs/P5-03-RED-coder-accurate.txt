@@ -1,0 +1,70 @@
+(1) Concise Plan
+1.  Create `apps/web/tests/position-filtered-views.test.mjs`.
+2.  Implement source-assertion tests that inspect the AST of `+page.ts` and `+page.svelte`.
+3.  Assert that `+page.ts` contains logic mapping `view=positions` to an API view and exposes `selectedPosition`.
+4.  Assert that `+page.svelte` uses a derived store or reactive statement filtering rows by `selectedPosition` instead of using raw board data.
+5.  Ensure tests fail because the current implementation likely lacks this specific filtering logic or naming convention.
+
+(2) Exact File Edits
+
+```diff
+diff --git a/apps/web/tests/position-filtered-views.test.mjs b/apps/web/tests/position-filtered-views.test.mjs
+new file mode 100644
+index 0000000..8b7c9d1
+--- /dev/null
++++ b/apps/web/tests/position-filtered-views.test.mjs
+@@ -0,0 +1,120 @@
++import { describe, it, expect } from 'vitest';
++import fs from 'fs';
++import path from 'path';
++import { fileURLToPath } from 'url';
++
++const __dirname = path.dirname(fileURLToPath(import.meta.url));
++const srcDir = path.resolve(__dirname, '../src/routes');
++
++describe('Position-Filtered Views End-to-End', () => {
++	let pageTsContent;
++	let pageSvelteContent;
++
++	beforeAll(() => {
++		pageTsContent = fs.readFileSync(path.join(srcDir, '+page.ts'), 'utf-8');
++		pageSvelteContent = fs.readFileSync(path.join(srcDir, '+page.svelte'), 'utf-8');
++	});
++
++	it('should have an API view resolver that keeps view=positions URL mode', () => {
++		// Assert that the page loader handles 'view=positions' specifically
++		expect(pageTsContent).toMatch(/view\s*===?\s*['"]positions['"]/);
++		expect(pageTsContent).toMatch(/['"]api['"]/);
++	});
++
++	it('should return selectedPosition from load output', () => {
++		// Assert that the load function returns a property named selectedPosition
++		expect(pageTsContent).toMatch(/return\s*\{[^}]*selectedPosition[^}]*\}/);
++	});
++
++	it('should have derived visible rows filtered by selected position in Svelte component', () => {
++		// Assert that there is a reactive statement or derived store filtering rows
++		expect(pageSvelteContent).toMatch(/\$\.positions|selectedPosition.*filter|visibleRows\s*=\s*boardRows\.filter/);
++	});
++
++	it('should NOT render raw boardRows store directly in the template', () => {
++		// Assert that the template does not iterate over raw boardRows without filtering
++		// We look for common iteration patterns like {#each boardRows} and ensure they are not present
++		// or are overridden by a filtered variable.
++		const hasRawIteration = /\{#each\s+boardRows\s+as\s+\w+\}/.test(pageSvelteContent);
++		expect(hasRawIteration).toBe(false);
++	});
++
++	it('should render filtered rows variable', () => {
++		// Assert that the template iterates over a filtered variable (e.g., visibleRows)
++		expect(pageSvelteContent).toMatch(/\{#each\s+(visibleRows|filteredRows)\s+as\s+\w+\}/);
++	});
++});
+```
+
+(3) Verification Commands
+
+```bash
+cd apps/web
+npm run test -- position-filtered-views.test.mjs
+```

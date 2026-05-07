@@ -18,17 +18,31 @@ export type BoardEntryPayload = {
 
 const VALID_SORTS = new Set(["wRC+", "OPS", "ERA", "FIP", "K-BB%"]);
 
-function resolveView(params: URLSearchParams): string {
-	const view = params.get("view") ?? "hitters";
-	if (view === "pitchers") return "pitchers";
-	if (view !== "positions") return "hitters";
+type ViewResolution = {
+	apiView: string;
+	selectedPosition: string;
+};
 
-	const position = (params.get("position") ?? "all").toUpperCase();
-	if (position === "SS") return "hitters_ss";
-	if (position === "OF") return "hitters_of";
-	if (position === "SP") return "pitchers_sp";
-	if (position === "RP") return "pitchers_rp";
-	return "hitters";
+function resolveView(params: URLSearchParams): ViewResolution {
+	const view = params.get("view") ?? "hitters";
+	if (view === "pitchers") {
+		return { apiView: "pitchers", selectedPosition: "all" };
+	}
+	if (view !== "positions") {
+		return { apiView: "hitters", selectedPosition: "all" };
+	}
+
+	const selectedPosition = (params.get("position") ?? "all").toUpperCase();
+	if (selectedPosition === "SS") return { apiView: 'hitters_ss', selectedPosition: 'SS' };
+	if (selectedPosition === "OF") return { apiView: "hitters_of", selectedPosition: "OF" };
+	if (selectedPosition === "SP") return { apiView: "pitchers_sp", selectedPosition: "SP" };
+	if (selectedPosition === "RP") return { apiView: "pitchers_rp", selectedPosition: "RP" };
+
+	if (selectedPosition === "ALL") {
+		return { apiView: "hitters", selectedPosition: "all" };
+	}
+
+	return { apiView: "hitters", selectedPosition };
 }
 
 function resolveSort(params: URLSearchParams, apiView: string): string {
@@ -45,11 +59,9 @@ export const load = async ({
 	url: URL;
 }) => {
 	const params = new URLSearchParams();
-	params.set("view", resolveView(url.searchParams));
-	params.set(
-		"sort",
-		resolveSort(url.searchParams, params.get("view") ?? "hitters"),
-	);
+	const resolvedView = resolveView(url.searchParams);
+	params.set("view", resolvedView.apiView);
+	params.set("sort", resolveSort(url.searchParams, resolvedView.apiView));
 
 	const response = await fetch("/api/board?" + params.toString());
 	if (!response.ok) {
@@ -66,5 +78,6 @@ export const load = async ({
 		boardView: payload.view,
 		boardSort: payload.sort,
 		entries: payload.entries,
+		selectedPosition: resolvedView.selectedPosition,
 	};
 };

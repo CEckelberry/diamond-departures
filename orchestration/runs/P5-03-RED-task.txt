@@ -1,0 +1,9 @@
+Packet P5-03 RED tests only for position-filtered views end-to-end.
+Create apps/web/tests/position-filtered-views.test.mjs source-assertion tests.
+Expect:
+- +page.ts has API view resolver that keeps view=positions URL mode while mapping position to api view.
+- +page.ts returns selectedPosition (or similar) from load output.
+- +page.svelte has derived visible rows filtered by selected position for unsupported backend slices.
+- Board renders filtered rows variable, not raw boardRows store.
+Keep tests failing on current code.
+Return unified diff only.
