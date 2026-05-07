@@ -45,10 +45,13 @@ export const load = async ({
 	url: URL;
 }) => {
 	const params = new URLSearchParams();
-	params.set('view', resolveView(url.searchParams));
-	params.set('sort', resolveSort(url.searchParams, params.get('view') ?? 'hitters'));
+	params.set("view", resolveView(url.searchParams));
+	params.set(
+		"sort",
+		resolveSort(url.searchParams, params.get("view") ?? "hitters"),
+	);
 
-	const response = await fetch('/api/board?' + params.toString());
+	const response = await fetch("/api/board?" + params.toString());
 	if (!response.ok) {
 		throw error(response.status, "Failed to load board");
 	}

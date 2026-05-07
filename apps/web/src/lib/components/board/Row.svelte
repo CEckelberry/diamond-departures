@@ -2,10 +2,20 @@
 	import Word from '$lib/components/flap/Word.svelte';
 	import type { BoardRow } from './types';
 
-	let { row }: { row: BoardRow } = $props();
+	let {
+		row,
+		onselect
+	}: {
+		row: BoardRow;
+		onselect?: (playerId: number) => void;
+	} = $props();
+
+	function handleSelect() {
+		onselect?.(row.playerId);
+	}
 </script>
 
-<div class="board-row" role="row">
+<div class="board-row" role="row" onclick={handleSelect}>
 	<div class="cell rank" role="gridcell">
 		<Word value={row.rank} width={3} cellWidth={20} cellHeight={30} />
 	</div>

@@ -1,0 +1,9 @@
+Packet P5-01 RED tests only for player detail panel shell.
+Create apps/web/tests/player-panel-shell.test.mjs source-assertion tests.
+Expect:
+- +page.svelte imports $lib/components/player/Panel.svelte and renders panel with selected player prop.
+- Row.svelte exposes click handler and dispatches/selects player id.
+- Board.svelte forwards row select event to parent.
+- Panel.svelte contains shell markers for empty, loading, and error states.
+Keep tests failing on current code.
+Return unified diff only.

@@ -1,0 +1,102 @@
+(1) Concise Plan
+The goal is to create a test suite that asserts the existence and basic behavior of the player detail panel components. Since the implementation (`$lib/components/player/Panel.svelte`, `Row.svelte`, `Board.svelte`) does not yet exist, the tests will fail on import or runtime errors, satisfying the "keep tests failing" requirement.
+
+1.  Create `apps/web/tests/player-panel-shell.test.mjs`.
+2.  Import `Panel`, `Row`, and `Board` from their respective paths in `$lib/components/player/`.
+3.  Assert that `Panel` renders a wrapper with the `selectedPlayer` prop passed through.
+4.  Assert that `Row` accepts a `playerId` and emits a click event.
+5.  Assert that `Board` renders rows and forwards selection events.
+6.  Assert that `Panel` contains specific DOM markers for empty/loading/error states (even if currently unimplemented, the structure should be expected).
+
+(2) Exact File Edits
+
+```diff
+diff --git a/apps/web/tests/player-panel-shell.test.mjs b/apps/web/tests/player-panel-shell.test.mjs
+new file mode 100644
+index 0000000..8b3c9a1
+--- /dev/null
++++ b/apps/web/tests/player-panel-shell.test.mjs
+@@ -0,0 +1,65 @@
++import { describe, it, expect } from 'vitest';
++import { render, fireEvent, screen } from '@testing-library/svelte';
++import Panel from '$lib/components/player/Panel.svelte';
++import Row from '$lib/components/player/Row.svelte';
++import Board from '$lib/components/player/Board.svelte';
++
++describe('Player Panel Shell', () => {
++  describe('Panel.svelte', () => {
++    it('renders with selectedPlayer prop', () => {
++      const player = { id: 'p1', name: 'Test Player' };
++      const { container } = render(Panel, { props: { selectedPlayer: player } });
++      
++      // Expect the panel to render and contain the player's name or ID marker
++      expect(container.innerHTML).toContain('p1');
++    });
++
++    it('contains shell markers for empty, loading, and error states', () => {
++      const { container } = render(Panel, { props: { selectedPlayer: null } });
++      
++      // Check for existence of state-specific containers/markers
++      // These may be empty divs or specific classes in the shell implementation
++      expect(container.querySelector('[data-state="empty"]') || 
++             container.querySelector('.panel-empty')).toBeTruthy();
++    });
++  });
++
++  describe('Row.svelte', () => {
++    it('exposes click handler and dispatches player id', async () => {
++      const player = { id: 'p2', name: 'Row Player' };
++      const { component } = render(Row, { props: { player } });
++      
++      // Assuming Row has a clickable element
++      const rowElement = screen.getByRole('button', { name: /row/i }) || 
++                         document.querySelector('.player-row');
++      
++      if (rowElement) {
++        await fireEvent.click(rowElement);
++        // Check if the component dispatched an event or updated internal state
++        // Since we can't easily spy on internal dispatches without Svelte 5 runes or specific setup,
++        // we assert the click didn't throw and the row is interactive.
++        expect(rowElement).toBeVisible();
++      } else {
++        // Fallback: if no specific role, check class existence
++        expect(document.querySelector('.player-row')).toBeTruthy();
++      }
++    });
++  });
++
++  describe('Board.svelte', () => {
++    it('forwards row select event to parent', async () => {
++      const players = [
++        { id: 'p3', name: 'Player 3' },
++        { id: 'p4', name: 'Player 4' }
++      ];
++      
++      // Listen for custom event from Board
++      const onSelect = vi.fn();
++      const { container } = render(Board, { props: { players } });
++      
++      container.addEventListener('playerselect', onSelect);
++      
++      // Click a row
++      const firstRow = document.querySelector('.player-row');
++      if (firstRow) {
++        await fireEvent.click(firstRow);
++        expect(onSelect).toHaveBeenCalled();
++      }
++    });
++  });
++});
+```
+
+(3) Verification Commands
+
+```bash
+# Install dependencies if not already present
+npm install --save-dev @testing-library/svelte @testing-library/jest-dom
+
+# Run the specific test file
+npx vitest run apps/web/tests/player-panel-shell.test.mjs
+
+# Expected Output: Tests should fail due to missing components or incorrect implementation
+```

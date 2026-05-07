@@ -52,18 +52,18 @@ export function openBoardStream(
 	const connect = () => {
 		if (stopped) return;
 		const params = new URLSearchParams();
-		params.set('view', view);
-		params.set('sort', sort);
-		source = new EventSource('/api/board/sse?' + params.toString());
+		params.set("view", view);
+		params.set("sort", sort);
+		source = new EventSource("/api/board/sse?" + params.toString());
 
-		source.addEventListener('snapshot', (event) => {
+		source.addEventListener("snapshot", (event) => {
 			attempts = 0;
 			handlers.onSnapshot(
 				JSON.parse((event as MessageEvent).data) as SnapshotPayload,
 			);
 		});
 
-		source.addEventListener('delta', (event) => {
+		source.addEventListener("delta", (event) => {
 			handlers.onDelta(
 				JSON.parse((event as MessageEvent).data) as DeltaPayload,
 			);

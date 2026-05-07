@@ -1,0 +1,12 @@
+Packet P5-02 GREEN implementation.
+Implement trend chart integration in player panel.
+Files to update/add:
+- apps/web/src/lib/components/player/TrendChart.svelte
+- apps/web/src/lib/components/player/Panel.svelte
+Requirements:
+- Panel imports TrendChart from ./TrendChart.svelte.
+- Add trendStat state default 'wRC+' and historyPoints/historyLoading/historyError state.
+- Fetch /api/players/${selectedPlayerId}/history?stat=${encodeURIComponent(trendStat)} when selected player or stat changes.
+- Render TrendChart with points and stat props.
+- Keep existing empty/loading/error shell behavior.
+Return unified diff only.

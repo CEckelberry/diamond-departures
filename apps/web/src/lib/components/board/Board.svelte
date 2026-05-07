@@ -14,7 +14,13 @@
 		stat: string;
 	};
 
-	let { rows = [] }: { rows?: RowShape[] } = $props();
+	let {
+		rows = [],
+		onselect
+	}: {
+		rows?: RowShape[];
+		onselect?: (playerId: number) => void;
+	} = $props();
 	let reducedMotion = $state(false);
 	let previousOrder = $state('');
 
@@ -73,7 +79,7 @@
 	<div class="board-body" role="rowgroup">
 		{#each placeholderRows as row, index (row.playerId)}
 			<div class="row-shell" animate:flip={rowFlip(index)}>
-				<Row {row} />
+				<Row {row} onselect={onselect} />
 			</div>
 		{/each}
 	</div>

@@ -1,0 +1,13 @@
+Packet P5-01 GREEN implementation.
+Implement player detail panel shell wiring.
+Files to update/add:
+- apps/web/src/lib/components/player/Panel.svelte
+- apps/web/src/lib/components/board/Row.svelte
+- apps/web/src/lib/components/board/Board.svelte
+- apps/web/src/routes/+page.svelte
+Requirements:
+- track selectedPlayerId in +page and render <Panel selectedPlayerId={...} />
+- row click should dispatch select event with row.playerId
+- Board should forward row select event and expose onselect hook
+- Panel shell with empty/loading/error markers and basic selected player header placeholder
+Return unified diff only.
