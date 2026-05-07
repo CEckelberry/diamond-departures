@@ -1,0 +1,8 @@
+Packet P4-05 RED. Create failing tests only for initial board load via REST from /api/board.
+Project uses node:test source-string tests (no jsdom). Add new test file apps/web/tests/board-rest-load.test.mjs.
+Expectations to assert in source:
+- routes/+page.ts exports load function and fetches /api/board with view+sort params.
+- +page.svelte receives data prop, passes rows into <Board rows={...}>.
+- loading skeleton placeholder markup/class exists for slow loads.
+Keep tests strict enough to fail current code.
+Return unified diff only.

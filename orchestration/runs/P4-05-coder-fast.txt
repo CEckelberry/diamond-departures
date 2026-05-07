@@ -1,0 +1,152 @@
+### 1. Concise Plan
+
+1.  **Define Types**: Create `src/lib/types/board.ts` to strictly type the API response and internal `BoardRow` structure.
+2.  **Implement Load Function**: Create `src/routes/+page.ts`. This function will:
+    *   Extract `view` and `sort` from URL search params, validating them against allowed enums (defaulting to safe values).
+    *   Fetch `/api/board` with these query parameters.
+    *   Transform the raw API response into the internal `BoardRow` format required by the UI component.
+    *   Return the data and a `pending` signal (handled by SvelteKit's default loading state, but we will explicitly manage the skeleton visibility in the Svelte file).
+3.  **Update UI Component**: Modify `src/routes/+page.svelte`.
+    *   Import the new types and the `Board` component.
+    *   Accept `data` from the load function.
+    *   Implement a `loading` store or use SvelteKit's `page.status`/`page.url` changes to toggle the `.board-skeleton` class.
+    *   Render the skeleton if data is not yet available or if the page is transitioning.
+    *   Render the `<Board>` component with the mapped rows when data is ready.
+
+### 2. Exact File Edits (Unified Diff)
+
+```diff
+diff --git a/src/lib/types/board.ts b/src/lib/types/board.ts
+new file mode 100644
+index 0000000..a1b2c3d
+--- /dev/null
++++ b/src/lib/types/board.ts
+@@ -0,0 +1,25 @@
++export interface Player {
++	id: string;
++	name: string;
++	team_abbr: string;
++	position: string;
++}
++
++export interface BoardEntry {
++	rank: number;
++	player: Player;
++	stat_value: number;
++}
++
++export interface BoardResponse {
++	view: string;
++	sort: string;
++	entries: BoardEntry[];
++}
++
++export interface BoardRow {
++	rank: number;
++	playerId: string;
++	playerName: string;
++	teamAbbr: string;
++	position: string;
++	statValue: number;
++}
+diff --git a/src/routes/+page.ts b/src/routes/+page.ts
+new file mode 100644
+index 0000000..e4f5g6h
+--- /dev/null
++++ b/src/routes/+page.ts
+@@ -0,0 +1,35 @@
++import type { PageLoad } from './$types';
++import type { BoardResponse, BoardRow } from '$lib/types/board';
++
++const VALID_VIEWS = ['overall', 'team', 'player'];
++const VALID_SORTS = ['rank_asc', 'stat_desc', 'name_asc'];
++
++function mapToBoardRows(entries: BoardResponse['entries']): BoardRow[] {
++	return entries.map((entry) => ({
++		rank: entry.rank,
++		playerId: entry.player.id,
++		playerName: entry.player.name,
++		teamAbbr: entry.player.team_abbr,
++		position: entry.player.position,
++		statValue: entry.stat_value
++	}));
++}
++
++export const load: PageLoad = async ({ url }) => {
++	const view = VALID_VIEWS.includes(url.searchParams.get('view') || '')
++		? (url.searchParams.get('view') as BoardResponse['view'])
++		: 'overall';
++
++	const sort = VALID_SORTS.includes(url.searchParams.get('sort') || '')
++		? (url.searchParams.get('sort') as BoardResponse['sort'])
++		: 'stat_desc';
++
++	const res = await fetch(`/api/board?view=${view}&sort=${sort}`, {
++		headers: {
++			'Accept': 'application/json'
++		}
++	});
++
++	if (!res.ok) {
++		throw error(res.status, 'Failed to load board data');
++	}
++
++	const data: BoardResponse = await res.json();
++	return {
++		boardRows: mapToBoardRows(data.entries),
++		view,
++		sort
++	};
++};
+diff --git a/src/routes/+page.svelte b/src/routes/+page.svelte
+index 1234567..8901234 100644
+--- a/src/routes/+page.svelte
++++ b/src/routes/+page.svelte
+@@ -1,10 +1,15 @@
++<script lang="ts">
++	import type { BoardRow } from '$lib/types/board';
++	import Board from '$lib/components/Board.svelte';
++	import { page } from '$app/stores';
++
++	export let data: { boardRows: BoardRow[]; view: string; sort: string };
++
++	$: isLoading = $page.status !== 200 || !$page.data.boardRows?.length;
++</script>
+ 
+ <div class="board-container">
+-	<!-- Existing tabs and picker logic -->
+-	<div class="tabs">
+-		<button>Overall</button>
+-		<button>Team</button>
+-	</div>
++	{#if isLoading}
++		<div class="board-skeleton">
++			<div class="skeleton-row"></div>
++			<div class="skeleton-row"></div>
++			<div class="skeleton-row"></div>
++		</div>
++	{:else}
++		<Board rows={data.boardRows} />
++	{/if}
+ </div>
+```
+
+### 3. Verification Commands
+
+```bash
+# 1. Type check to ensure new types and load function are valid
+npm run check
+
+# 2. Build the project to verify SvelteKit integration
+npm run build
+
+# 3. Run unit tests if they exist for the board component
+npm test -- --grep "Board"
+
+# 4. Manual verification: Start dev server and check network tab for /api/board call
+npm run dev
+# Open http://localhost:5173 and verify:
+# - Initial load shows skeleton briefly then Board
+# - URL params ?view=team&sort=rank_asc are reflected in API call
+# - No console errors
+```

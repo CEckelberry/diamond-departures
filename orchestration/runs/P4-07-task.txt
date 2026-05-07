@@ -1,0 +1,8 @@
+Packet P4-07 GREEN implementation.
+Integrate row reshuffle animation in Board.svelte.
+Requirements:
+- use Svelte animate:flip on row wrappers keyed by row.playerId.
+- add stagger logic using index*30ms and reduced-motion guard duration 0 when prefers reduced motion.
+- detect rank order changes and call playRowShift() once per reshuffle.
+- keep current board layout styles and row rendering.
+Return unified diff only.

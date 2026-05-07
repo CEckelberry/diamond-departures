@@ -112,19 +112,38 @@ Branch: `main`
 - Implemented `Board.svelte`, `Row.svelte`, and board page composition using `Header`, `ViewTabs`, `StatPicker`, and `Board` with 100-row placeholder path.
 - Verification: `node --test apps/web/tests/board-structure.test.mjs`, combined Phase 4 node tests, and `pnpm --filter web check` (PASS).
 
+### P4-05 (RED → GREEN completed)
+
+- Added RED tests for route load wiring, `/api/board` fetch contract, and loading skeleton presence.
+- Implemented `+page.ts` load (`view/sort` mapping -> `/api/board`) and data-driven board rendering in `+page.svelte`.
+- Verification: `node --test apps/web/tests/board-rest-load.test.mjs` and `pnpm --filter web check` (PASS, warning-only).
+
+### P4-06 (RED → GREEN completed)
+
+- Added RED tests for SSE client contract, reconnect backoff, store mutators, and page lifecycle wiring.
+- Implemented `src/lib/api/sse.ts` reconnecting EventSource client and `src/lib/stores/board.ts` with `seedBoard`, `applySnapshot`, `applyDelta`, `toBoardRows`.
+- Updated `+page.svelte` to seed board store from load data and stream live snapshot/delta updates.
+- Verification: `node --test apps/web/tests/board-sse-wiring.test.mjs` and `pnpm --filter web check` (PASS, warning-only).
+
+### P4-07 (RED → GREEN completed)
+
+- Added RED tests for FLIP reshuffle integration, keyed rows, stagger timing, reduced-motion fallback, and row-shift audio hook.
+- Updated `Board.svelte` to animate row wrappers via `animate:flip`, key rows by `playerId`, and trigger `playRowShift()` on order changes.
+- Verification: `node --test apps/web/tests/board-reshuffle-animation.test.mjs` and `pnpm --filter web check` (PASS, warning-only).
+
 ## Additional verification
 
-- `pnpm --filter web check` (PASS, warning-only)
-- `node --test apps/web/tests/layout-shell.test.mjs apps/web/tests/board-header.test.mjs apps/web/tests/view-controls.test.mjs apps/web/tests/board-structure.test.mjs` (PASS, 8 tests)
+- `node --test apps/web/tests/board-structure.test.mjs apps/web/tests/board-rest-load.test.mjs apps/web/tests/board-sse-wiring.test.mjs apps/web/tests/board-reshuffle-animation.test.mjs` (PASS, 10 tests)
+- `pnpm --filter web check` (PASS, warning-only for missing `@types/node`)
 
 ## Artifacts updated
 
-- Packet docs: `orchestration/task-packets/P4-01*`, `P4-02*`, `P4-03*`, `P4-04*`
-- Run outputs: `orchestration/runs/P4-01*`, `P4-02*`, `P4-03*`, `P4-04*`
-- Task board: `orchestration/task-board.yaml` (P4-01..P4-04 marked `done`, phase focus set to 4)
+- Packet docs: `orchestration/task-packets/P4-05*`, `P4-06*`, `P4-07*`
+- Run outputs: `orchestration/runs/P4-05*`, `P4-06*`, `P4-07*`
+- Task board: `orchestration/task-board.yaml` (P4-05..P4-07 marked `done`, P5-01 queued `todo`)
 
 ## Assumptions used
 
-- Header polling interval fixed at 30s until SSE freshness wiring lands in Task 4.6.
-- View URL contract uses `view=hitters|pitchers|positions`, optional `position`, and `sort` stat key.
+- REST load maps unsupported UI sorts to API-supported defaults (`wRC+` for hitters, `ERA` for pitchers).
+- Position tab currently maps to supported API subviews (`SS/OF/SP/RP`) and falls back to hitters for other positions until Phase 5 expands backend view keys.
 - Existing web toolchain warning about missing `@types/node` remains pre-existing and non-blocking.

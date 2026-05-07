@@ -1,13 +1,28 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
+	import { flip } from 'svelte/animate';
+	import { cubicOut } from 'svelte/easing';
+	import { playRowShift } from '$lib/audio/flap';
 	import Row from './Row.svelte';
-	import type { BoardRow } from './types';
 
-	let { rows = [] }: { rows?: BoardRow[] } = $props();
+	type RowShape = {
+		playerId: number;
+		rank: string;
+		player: string;
+		team: string;
+		position: string;
+		stat: string;
+	};
+
+	let { rows = [] }: { rows?: RowShape[] } = $props();
+	let reducedMotion = $state(false);
+	let previousOrder = $state('');
 
 	const placeholderRows = $derived(
 		rows.length > 0
 			? rows
 			: Array.from({ length: 100 }, (_, index) => ({
+					playerId: index + 1,
 					rank: String(index + 1).padStart(3, ' '),
 					player: `PLAYER ${String(index + 1).padStart(2, '0')}`,
 					team: ['ATL', 'LAD', 'NYY', 'SEA', 'SDP'][index % 5],
@@ -15,6 +30,36 @@
 					stat: (150 - index / 2).toFixed(1)
 				}))
 	);
+
+	onMount(() => {
+		const media = window.matchMedia('(prefers-reduced-motion: reduce)');
+		const apply = () => {
+			reducedMotion = media.matches;
+		};
+		apply();
+		media.addEventListener('change', apply);
+		return () => media.removeEventListener('change', apply);
+	});
+
+	$effect(() => {
+		const nextOrder = placeholderRows.map((row) => row.playerId).join(',');
+		if (!previousOrder) {
+			previousOrder = nextOrder;
+			return;
+		}
+		if (nextOrder !== previousOrder) {
+			playRowShift();
+			previousOrder = nextOrder;
+		}
+	});
+
+	function rowFlip(index: number) {
+		return {
+			delay: index * 30,
+			duration: reducedMotion ? 0 : 420,
+			easing: cubicOut
+		};
+	}
 </script>
 
 <section class="board" aria-label="leaderboard board">
@@ -26,8 +71,10 @@
 		<span>STAT</span>
 	</div>
 	<div class="board-body" role="rowgroup">
-		{#each placeholderRows as row, index (index)}
-			<Row {row} />
+		{#each placeholderRows as row, index (row.playerId)}
+			<div class="row-shell" animate:flip={rowFlip(index)}>
+				<Row {row} />
+			</div>
 		{/each}
 	</div>
 </section>
@@ -59,6 +106,10 @@
 		gap: 0.2rem;
 		max-height: min(72vh, 2300px);
 		overflow: auto;
+	}
+
+	.row-shell {
+		will-change: transform;
 	}
 
 	@media (max-width: 920px) {

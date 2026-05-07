@@ -1,0 +1,9 @@
+Packet P4-06 RED tests only. Add failing source-assertion tests for SSE wiring + delta apply.
+Create apps/web/tests/board-sse-wiring.test.mjs.
+Assertions expected in future code:
+- src/lib/api/sse.ts exports openBoardStream and uses EventSource('/api/board/sse?...').
+- sse client handles snapshot and delta events and has reconnect backoff logic.
+- src/lib/stores/board.ts exports applySnapshot/applyDelta and mutates rank/stat values.
+- routes/+page.svelte wires onMount teardown to open stream with boardView/boardSort and updates board store rows.
+Keep in same style as existing node source regex tests.
+Return unified diff only.

@@ -90,25 +90,38 @@ Repo: `/home/roger/Documents/coding/cole-portfolio-apps/diamond-departures`
   - Implemented `Board.svelte`, `Row.svelte`, `types.ts`, and updated `+page.svelte` board screen composition.
   - Verification artifact: `orchestration/runs/P4-04-verify.md`.
 
+- **P4-05 (Task 4.5) — completed**
+  - Added RED tests for `/api/board` load function wiring and loading skeleton rendering.
+  - Implemented `apps/web/src/routes/+page.ts` route load + `+page.svelte` data-driven board render.
+  - Verification artifact: `orchestration/runs/P4-05-verify.md`.
+
+- **P4-06 (Task 4.6) — completed**
+  - Added RED tests for SSE client wiring, reconnect backoff, and board delta mutators.
+  - Implemented `apps/web/src/lib/api/sse.ts`, `apps/web/src/lib/stores/board.ts`, and stream lifecycle wiring in `+page.svelte`.
+  - Verification artifact: `orchestration/runs/P4-06-verify.md`.
+
+- **P4-07 (Task 4.7) — completed**
+  - Added RED tests for FLIP reshuffle hooks, stagger timing, reduced-motion fallback, and row-shift audio trigger.
+  - Updated `apps/web/src/lib/components/board/Board.svelte` with keyed `playerId` rows + `animate:flip` wrappers.
+  - Verification artifact: `orchestration/runs/P4-07-verify.md`.
+
 ## TDD evidence
 
-- P4-01 RED: layout shell tests failed due to missing nav/footer components and imports.
-- P4-02 RED: board header tests failed due to missing `Header.svelte`.
-- P4-03 RED: control tests failed due to missing `ViewTabs.svelte` and `StatPicker.svelte`.
-- P4-04 RED: board structure tests failed due to missing `Board.svelte` and `Row.svelte`.
-- GREEN: all Phase 4 packet suites pass after implementation.
+- P4-05 RED: board REST load tests failed (`+page.ts` missing, no data-driven board wiring).
+- P4-06 RED: SSE wiring tests failed (`sse.ts` and `board.ts` missing).
+- P4-07 RED: reshuffle animation tests failed (no FLIP/keyed rows/audio hook).
+- GREEN: all new packet suites pass after implementation.
 
 ## Validation commands run
 
-- `node --test apps/web/tests/layout-shell.test.mjs`
-- `node --test apps/web/tests/board-header.test.mjs`
-- `node --test apps/web/tests/view-controls.test.mjs`
-- `node --test apps/web/tests/board-structure.test.mjs`
-- `node --test apps/web/tests/layout-shell.test.mjs apps/web/tests/board-header.test.mjs apps/web/tests/view-controls.test.mjs apps/web/tests/board-structure.test.mjs`
+- `node --test apps/web/tests/board-rest-load.test.mjs`
+- `node --test apps/web/tests/board-sse-wiring.test.mjs`
+- `node --test apps/web/tests/board-reshuffle-animation.test.mjs`
+- `node --test apps/web/tests/board-structure.test.mjs apps/web/tests/board-rest-load.test.mjs apps/web/tests/board-sse-wiring.test.mjs apps/web/tests/board-reshuffle-animation.test.mjs`
 - `pnpm --filter web check`
 
 ## Risks / follow-ups
 
-- Header polling is temporary (30s); SSE freshness sync lands in Task 4.6.
-- `ViewTabs`/`StatPicker` URL contract is now established; must stay stable when server-backed loading arrives in Task 4.5.
-- Web check has warning-only missing `@types/node`; non-blocking but should be cleaned later.
+- Position dropdown values beyond `SS/OF/SP/RP` currently map to hitter default until backend view keys expand in Phase 5.
+- REST-load sort fallback coerces unsupported UI sorts to backend-supported set to avoid 400s.
+- Web check has warning-only missing `@types/node`; non-blocking and pre-existing.

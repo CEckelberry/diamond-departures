@@ -1,0 +1,169 @@
+(1) Concise Plan
+The goal is to implement `apps/web/tests/board-reshuffle-animation.test.mjs` to verify the integration of the FLIP animation and audio cues for row reshuffling in the `Board.svelte` component.
+
+Since the prompt requires "tests failing current code" and asks for a "unified diff only," I will generate the diff for the new test file. The tests will be written with strict assertions expecting:
+1.  `animate:flip` directive on the row container.
+2.  Staggered delays (`index * 30`).
+3.  Audio playback via `playRowShift`.
+4.  Keyed elements by `playerId`.
+
+As the current codebase likely lacks these specific implementations (or they are not yet integrated), these tests will initially fail, satisfying the requirement to "keep tests failing current code" until the implementation is completed.
+
+(2) Exact File Edits as Unified Diff
+
+```diff
+diff --git a/apps/web/tests/board-reshuffle-animation.test.mjs b/apps/web/tests/board-reshuffle-animation.test.mjs
+new file mode 100644
+index 0000000..a1b2c3d
+--- /dev/null
++++ b/apps/web/tests/board-reshuffle-animation.test.mjs
+@@ -0,0 +1,85 @@
++import { describe, it, expect, vi, beforeEach } from 'vitest';
++import { render, fireEvent, waitFor } from '@testing-library/svelte';
++import Board from '../src/lib/components/Board.svelte';
++import * as audioModule from '../src/lib/utils/audio.mjs';
++
++describe('Board Reshuffle Animation Integration', () => {
++  beforeEach(() => {
++    vi.clearAllMocks();
++    // Mock the audio utility to prevent actual sound playback during tests
++    vi.spyOn(audioModule, 'playRowShift').mockImplementation(() => {});
++  });
++
++  it('should apply animate:flip directive to the keyed row container', async () => {
++    const { container } = render(Board, {
++      props: {
++        players: [
++          { id: 'p1', rank: 1 },
++          { id: 'p2', rank: 2 }
++        ]
++      }
++    });
++
++    // Wait for the component to render and potentially trigger initial animations
++    await waitFor(() => {
++      const rowContainer = container.querySelector('.row-container');
++      expect(rowContainer).toBeTruthy();
++      // Check if the animate directive is applied (usually results in a specific class or attribute)
++      // In Svelte 5/Kit, animate:flip might add specific animation classes or data attributes
++      const hasFlipAnimation = rowContainer.hasAttribute('data-flip') || 
++                               rowContainer.classList.contains('flipped');
++      expect(hasFlipAnimation).toBe(true);
++    });
++  });
++
++  it('should apply staggered delay logic (~index*30) to rows', async () => {
++    const { container } = render(Board, {
++      props: {
++        players: [
++          { id: 'p1', rank: 1 },
++          { id: 'p2', rank: 2 },
++          { id: 'p3', rank: 3 }
++        ]
++      }
++    });
++
++    await waitFor(() => {
++      const rows = container.querySelectorAll('.player-row');
++      expect(rows.length).toBe(3);
++      
++      // Check for staggered animation classes or inline styles
++      // Assuming the implementation adds a class like 'stagger-0', 'stagger-1' etc.
++      // or uses inline style transition-delay
++      rows.forEach((row, index) => {
++        const delay = row.style.transitionDelay || row.getAttribute('data-stagger-delay');
++        const expectedDelay = `${index * 30}ms`;
++        expect(delay).toBe(expectedDelay);
++      });
++    });
++  });
++
++  it('should respect reduced motion settings', async () => {
++    // Mock window.matchMedia to simulate reduced motion preference
++    const matchMediaMock = vi.fn().mockImplementation(query => ({
++      matches: true,
++      media: query,
++      onchange: null,
++      addListener: vi.fn(),
++      removeListener: vi.fn(),
++      addEventListener: vi.fn(),
++      removeEventListener: vi.fn(),
++      dispatchEvent: vi.fn()
++    }));
++    window.matchMedia = matchMediaMock;
++
++    const { container } = render(Board, {
++      props: {
++        players: [
++          { id: 'p1', rank: 1 },
++          { id: 'p2', rank: 2 }
++        ]
++      }
++    });
++
++    await waitFor(() => {
++      const rows = container.querySelectorAll('.player-row');
++      rows.forEach(row => {
++        // If reduced motion is on, animations should be disabled or very fast
++        const duration = row.style.transitionDuration || '0s';
++        expect(duration).toBe('0s');
++      });
++    });
++  });
++
++  it('should call playRowShift once when rank order changes', async () => {
++    const { container, component } = render(Board, {
++      props: {
++        players: [
++          { id: 'p1', rank: 1 },
++          { id: 'p2', rank: 2 }
++        ]
++      }
++    });
++
++    // Simulate a rank change (e.g., p2 moves to rank 1, p1 to rank 2)
++    component.$set({
++      players: [
++        { id: 'p2', rank: 1 },
++        { id: 'p1', rank: 2 }
++      ]
++    });
++
++    await waitFor(() => {
++      expect(audioModule.playRowShift).toHaveBeenCalledTimes(1);
++    });
++  });
++
++  it('should key each block by playerId to allow stable FLIP transitions', async () => {
++    const { container } = render(Board, {
++      props: {
++        players: [
++          { id: 'p1', rank: 1 },
++          { id: 'p2', rank: 2 }
++        ]
++      }
++    });
++
++    await waitFor(() => {
++      const rows = container.querySelectorAll('.player-row');
++      rows.forEach(row => {
++        // Check if the row has a data attribute or class indicating it's keyed by playerId
++        // This is crucial for FLIP to track the element correctly
++        expect(row.hasAttribute('data-player-id')).toBe(true);
++        const playerId = row.getAttribute('data-player-id');
++        expect(['p1', 'p2']).toContain(playerId);
++      });
++    });
++  });
++});
+```
+
+(3) Verification Commands
+
+```bash
+# Run the specific test file to see failures (as expected)
+npm run test -- apps/web/tests/board-reshuffle-animation.test.mjs
+
+# If using vitest directly:
+npx vitest run apps/web/tests/board-reshuffle-animation.test.mjs
+```

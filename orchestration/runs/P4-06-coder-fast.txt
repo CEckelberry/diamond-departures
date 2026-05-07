@@ -1,0 +1,240 @@
+Here is the implementation for Packet P4-06.
+
+### 1. Concise Plan
+1.  **`src/lib/api/sse.ts`**: Create a utility to open an `EventSource` to `/api/board/sse`. It accepts view/sort parameters, handles `open`, `message` (delta), and `close` events, and implements exponential backoff on reconnection.
+2.  **`src/lib/stores/board.ts`**: Create a writable store for board state. Implement `applySnapshot` (replaces data) and `applyDelta` (merges incremental updates into the store). Add `toBoardRows` to transform raw data into the UI-ready row format.
+3.  **`src/routes/+page.svelte`**: Update the component to initialize the store from server-side load data. On mount, open the SSE stream using current view/sort params. Wire up handlers to update the store. Ensure teardown on destroy.
+
+### 2. Exact File Edits (Unified Diff)
+
+```diff
+diff --git a/src/lib/api/sse.ts b/src/lib/api/sse.ts
+new file mode 100644
+index 0000000..a1b2c3d
+--- /dev/null
++++ b/src/lib/api/sse.ts
+@@ -0,0 +1,56 @@
++export interface SSEHandlers<T> {
++	onOpen?: () => void;
++	onMessage?: (data: T) => void;
++	onClose?: () => void;
++	onError?: (err: Event) => void;
++}
++
++export function openBoardStream<T>(
++	view: string,
++	sort: string,
++	handlers: SSEHandlers<T>
++) {
++	let source: EventSource | null = null;
++	let reconnectAttempts = 0;
++	const maxDelay = 30000;
++
++	const connect = () => {
++		const params = new URLSearchParams({ view, sort });
++		const url = `/api/board/sse?${params.toString()}`;
++
++		source = new EventSource(url);
++
++		source.onopen = () => {
++			reconnectAttempts = 0;
++			handlers.onOpen?.();
++		};
++
++		source.onmessage = (event) => {
++			try {
++				const data = JSON.parse(event.data) as T;
++				handlers.onMessage?.(data);
++			} catch (e) {
++				console.error('SSE Parse Error', e);
++			}
++		};
++
++		source.onerror = (err) => {
++			handlers.onError?.(err);
++			if (source && source.readyState === EventSource.CLOSED) {
++				source.close();
++				const delay = Math.min(Math.pow(2, reconnectAttempts) * 1000, maxDelay);
++				reconnectAttempts++;
++				setTimeout(connect, delay);
++			}
++		};
++	};
++
++	connect();
++
++	return {
++		stop: () => {
++			if (source) {
++				source.close();
++				source = null;
++			}
++		}
++	};
++}
+diff --git a/src/lib/stores/board.ts b/src/lib/stores/board.ts
+new file mode 100644
+index 0000000..e4f5g6h
+--- /dev/null
++++ b/src/lib/stores/board.ts
+@@ -0,0 +1,45 @@
++import { writable } from 'svelte/store';
++
++export interface BoardRow {
++	id: string;
++	[key: string]: any;
++}
++
++interface BoardState {
++	rows: BoardRow[];
++	loading: boolean;
++}
++
++const initialState: BoardState = {
++	rows: [],
++	loading: true
++};
++
++export const boardStore = writable<BoardState>(initialState);
++
++export function applySnapshot(rows: BoardRow[]) {
++	boardStore.set({
++		rows,
++		loading: false
++	});
++}
++
++export function applyDelta(delta: { rows: BoardRow[]; type: 'update' | 'delete' }) {
++	boardStore.update((state) => {
++		if (delta.type === 'delete') {
++			const idsToDelete = new Set(delta.rows.map((r: any) => r.id));
++			return {
++				...state,
++				rows: state.rows.filter((r) => !idsToDelete.has(r.id))
++			};
++		}
++
++		// Merge update: replace existing or append
++		const existingIds = new Set(state.rows.map((r) => r.id));
++		const newRows = delta.rows.map((r) => {
++			if (existingIds.has(r.id)) {
++				return { ...state.rows.find((row) => row.id === r.id), ...r };
++			}
++			return r;
++		});
++
++		// Simple append for new items not in existing set (optimization: usually delta contains full updated row)
++		// For robustness, we rebuild the array based on the delta rows if they are authoritative
++		// Assuming delta.rows contains the full set of changed rows.
++		// If delta is "append only", we might need different logic, but standard SSE usually sends full entity updates.
++		
++		// Re-merge: Keep state rows, update with delta rows
++		const merged = [...state.rows];
++		delta.rows.forEach((r) => {
++			const idx = merged.findIndex((row) => row.id === r.id);
++			if (idx !== -1) {
++				merged[idx] = r;
++			} else {
++				merged.push(r);
++			}
++		});
++
++		return { ...state, rows: merged };
++	});
++}
++
++export function toBoardRows(data: any[]): BoardRow[] {
++	if (!data) return [];
++	return data.map((item) => ({ id: item.id || Math.random().toString(), ...item }));
++}
+diff --git a/src/routes/+page.svelte b/src/routes/+page.svelte
+index 1234567..abcdefg 100644
+--- a/src/routes/+page.svelte
++++ b/src/routes/+page.svelte
+@@ -1,10 +1,14 @@
+ <script lang="ts">
++	import { onMount, onDestroy } from 'svelte';
++	import { boardStore, applySnapshot, applyDelta, toBoardRows } from '$lib/stores/board';
++	import { openBoardStream } from '$lib/api/sse';
++
+ 	export let data;
+-	let rows = [];
++	let stopStream: (() => void) | null = null;
+ 
+-	$: rows = data.rows;
++	$: boardRows = $boardStore.rows;
++	$: isLoading = $boardStore.loading;
+ 
+-	// ... existing controls/skeleton ...
++	// ... existing controls/skeleton ...
+ </script>
+ 
+ <div class="board-container">
+-	{#each rows as row (row.id)}
++	{#if isLoading}
++		<div class="skeleton"></div>
++	{:else}
++		{#each boardRows as row (row.id)}
+ 		<div class="row">
+ 			<!-- Row Content -->
+ 		</div>
+-	{/each}
++		{/each}
++	{/if}
+ </div>
+ 
+ <script lang="ts">
++	onMount(() => {
++		// Seed initial data
++		const initialRows = toBoardRows(data.rows);
++		applySnapshot(initialRows);
++
++		// Open SSE stream
++		// Assuming boardView and boardSort are derived from props or global state
++		// For this packet, we assume they are available in scope or passed via data
++		const view = data.view || 'default';
++		const sort = data.sort || 'id';
++
++		stopStream = openBoardStream(view, sort, {
++			onMessage: (msg) => {
++				if (msg.type === 'snapshot') {
++					applySnapshot(toBoardRows(msg.rows));
++				} else if (msg.type === 'delta') {
++					applyDelta(msg);
++				}
++			},
++			onError: (err) => {
++				console.error('SSE Error', err);
++			}
++		});
++	});
++
++	onDestroy(() => {
++		if (stopStream) {
++			stopStream();
++		}
++	});
+ </script>
+```
+
+### 3. Verification Commands
+
+1.  **Check File Existence**:
+    ```bash
+    ls -l src/lib/api/sse.ts src/lib/stores/board.ts src/routes/+page.svelte
+    ```
+2.  **Type Check**:
+    ```bash
+    npm run check
+    ```
+3.  **Build**:
+    ```bash
+    npm run build
+    ```
+4.  **Run Dev Server & Test SSE**:
+    ```bash
+    npm run dev
+    # Open browser to http://localhost:5173
+    # Check Network tab for /api/board/sse connection
+    # Verify board updates in real-time
+    ```
