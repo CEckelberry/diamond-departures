@@ -156,6 +156,26 @@ Repo: `/home/roger/Documents/coding/cole-portfolio-apps/diamond-departures`
   - Implemented split seeding/stream effects, board compositor hints, and panel lazy trend chart loading/headshot optimizations.
   - Verification artifact: `orchestration/runs/P7-01-verify.md`.
 
+- **P7-02 (Task 7.2) — completed**
+  - Added RED accessibility contracts for row keyboard activation, polite live region, and Escape close behavior.
+  - Implemented row keyboard semantics + panel close wiring and board live announcement region.
+  - Verification artifact: `orchestration/runs/P7-02-verify.md`.
+
+- **P7-03 (Task 7.3) — completed**
+  - Added RED mobile contracts for card-layout rows, touch target size, and horizontal overflow safety.
+  - Implemented mobile row/card adaptations and overflow guard.
+  - Verification artifact: `orchestration/runs/P7-03-verify.md`.
+
+- **P7-04 (Task 7.4) — completed**
+  - Added RED SEO/OG contracts.
+  - Implemented SEO component + robots/sitemap/OG SVG endpoints.
+  - Verification artifact: `orchestration/runs/P7-04-verify.md`.
+
+- **P7-05 (Task 7.5) — completed**
+  - Added RED methodology page contracts.
+  - Implemented `/methodology` page with DATA/STATS/GitHub linkage.
+  - Verification artifact: `orchestration/runs/P7-05-verify.md`.
+
 ## TDD evidence
 
 - P4-05 RED: board REST load tests failed (`+page.ts` missing, no data-driven board wiring).
@@ -168,6 +188,10 @@ Repo: `/home/roger/Documents/coding/cole-portfolio-apps/diamond-departures`
 - P6-02 RED: preview-mode tests failed (missing preview controls and preview SSE wiring).
 - P6-03 RED: between/off-game tests failed (missing idle copy and idle-mode stream policy hooks).
 - P7-01 RED: performance pass tests failed (missing stream churn guards and lazy chart/perf script contracts).
+- P7-02 RED: accessibility contracts failed before keyboard semantics and Escape close wiring were implemented.
+- P7-03 RED: mobile contracts failed before card layout/tap-target/overflow guards were implemented.
+- P7-04 RED: SEO/OG contracts failed before SEO component and server routes were added.
+- P7-05 RED: methodology page contracts failed before route and doc links were added.
 - GREEN: all new packet suites pass after implementation.
 
 ## Validation commands run

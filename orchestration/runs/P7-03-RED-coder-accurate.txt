@@ -1,0 +1,177 @@
+# Packet P7-03-RED — Mobile experience tests first
+
+## 1. Plan
+
+### Assumptions
+1.  **Framework**: React with TypeScript, using `@testing-library/react` for component testing and `vitest` as the test runner.
+2.  **Styling**: Tailwind CSS is used for styling. We will rely on computed styles to verify dimensions rather than parsing class names.
+3.  **Component Structure**:
+    *   `Board`: The main container for the Kanban board.
+    *   `Row`: Represents a column (e.g., "To Do", "In Progress").
+    *   `Card`: Represents an individual task item within a row.
+4.  **Viewport**: Tests will simulate a viewport width of 375px (standard mobile width).
+5.  **No Horizontal Scroll**: The root container or board wrapper must have `overflow-x: hidden` or constrain content width to prevent horizontal scrolling on mobile.
+
+### Risks & Edge Cases
+1.  **False Positives in Tap Target Testing**: Simply checking `width` and `height` is insufficient if the element is rotated or has padding that doesn't count as a "tap target" in the user's mental model. We will assert against the *computed* bounding box of interactive elements.
+2.  **Layout Shifts**: Mobile layouts often change drastically (e.g., columns stack vertically). Tests must account for the specific DOM structure at 375px. If the layout doesn't stack, the test should fail because usability is compromised.
+3.  **CSS Framework Interference**: Tailwind's default breakpoints might interfere. We assume a custom `mobile` breakpoint or standard `sm`/`md` handling. The test will force the container width via CSS injection or wrapper component to ensure consistency regardless of the global window size.
+4.  **Dynamic Content**: If cards have variable heights, tap target assertions must be robust enough to handle different card sizes.
+
+### Implementation Strategy
+1.  Create a `MobileBoardTest` wrapper that forces a 375px width container.
+2.  Write tests for:
+    *   **No Horizontal Scroll**: Assert `scrollWidth === clientWidth` on the board container.
+    *   **Tap Targets**: Query all interactive elements (buttons, links, clickable cards) and assert their computed `offsetWidth` and `offsetHeight` are >= 44px.
+    *   **Layout Structure**: Assert that rows are stacked vertically (flex-col or block) rather than horizontally at this width.
+
+## 2. Exact File Edits
+
+### File: `src/components/__tests__/MobileBoard.test.tsx`
+
+```diff
++import { render, screen } from '@testing-library/react';
++import { describe, it, expect, vi } from 'vitest';
++import { Board } from '../Board';
++import { Row } from '../Row';
++import { Card } from '../Card';
++
++// Mock data for testing
++const mockTasks = [
++  { id: '1', title: 'Task 1', status: 'todo' },
++  { id: '2', title: 'Task 2', status: 'todo' },
++];
++
++describe('Mobile Experience (375px)', () => {
++  const MOBILE_WIDTH = 375;
++
++  // Helper to render board in a constrained container
++  const renderInMobileContainer = () => {
++    return render(
++      <div style={{ width: `${MOBILE_WIDTH}px`, overflow: 'hidden' }}>
++        <Board>
++          <Row title="To Do">
++            {mockTasks.map((task) => (
++              <Card key={task.id} task={task} />
++            ))}
++          </Row>
++        </Board>
++      </div>
++    );
++  };
++
++  it('should not allow horizontal scrolling at 375px', () => {
++    const { container } = renderInMobileContainer();
++    
++    // Wait for any potential layout shifts
++    setTimeout(() => {
++      const boardContainer = container.querySelector('[data-testid="board-container"]') || container.firstChild;
++      
++      if (boardContainer) {
++        const { scrollWidth, clientWidth } = boardContainer as HTMLElement;
++        
++        // Allow for a small margin of error due to scrollbar rendering differences
++        expect(scrollWidth).toBeLessThanOrEqual(clientWidth + 1);
++      } else {
++        throw new Error('Board container not found');
++      }
++    }, 100);
++  });
++
++  it('should have tap targets >= 44px for primary controls', () => {
++    renderInMobileContainer();
++    
++    // Query all interactive elements (buttons, links, and cards if they are clickable)
++    const interactiveElements = screen.getAllByRole('button', { hidden: true });
++    const clickableCards = screen.getAllByRole('article'); // Assuming cards are articles
++    
++    const allInteractive = [...interactiveElements, ...clickableCards];
++    
++    allInteractive.forEach((element) => {
++      const rect = element.getBoundingClientRect();
++      
++      // Assert width and height are at least 44px
++      expect(rect.width).toBeGreaterThanOrEqual(44);
++      expect(rect.height).toBeGreaterThanOrEqual(44);
++    });
++  });
++
++  it('should stack rows vertically at 375px', () => {
++    const { container } = renderInMobileContainer();
++    
++    const rows = container.querySelectorAll('[data-testid="row"]');
++    
++    expect(rows.length).toBeGreaterThan(0);
++    
++    // Check that rows are not side-by-side (i.e., they are stacked)
++    // We can check the flex direction or the position of the second row
++    if (rows.length > 1) {
++      const firstRow = rows[0] as HTMLElement;
++      const secondRow = rows[1] as HTMLElement;
++      
++      // If stacked vertically, the second row should be below the first
++      expect(secondRow.offsetTop).toBeGreaterThan(firstRow.offsetTop + firstRow.offsetHeight);
++    }
++  });
++});
+```
+
+### File: `src/components/Board/index.tsx` (Assumed existing file, no changes needed for RED, but ensure `data-testid`)
+
+*Note: Ensure the Board component has a `data-testid="board-container"` attribute for the test to find the root.*
+
+```diff
+  export const Board = ({ children }: { children: React.ReactNode }) => {
+-   return <div className="board">{children}</div>;
++   return <div data-testid="board-container" className="board">{children}</div>;
+  };
+```
+
+### File: `src/components/Row/index.tsx` (Assumed existing file, no changes needed for RED, but ensure `data-testid`)
+
+*Note: Ensure the Row component has a `data-testid="row"` attribute.*
+
+```diff
+  export const Row = ({ title, children }: { title: string; children: React.ReactNode }) => {
+-   return <div className="row">{title}{children}</div>;
++   return <div data-testid="row" className="row">{title}{children}</div>;
+  };
+```
+
+### File: `src/components/Card/index.tsx` (Assumed existing file, no changes needed for RED, but ensure `role="article"` and interactive elements have `role="button"` if applicable)
+
+*Note: Ensure Card is an `<article>` and any internal buttons are properly marked.*
+
+```diff
+  export const Card = ({ task }: { task: Task }) => {
+-   return <div className="card">{task.title}</div>;
++   return (
++     <article className="card" role="article">
++       <span>{task.title}</span>
++       {/* Ensure any action buttons are present and have role="button" */}
++       <button type="button" aria-label={`Edit ${task.title}`}>Edit</button>
++     </article>
++   );
+  };
+```
+
+## 3. Verification Commands
+
+1.  **Run the new tests to confirm they fail (RED phase):**
+    ```bash
+    npm run test -- src/components/__tests__/MobileBoard.test.tsx
+    ```
+    *Expected Result*: Tests should fail because the current implementation likely does not enforce 44px tap targets, may have horizontal scroll, or rows may not be stacked vertically at 375px.
+
+2.  **Verify no regressions in existing tests:**
+    ```bash
+    npm run test
+    ```
+    *Expected Result*: All existing tests should pass.
+
+3.  **Manual Verification (Optional but recommended):**
+    *   Open the app in a browser.
+    *   Use DevTools to set viewport to 375px.
+    *   Confirm that horizontal scroll is present (test failure reason).
+    *   Confirm that tap targets are smaller than 44px (test failure reason).
+    *   Confirm that rows are not stacked vertically (test failure reason).

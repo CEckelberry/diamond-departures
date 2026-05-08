@@ -1,0 +1,273 @@
+# Packet P7-06-RED — Implementation Plan & Code
+
+## 1. Plan: Assumptions, Risks, and Strategy
+
+### Assumptions
+1.  **Artifact Location**: Case study drafts are stored as Markdown files (`.md`) in a specific directory structure (e.g., `./case-studies/`). We will assume a generic path `./data/case-studies/` for the scope of this test, but the logic is portable.
+2.  **Contract Definition**:
+    *   **Required Sections**: The H1 title, Introduction (`## Introduction`), Methodology (`## Methodology`), Results (`## Results`), and Conclusion (`## Conclusion`).
+    *   **Length**: Minimum 500 words (excluding markdown syntax) to ensure substance.
+    *   **Required Links**:
+        *   Live Site: A link containing `live-site` or pointing to a specific domain pattern (e.g., `example.com/live`).
+        *   Repo: A link containing `github.com` or `gitlab.com`.
+        *   Methodology: A link within the Methodology section pointing to external validation or source data.
+3.  **Environment**: Python 3.8+ with `pytest` and `markdown` library available.
+
+### Risks & Failure Modes
+1.  **False Negatives on Length**: Counting words in raw markdown vs. rendered HTML can differ significantly due to lists, code blocks, or images. *Mitigation*: Use a robust word counter that strips tags but preserves text content.
+2.  **Link Detection Ambiguity**: Regex matching for links might fail if URLs are obfuscated or use relative paths. *Mitigation*: Use a proper Markdown parser (like `markdown` or `mistune`) to extract links rather than raw regex, ensuring we catch `[text](url)` structures accurately.
+3.  **Section Header Variance**: Users might use `# Title` vs `## Title`. *Mitigation*: The contract will strictly enforce `## SectionName` for sub-sections to maintain structure consistency, but allow flexibility in the H1 title.
+
+### Strategy
+1.  Create a test suite using `pytest`.
+2.  Implement mock Markdown content that violates each constraint (missing section, short length, missing links).
+3.  Implement a validator function `validate_case_study_draft(content: str) -> dict` that returns errors.
+4.  Ensure tests fail initially against a non-existent or stubbed validator, then implement the validator to pass them.
+
+## 2. Exact File Edits (Unified Diff)
+
+We will create a new test file and a new validator module.
+
+### File: `tests/test_case_study_contract.py`
+
+```diff
++"""
++P7-06-RED: Tests for Case Study Artifact Contract Validation.
++
++This module contains failing tests that define the contract for case study drafts.
++It validates:
++1. Required sections (Introduction, Methodology, Results, Conclusion).
++2. Minimum word count (500 words).
++3. Required links (Live Site, Repo, Methodology source).
++"""
++
++import pytest
++from pathlib import Path
++
++# Import the validator we are about to implement
++from src.case_study_validator import validate_case_study_draft
++
++
++# --- Test Data: Violations ---
++
++SHORT_DRAFT = """
++# My Case Study
++
++## Introduction
++This is a short draft. It lacks depth and required links.
++"""
++
++MISSING_SECTIONS_DRAFT = """
++# My Case Study
++
++## Introduction
++This is a long introduction with enough words to pass the length check. 
++We need to add more text here to ensure we hit 500 words. 
++Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
++
++## Results
++Here are the results. More text to pad the word count. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
++
++## Conclusion
++In conclusion, this draft is missing the Methodology section and required links.
++"""
++
++MISSING_LINKS_DRAFT = """
++# My Case Study
++
++## Introduction
++This is a long introduction with enough words to pass the length check. 
++We need to add more text here to ensure we hit 500 words. 
++Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
++
++## Methodology
++Here is the methodology. More text to pad the word count. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
++
++## Results
++Here are the results. More text to pad the word count. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
++
++## Conclusion
++In conclusion, this draft is missing required links.
++"""
++
++# --- Test Cases ---
++
++class TestCaseStudyContract:
++    """Tests for the case study draft contract."""
++
++    def test_short_draft_fails_length_check(self):
++        """A draft under 500 words should fail validation."""
++        errors = validate_case_study_draft(SHORT_DRAFT)
++        assert any("word count" in error.lower() for error in errors), \
++            "Expected a word count error, but got: " + str(errors)
++
++    def test_missing_sections_fails_section_check(self):
++        """A draft missing required sections should fail validation."""
++        errors = validate_case_study_draft(MISSING_SECTIONS_DRAFT)
++        assert any("methodology" in error.lower() for error in errors), \
++            "Expected a missing section error for 'Methodology', but got: " + str(errors)
++
++    def test_missing_links_fails_link_check(self):
++        """A draft missing required links should fail validation."""
++        errors = validate_case_study_draft(MISSING_LINKS_DRAFT)
++        assert any("live site" in error.lower() or "repo" in error.lower() or "methodology link" in error.lower() for error in errors), \
++            "Expected a missing link error, but got: " + str(errors)
++
++    def test_valid_draft_passes_all_checks(self):
++        """A draft meeting all criteria should pass validation."""
++        valid_draft = """
++# My Case Study
++
++## Introduction
++This is a long introduction with enough words to pass the length check. 
++We need to add more text here to ensure we hit 500 words. 
++Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
++
++## Methodology
++Here is the methodology. More text to pad the word count. 
++See our detailed methodology [here](https://example.com/methodology).
++Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
++
++## Results
++Here are the results. More text to pad the word count. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
++
++## Conclusion
++In conclusion, this draft meets all requirements.
++Check out the [Live Site](https://example.com/live) and the [GitHub Repo](https://github.com/example/repo).
++"""
++        errors = validate_case_study_draft(valid_draft)
++        assert errors == [], f"Expected no errors, but got: " + str(errors)
+```
+
+### File: `src/case_study_validator.py`
+
+```diff
++"""
++P7-06-RED: Validator for Case Study Drafts.
++
++This module provides functions to validate case study drafts against a defined contract.
++Contract:
++1. Required Sections: Introduction, Methodology, Results, Conclusion.
++2. Minimum Word Count: 500 words.
++3. Required Links: Live Site, Repo, Methodology Source.
++"""
++
++import re
++from markdown import markdown
++from bs4 import BeautifulSoup
++
++# Constants
++REQUIRED_SECTIONS = ["Introduction", "Methodology", "Results", "Conclusion"]
++MIN_WORD_COUNT = 500
++
++def count_words(text: str) -> int:
++    """Count words in text, ignoring markdown syntax."""
++    # Strip markdown links but keep link text
++    text = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', text)
++    # Strip other markdown syntax (headers, bold, italic, etc.)
++    text = re.sub(r'[#*_~`]', '', text)
++    # Split by whitespace and filter empty strings
++    words = [w for w in text.split() if w]
++    return len(words)
++
++def extract_links(markdown_content: str) -> list:
++    """Extract all links from markdown content."""
++    html = markdown(markdown_content)
++    soup = BeautifulSoup(html, 'html.parser')
++    links = []
++    for a_tag in soup.find_all('a'):
++        links.append({
++            'text': a_tag.get_text(),
++            'href': a_tag.get('href')
++        })
++    return links
++
++def validate_case_study_draft(content: str) -> list:
++    """
++    Validate a case study draft against the contract.
++    
++    Args:
++        content (str): The markdown content of the draft.
++        
++    Returns:
++        list: A list of error messages. Empty if valid.
++    """
++    errors = []
++    
++    # 1. Check Required Sections
++    content_lower = content.lower()
++    for section in REQUIRED_SECTIONS:
++        # Look for ## Section Name or ### Section Name
++        if not re.search(rf'#{1,3}\s+{section}', content, re.IGNORECASE):
++            errors.append(f"Missing required section: {section}")
++            
++    # 2. Check Word Count
++    word_count = count_words(content)
++    if word_count < MIN_WORD_COUNT:
++        errors.append(f"Draft too short: {word_count} words (minimum {MIN_WORD_COUNT})")
++        
++    # 3. Check Required Links
++    links = extract_links(content)
++    
++    # Check for Live Site Link
++    live_site_found = any(
++        'live' in link['href'].lower() or 
++        'example.com/live' in link['href'].lower()  # Specific pattern for demo
++        for link in links
++    )
++    if not live_site_found:
++        errors.append("Missing required link: Live Site")
++        
++    # Check for Repo Link
++    repo_found = any(
++        'github.com' in link['href'].lower() or 
++        'gitlab.com' in link['href'].lower()
++        for link in links
++    )
++    if not repo_found:
++        errors.append("Missing required link: Repository")
++        
++    # Check for Methodology Link (must be in Methodology section)
++    # Extract text of Methodology section
++    methodology_section = re.search(r'#{1,3}\s+Methodology\s+(.*?)(?=#\s+Results)', content, re.DOTALL | re.IGNORECASE)
++    if methodology_section:
++        methodology_text = methodology_section.group(1)
++        methodology_links = extract_links(methodology_text)
++        if not methodology_links:
++            errors.append("Missing required link in Methodology section: Methodology Source")
++    else:
++        # If Methodology section is missing, we already added an error above.
++        # No need to add another for the link.
++        pass
++        
++    return errors
+```
+
+## 3. Verification Commands
+
+1.  **Install Dependencies**:
+    ```bash
+    pip install pytest markdown beautifulsoup4
+    ```
+
+2.  **Run Tests (Expected to Fail Initially)**:
+    ```bash
+    pytest tests/test_case_study_contract.py -v
+    ```
+    *   **Expected Output**: All 4 tests should fail because the `validate_case_study_draft` function is either not implemented or returns empty lists incorrectly. If you copy the code above, the first 3 tests should fail (as they expect errors but the stub might return none), and the last test might pass if the stub is naive. The goal is to have them *fail* before implementation.
+
+3.  **Verify Validator Logic (Manual Check)**:
+    ```python
+    # In a Python shell or script
+    from src.case_study_validator import validate_case_study_draft
+    
+    # Test short draft
+    errors = validate_case_study_draft("# Title\n## Intro\nShort text.")
+    print(errors) # Should contain word count error
+    
+    # Test missing sections
+    errors = validate_case_study_draft("# Title\n## Intro\nLong text... " * 100)
+    print(errors) # Should contain missing Methodology, Results, Conclusion errors
+    ```
+
+This packet provides the exact code and steps to establish the failing tests for the case study contract, fulfilling the RED scope of P7-06.

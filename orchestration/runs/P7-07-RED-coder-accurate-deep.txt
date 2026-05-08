@@ -1,0 +1,207 @@
+# Packet P7-07-RED — Launch Checklist Validation
+
+## 1. Plan & Assumptions
+
+### Assumptions
+1.  **Artifact Location**: The launch checklist is a Markdown file located at `docs/launch-checklist.md` relative to the repository root.
+2.  **Structure**: The checklist uses standard H2 (`##`) headers for major sections and H3 (`###`) or bullet points for specific items.
+3.  **Required Sections**: Based on standard launch protocols, the following sections are mandatory:
+    *   `## Pre-Launch Verification` (Technical readiness)
+    *   `## Communication & Alerts` (Stakeholder notification)
+    *   `## Rollback Plan` (Failure recovery)
+4.  **Specific Content**:
+    *   Under `Communication & Alerts`, there must be a placeholder or entry for `Portfolio Link`.
+    *   Under `Communication & Alerts`, there must be a placeholder or entry for `Alert Runbook`.
+5.  **Tooling**: The verification script is a standalone Bash script compatible with POSIX shells, executable via CI/CD pipelines.
+
+### Risks & Failure Modes
+1.  **False Negatives (Risk: High)**: If the checklist uses non-standard formatting (e.g., bold text instead of headers, or nested lists without clear markers), the regex-based parser will fail.
+    *   *Mitigation*: The script will output the specific line numbers and content that failed matching to aid manual debugging.
+2.  **False Positives (Risk: Medium)**: If "Portfolio Link" appears in a comment or a "TODO" list that is already crossed out, it might still match.
+    *   *Mitigation*: The regex will explicitly exclude lines starting with `<!--` or containing `[x]` (completed tasks) if we were tracking status, but for *existence* checks, we simply ensure the keyword is present in the relevant section. We will scope the search to the specific section header to avoid matching unrelated mentions.
+3.  **File Not Found (Risk: Low)**: The file does not exist yet.
+    *   *Mitigation*: The script explicitly checks for file existence before parsing.
+
+### Implementation Strategy
+1.  Create a validation script `scripts/validate-launch-checklist.sh`.
+2.  The script will:
+    *   Check if `docs/launch-checklist.md` exists.
+    *   Extract the content between `## Communication & Alerts` and the next section header (or end of file).
+    *   Verify the presence of "Portfolio Link" and "Alert Runbook" within that extracted block.
+    *   Exit with code 0 on success, 1 on failure.
+3.  Create a stub `docs/launch-checklist.md` that is intentionally incomplete to ensure the test fails initially (as per RED scope).
+
+## 2. Exact File Edits
+
+### File: `scripts/validate-launch-checklist.sh`
+**Action**: Create new file.
+
+```bash
+#!/usr/bin/env bash
+# P7-07-RED: Validate Launch Checklist Readiness Artifacts
+# Exit codes: 0 = Pass, 1 = Fail
+
+set -euo pipefail
+
+CHECKLIST_PATH="docs/launch-checklist.md"
+ERRORS=0
+
+echo "=== P7-07-RED: Launch Checklist Validation ==="
+
+# Check 1: File Existence
+if [[ ! -f "$CHECKLIST_PATH" ]]; then
+    echo "FAIL: Launch checklist file not found at $CHECKLIST_PATH"
+    exit 1
+fi
+echo "PASS: Launch checklist file exists."
+
+# Function to extract section content
+# Usage: get_section_content <section_header> <file_path>
+get_section_content() {
+    local header="$1"
+    local file="$2"
+    
+    # Use awk to extract lines between the header and the next ## header or EOF
+    awk -v header="## $header" '
+        BEGIN { found=0; in_section=0 }
+        /^## / { 
+            if (found && $0 == header) { in_section=1; next }
+            else if (found) { exit } # Next section started, stop
+            if ($0 == header) { found=1; in_section=1; next }
+        }
+        in_section { print }
+    ' "$file"
+}
+
+# Check 2: Verify Required Sections Exist
+REQUIRED_SECTIONS=("Pre-Launch Verification" "Communication & Alerts" "Rollback Plan")
+
+for section in "${REQUIRED_SECTIONS[@]}"; do
+    if ! grep -q "^## $section$" "$CHECKLIST_PATH"; then
+        echo "FAIL: Missing required section: ## $section"
+        ERRORS=$((ERRORS + 1))
+    else
+        echo "PASS: Section found: ## $section"
+    fi
+done
+
+# Check 3: Verify Specific Content in Communication & Alerts Section
+COMM_SECTION_CONTENT=$(get_section_content "Communication & Alerts" "$CHECKLIST_PATH")
+
+if [[ -z "$COMM_SECTION_CONTENT" ]]; then
+    echo "FAIL: Could not extract content for 'Communication & Alerts' section."
+    ERRORS=$((ERRORS + 1))
+else
+    # Check for Portfolio Link placeholder
+    if ! echo "$COMM_SECTION_CONTENT" | grep -qi "portfolio.*link"; then
+        echo "FAIL: Missing 'Portfolio Link' reference in Communication & Alerts section."
+        ERRORS=$((ERRORS + 1))
+    else
+        echo "PASS: 'Portfolio Link' reference found in Communication & Alerts."
+    fi
+
+    # Check for Alert Runbook entry
+    if ! echo "$COMM_SECTION_CONTENT" | grep -qi "alert.*runbook"; then
+        echo "FAIL: Missing 'Alert Runbook' reference in Communication & Alerts section."
+        ERRORS=$((ERRORS + 1))
+    else
+        echo "PASS: 'Alert Runbook' reference found in Communication & Alerts."
+    fi
+fi
+
+# Final Result
+if [[ $ERRORS -gt 0 ]]; then
+    echo "=== VALIDATION FAILED: $ERRORS error(s) ==="
+    exit 1
+else
+    echo "=== VALIDATION PASSED ==="
+    exit 0
+fi
+```
+
+### File: `docs/launch-checklist.md`
+**Action**: Create new file (Stub with intentional failures).
+
+```markdown
+# Launch Checklist
+
+## Pre-Launch Verification
+
+- [ ] Code freeze confirmed
+- [ ] All unit tests passing
+- [ ] Integration tests passing
+
+## Communication & Alerts
+
+- [ ] Stakeholders notified via email
+- [ ] Status page updated
+
+## Rollback Plan
+
+- [ ] Backup database snapshot taken
+- [ ] Rollback procedure documented
+```
+
+### File: `.github/workflows/launch-check.yml` (Optional but recommended for CI integration)
+**Action**: Create new file to automate the check.
+
+```yaml
+name: Launch Checklist Validation
+
+on:
+  pull_request:
+    paths:
+      - 'docs/launch-checklist.md'
+  push:
+    branches:
+      - main
+
+jobs:
+  validate-checklist:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Run Launch Checklist Validation
+        run: |
+          chmod +x scripts/validate-launch-checklist.sh
+          ./scripts/validate-launch-checklist.sh
+```
+
+## 3. Verification Commands
+
+1.  **Make the script executable**:
+    ```bash
+    chmod +x scripts/validate-launch-checklist.sh
+    ```
+
+2.  **Run the validation against the stub file (Expected to FAIL)**:
+    ```bash
+    ./scripts/validate-launch-checklist.sh
+    ```
+    *Expected Output*:
+    ```
+    === P7-07-RED: Launch Checklist Validation ===
+    PASS: Launch checklist file exists.
+    PASS: Section found: ## Pre-Launch Verification
+    PASS: Section found: ## Communication & Alerts
+    PASS: Section found: ## Rollback Plan
+    FAIL: Missing 'Portfolio Link' reference in Communication & Alerts section.
+    FAIL: Missing 'Alert Runbook' reference in Communication & Alerts section.
+    === VALIDATION FAILED: 2 error(s) ===
+    ```
+
+3.  **Verify the script handles missing file correctly**:
+    ```bash
+    mv docs/launch-checklist.md docs/launch-checklist.md.bak
+    ./scripts/validate-launch-checklist.sh
+    mv docs/launch-checklist.md.bak docs/launch-checklist.md
+    ```
+    *Expected Output*:
+    ```
+    === P7-07-RED: Launch Checklist Validation ===
+    FAIL: Launch checklist file not found at docs/launch-checklist.md
+    ```
+
+4.  **Confirm the test fails before implementation**: The initial run (Step 2) must return a non-zero exit code, confirming that the checks are active and catching missing artifacts.

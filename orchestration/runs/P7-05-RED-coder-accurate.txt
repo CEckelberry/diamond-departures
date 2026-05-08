@@ -1,0 +1,179 @@
+# Packet P7-05-RED — Methodology Page Tests
+
+## 1. Plan & Assumptions
+
+### Assumptions
+1.  **Framework**: The project uses **Jest** with **React Testing Library** (standard for modern React apps).
+2.  **Routing**: The application uses `react-router-dom` v6+.
+3.  **Component Structure**:
+    *   `MethodologyPage` is the component rendered at `/methodology`.
+    *   `Footer` is the component containing the navigation links.
+    *   `Header` (or similar) contains the primary navigation links (DATA, STATS, GitHub).
+4.  **Content Contract**: The Methodology page must contain specific semantic sections: "Overview", "Data Sources", and "Analysis Methods".
+5.  **Link Contracts**:
+    *   Footer must link to `/methodology`.
+    *   Header/Nav must link to `/data`, `/stats`, and `https://github.com/...` (or similar external).
+
+### Risks & Edge Cases
+1.  **Router Context**: Tests must be wrapped in `MemoryRouter` or `BrowserRouter` to resolve `<Link>` components correctly. Without this, `<Link>` renders as a `<span>`, breaking click/href assertions.
+2.  **Asynchronous Data**: If `MethodologyPage` fetches data from an API, tests will fail if not mocked. *Assumption*: For RED phase, we test the UI shell and static content first. If async, we mock `fetch` or use `msw`.
+3.  **External Links**: GitHub links are external. We must assert `target="_blank"` and `rel="noopener noreferrer"` for security best practices.
+4.  **Footer/Nav Coupling**: If the footer is shared across all pages, testing it in isolation requires mocking its children or ensuring it renders correctly without page-specific context.
+
+### Implementation Strategy
+1.  Create `MethodologyPage.test.tsx`:
+    *   Render `/methodology`.
+    *   Assert presence of key content sections (H1, H2s).
+    *   Assert no broken internal links within the page.
+2.  Create `Footer.test.tsx`:
+    *   Render `<Footer />`.
+    *   Assert link to `/methodology` exists and has correct text.
+3.  Create `Header.test.tsx` (or `App.test.tsx` if header is global):
+    *   Assert links for DATA, STATS, GitHub exist.
+    *   Verify GitHub link is external and secure.
+
+---
+
+## 2. Exact File Edits (Unified Diff)
+
+### File: `src/pages/MethodologyPage.test.tsx`
+```diff
++import { render, screen } from '@testing-library/react';
++import { MemoryRouter, Routes, Route } from 'react-router-dom';
++import MethodologyPage from './MethodologyPage';
++
++describe('MethodologyPage', () => {
++  const renderWithRouter = (ui: React.ReactElement) => {
++    return render(
++      <MemoryRouter initialEntries={['/methodology']}>
++        <Routes>
++          <Route path="/methodology" element={ui} />
++        </Routes>
++      </MemoryRouter>
++    );
++  };
++
++  it('renders the main title', () => {
++    renderWithRouter(<MethodologyPage />);
++    expect(screen.getByRole('heading', { name: /methodology/i })).toBeInTheDocument();
++  });
++
++  it('renders the overview section', () => {
++    renderWithRouter(<MethodologyPage />);
++    expect(screen.getByText(/overview/i)).toBeInTheDocument();
++  });
++
++  it('renders the data sources section', () => {
++    renderWithRouter(<MethodologyPage />);
++    expect(screen.getByText(/data sources/i)).toBeInTheDocument();
++  });
++
++  it('renders the analysis methods section', () => {
++    renderWithRouter(<MethodologyPage />);
++    expect(screen.getByText(/analysis methods/i)).toBeInTheDocument();
++  });
++
++  it('does not contain broken internal links', () => {
++    renderWithRouter(<MethodologyPage />);
++    const links = screen.getAllByRole('link');
++    links.forEach((link) => {
++      const href = link.getAttribute('href');
++      if (href && !href.startsWith('http')) {
++        // In a real test, we might assert that internal links point to valid routes.
++        // For RED, we just ensure they exist and are not empty.
++        expect(href).not.toBe('');
++      }
++    });
++  });
++});
+```
+
+### File: `src/components/Footer.test.tsx`
+```diff
++import { render, screen } from '@testing-library/react';
++import { MemoryRouter } from 'react-router-dom';
++import Footer from './Footer';
++
++describe('Footer', () => {
++  it('renders a link to the methodology page', () => {
++    render(
++      <MemoryRouter>
++        <Footer />
++      </MemoryRouter>
++    );
++    const methodologyLink = screen.getByRole('link', { name: /methodology/i });
++    expect(methodologyLink).toBeInTheDocument();
++    expect(methodologyLink).toHaveAttribute('href', '/methodology');
++  });
++
++  it('renders copyright text', () => {
++    render(
++      <MemoryRouter>
++        <Footer />
++      </MemoryRouter>
++    );
++    expect(screen.getByText(/© \d{4}/)).toBeInTheDocument();
++  });
++});
+```
+
+### File: `src/components/Header.test.tsx`
+```diff
++import { render, screen } from '@testing-library/react';
++import { MemoryRouter } from 'react-router-dom';
++import Header from './Header';
++
++describe('Header', () => {
++  it('renders the DATA link', () => {
++    render(
++      <MemoryRouter>
++        <Header />
++      </MemoryRouter>
++    );
++    expect(screen.getByRole('link', { name: /data/i })).toBeInTheDocument();
++  });
++
++  it('renders the STATS link', () => {
++    render(
++      <MemoryRouter>
++        <Header />
++      </MemoryRouter>
++    );
++    expect(screen.getByRole('link', { name: /stats/i })).toBeInTheDocument();
++  });
++
++  it('renders the GitHub link with security attributes', () => {
++    render(
++      <MemoryRouter>
++        <Header />
++      </MemoryRouter>
++    );
++    const githubLink = screen.getByRole('link', { name: /github/i });
++    expect(githubLink).toBeInTheDocument();
++    expect(githubLink).toHaveAttribute('href', 'https://github.com/');
++    expect(githubLink).toHaveAttribute('target', '_blank');
++    expect(githubLink).toHaveAttribute('rel', 'noopener noreferrer');
++  });
++});
+```
+
+---
+
+## 3. Verification Commands
+
+1.  **Run the new tests (expect failure)**:
+    ```bash
+    npm test -- --testPathPattern="(MethodologyPage|Footer|Header)\.test\.tsx$" --no-coverage
+    ```
+    *Expected Result*: Tests fail because `MethodologyPage` does not yet have the required headings, or `Footer`/`Header` do not have the specified links.
+
+2.  **Verify no existing tests are broken**:
+    ```bash
+    npm test -- --watchAll=false
+    ```
+    *Expected Result*: All other tests pass.
+
+3.  **Check for linting errors in new files**:
+    ```bash
+    npm run lint -- src/pages/MethodologyPage.test.tsx src/components/Footer.test.tsx src/components/Header.test.tsx
+    ```

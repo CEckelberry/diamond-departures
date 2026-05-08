@@ -1,0 +1,251 @@
+# Packet P7-07-RED — Launch Checklist Validation
+
+## 1. Plan & Assumptions
+
+### Assumptions
+1.  **Artifact Location**: The launch checklist is stored as a Markdown file at `docs/launch-checklist.md` relative to the repository root.
+2.  **Structure**: The checklist uses standard H2 (`##`) headers for major sections and H3 (`###`) or bullet points for specific items.
+3.  **Required Sections**: Based on standard launch protocols, the following sections are mandatory:
+    *   `## Pre-Launch Validation`
+    *   `## Portfolio & Links`
+    *   `## Alerting & Runbooks`
+    *   `## Rollback Plan`
+4.  **Placeholders**: The checklist must contain explicit placeholders (e.g., `[LINK]`, `[TODO]`) that are intended to be filled, but their *presence* proves the structure is ready for population. The check verifies the *structure* exists, not that it is fully populated (which would be a "GREEN" state). However, the prompt implies we need to check for "Portfolio link/update placeholders". We will verify that the section exists and contains at least one placeholder pattern or item.
+5.  **Tooling**: The verification script uses standard POSIX shell utilities (`grep`, `cat`) to ensure portability and speed.
+
+### Risks & Edge Cases
+1.  **File Not Found**: If `docs/launch-checklist.md` does not exist, the check must fail immediately with a clear error.
+2.  **Case Sensitivity**: Headers might be capitalized differently (e.g., "Pre-launch" vs "Pre-Launch"). The check will use case-insensitive matching for section headers to be robust.
+3.  **Whitespace**: Extra whitespace around headers should not break detection.
+4.  **False Positives**: A section header appearing in a comment or code block might trigger a false positive. *Mitigation*: For this initial RED phase, we accept simple text matching. A more robust solution would use a Markdown parser, but that adds complexity and dependencies. The current scope is "checks fail before implementation," implying a lightweight gate.
+5.  **Empty Sections**: A section header exists but has no content. This should still pass the structural check, as the *artifact* exists with the *section*.
+
+### Failure Modes
+-   **Exit Code 1**: One or more required sections are missing.
+-   **Exit Code 2**: The checklist file itself is missing.
+-   **Exit Code 0**: All checks pass (this is the target state after implementation, but currently we want it to fail).
+
+## 2. Exact File Edits
+
+We will create a new script `scripts/validate-launch-checklist.sh` and add a corresponding test entry in the CI configuration (assuming a standard `.github/workflows/ci.yml` or similar). For this packet, we focus on the validation script itself, as it is the core "check."
+
+### File: `scripts/validate-launch-checklist.sh`
+
+```bash
+#!/usr/bin/env bash
+# P7-07-RED: Launch Checklist Validation
+# This script validates that the launch checklist artifact exists and contains
+# all required sections. It is designed to FAIL initially until the checklist
+# is properly populated.
+
+set -euo pipefail
+
+CHECKLIST_FILE="docs/launch-checklist.md"
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+NC='\033[0m' # No Color
+
+# Required sections (case-insensitive matching)
+REQUIRED_SECTIONS=(
+    "## Pre-Launch Validation"
+    "## Portfolio & Links"
+    "## Alerting & Runbooks"
+    "## Rollback Plan"
+)
+
+echo "🚀 Running Launch Checklist Validation (P7-07-RED)..."
+
+# Check if file exists
+if [ ! -f "$CHECKLIST_FILE" ]; then
+    echo -e "${RED}❌ FAIL: Launch checklist file not found at $CHECKLIST_FILE${NC}"
+    exit 2
+fi
+
+echo "✅ Launch checklist file found."
+
+FAILED=0
+
+for section in "${REQUIRED_SECTIONS[@]}"; do
+    # Use grep with case-insensitive (-i) and fixed string (-F) matching
+    # We look for the header line. Using ^ to ensure it's at the start of a line.
+    if ! grep -q "^${section}" "$CHECKLIST_FILE" 2>/dev/null; then
+        # Try case-insensitive match if exact match fails (for robustness)
+        if ! grep -qi "^${section}" "$CHECKLIST_FILE" 2>/dev/null; then
+            echo -e "${RED}❌ FAIL: Missing required section: '${section}'${NC}"
+            FAILED=1
+        else
+            echo "✅ Found section: '${section}' (case-insensitive match)"
+        fi
+    else
+        echo "✅ Found section: '${section}'"
+    fi
+done
+
+# Additional check: Ensure 'Portfolio & Links' has at least one placeholder or item
+# This is a more specific requirement from the scope: "Portfolio link/update placeholders... present"
+PORTFOLIO_SECTION=$(grep -i "^## Portfolio & Links" "$CHECKLIST_FILE" -A 100 || true)
+if [ -z "$PORTFOLIO_SECTION" ]; then
+    echo -e "${RED}❌ FAIL: Portfolio section exists but is empty or not found.${NC}"
+    FAILED=1
+else
+    # Check for common placeholder patterns
+    if echo "$PORTFOLIO_SECTION" | grep -qE '\[LINK\]|\[TODO\]|https?://|http://'; then
+        echo "✅ Portfolio section contains links or placeholders."
+    else
+        echo -e "${RED}❌ FAIL: Portfolio section does not contain any links or placeholders.${NC}"
+        FAILED=1
+    fi
+fi
+
+# Additional check: Ensure 'Alerting & Runbooks' has at least one entry
+ALERTING_SECTION=$(grep -i "^## Alerting & Runbooks" "$CHECKLIST_FILE" -A 100 || true)
+if [ -z "$ALERTING_SECTION" ]; then
+    echo -e "${RED}❌ FAIL: Alerting section exists but is empty or not found.${NC}"
+    FAILED=1
+else
+    # Check for common runbook/alert patterns
+    if echo "$ALERTING_SECTION" | grep -qE 'pagerduty|slack|email|runbook|alert'; then
+        echo "✅ Alerting section contains relevant keywords."
+    else
+        echo -e "${RED}❌ FAIL: Alerting section does not contain any alert/runbook references.${NC}"
+        FAILED=1
+    fi
+fi
+
+if [ $FAILED -eq 1 ]; then
+    echo -e "${RED}🚨 Launch Checklist Validation FAILED${NC}"
+    exit 1
+else
+    echo -e "${GREEN}✅ Launch Checklist Validation PASSED${NC}"
+    exit 0
+fi
+```
+
+### File: `.github/workflows/ci.yml` (Snippet to add)
+
+```yaml
+      - name: Validate Launch Checklist
+        run: |
+          chmod +x scripts/validate-launch-checklist.sh
+          ./scripts/validate-launch-checklist.sh
+```
+
+## 3. Verification Commands
+
+1.  **Create the script**:
+    ```bash
+    mkdir -p scripts
+    cat > scripts/validate-launch-checklist.sh << 'EOF'
+    #!/usr/bin/env bash
+    set -euo pipefail
+    CHECKLIST_FILE="docs/launch-checklist.md"
+    RED='\033[0;31m'
+    GREEN='\033[0;32m'
+    NC='\033[0m'
+    REQUIRED_SECTIONS=(
+        "## Pre-Launch Validation"
+        "## Portfolio & Links"
+        "## Alerting & Runbooks"
+        "## Rollback Plan"
+    )
+    echo "🚀 Running Launch Checklist Validation (P7-07-RED)..."
+    if [ ! -f "$CHECKLIST_FILE" ]; then
+        echo -e "${RED}❌ FAIL: Launch checklist file not found at $CHECKLIST_FILE${NC}"
+        exit 2
+    fi
+    echo "✅ Launch checklist file found."
+    FAILED=0
+    for section in "${REQUIRED_SECTIONS[@]}"; do
+        if ! grep -q "^${section}" "$CHECKLIST_FILE" 2>/dev/null; then
+            if ! grep -qi "^${section}" "$CHECKLIST_FILE" 2>/dev/null; then
+                echo -e "${RED}❌ FAIL: Missing required section: '${section}'${NC}"
+                FAILED=1
+            else
+                echo "✅ Found section: '${section}' (case-insensitive match)"
+            fi
+        else
+            echo "✅ Found section: '${section}'"
+        fi
+    done
+    PORTFOLIO_SECTION=$(grep -i "^## Portfolio & Links" "$CHECKLIST_FILE" -A 100 || true)
+    if [ -z "$PORTFOLIO_SECTION" ]; then
+        echo -e "${RED}❌ FAIL: Portfolio section exists but is empty or not found.${NC}"
+        FAILED=1
+    else
+        if echo "$PORTFOLIO_SECTION" | grep -qE '\[LINK\]|\[TODO\]|https?://|http://'; then
+            echo "✅ Portfolio section contains links or placeholders."
+        else
+            echo -e "${RED}❌ FAIL: Portfolio section does not contain any links or placeholders.${NC}"
+            FAILED=1
+        fi
+    fi
+    ALERTING_SECTION=$(grep -i "^## Alerting & Runbooks" "$CHECKLIST_FILE" -A 100 || true)
+    if [ -z "$ALERTING_SECTION" ]; then
+        echo -e "${RED}❌ FAIL: Alerting section exists but is empty or not found.${NC}"
+        FAILED=1
+    else
+        if echo "$ALERTING_SECTION" | grep -qE 'pagerduty|slack|email|runbook|alert'; then
+            echo "✅ Alerting section contains relevant keywords."
+        else
+            echo -e "${RED}❌ FAIL: Alerting section does not contain any alert/runbook references.${NC}"
+            FAILED=1
+        fi
+    fi
+    if [ $FAILED -eq 1 ]; then
+        echo -e "${RED}🚨 Launch Checklist Validation FAILED${NC}"
+        exit 1
+    else
+        echo -e "${GREEN}✅ Launch Checklist Validation PASSED${NC}"
+        exit 0
+    fi
+    EOF
+    chmod +x scripts/validate-launch-checklist.sh
+    ```
+
+2.  **Verify Failure (No Checklist File)**:
+    ```bash
+    ./scripts/validate-launch-checklist.sh
+    # Expected: Exit code 2, error message about missing file
+    ```
+
+3.  **Verify Failure (Empty Checklist File)**:
+    ```bash
+    mkdir -p docs
+    touch docs/launch-checklist.md
+    ./scripts/validate-launch-checklist.sh
+    # Expected: Exit code 1, errors for all missing sections
+    ```
+
+4.  **Verify Failure (Partial Checklist)**:
+    ```bash
+    cat > docs/launch-checklist.md << 'EOF'
+    ## Pre-Launch Validation
+    - [ ] Test 1
+    EOF
+    ./scripts/validate-launch-checklist.sh
+    # Expected: Exit code 1, errors for missing sections and portfolio/alerting content
+    ```
+
+5.  **Verify Success (Fully Populated Checklist)**:
+    ```bash
+    cat > docs/launch-checklist.md << 'EOF'
+    ## Pre-Launch Validation
+    - [x] Unit tests passed
+    - [x] Integration tests passed
+
+    ## Portfolio & Links
+    - [LINK] Main Product Page
+    - [TODO] Update social media links
+
+    ## Alerting & Runbooks
+    - PagerDuty integration configured
+    - Slack alerts for critical errors
+
+    ## Rollback Plan
+    - [ ] Documented rollback steps
+    EOF
+    ./scripts/validate-launch-checklist.sh
+    # Expected: Exit code 0, all checks pass
+    ```

@@ -1,0 +1,159 @@
+# Packet P7-04-RED — SEO + Open Graph tests first
+
+## 1. Plan
+
+### Assumptions
+1.  **Framework**: The project uses **Jest** (standard for Node/TS) and **Supertest** for HTTP integration testing.
+2.  **Architecture**: The application is a standard Express/Fastify-style server with a centralized metadata service or middleware pattern.
+3.  **Route Structure**:
+    *   `/` (Home)
+    *   `/about` (Static content)
+    *   `/blog/:slug` (Dynamic content)
+4.  **OG Image Strategy**: There is a dedicated route `/og/image.png` that accepts query parameters (`title`, `description`) to generate images dynamically, or a static asset served at `/assets/og-default.png`. We will test the dynamic generation endpoint as it's more complex and prone to wiring errors.
+5.  **Sitemap/Robots**: These are standard text/plain responses at root paths.
+
+### Risks & Edge Cases
+1.  **Timing/Async**: OG image generation might be async. Tests must handle `await` correctly.
+2.  **Encoding**: URLs in sitemap and OG parameters often contain special characters. Tests must verify proper URL encoding (`encodeURIComponent`).
+3.  **Caching**: If the OG route is cached, tests might pass incorrectly if not handled with cache-busting or cache-control headers verification.
+4.  **Missing Implementation**: The goal is *failing* tests. We assume the implementation does *not* exist yet or is stubbed out.
+
+### Strategy
+1.  Create `src/__tests__/seo.spec.ts`.
+2.  Define a `describe` block for each contract:
+    *   `Metadata`: Check `<title>` and `<meta name="description">` in HTML response.
+    *   `OG`: Check `og:title`, `og:description`, `og:image` in HTML response.
+    *   `Robots`: Check `User-agent` and `Disallow` directives.
+    *   `Sitemap`: Check XML structure and valid URLs.
+3.  Use `supertest` to hit the server.
+4.  Assert specific strings and headers.
+
+## 2. Exact File Edits
+
+### File: `src/__tests__/seo.spec.ts` (New)
+
+```typescript
+import request from 'supertest';
+import { app } from '../app'; // Adjust import path to your actual app entry point
+
+describe('SEO & Open Graph Contracts', () => {
+  describe('Home Page Metadata', () => {
+    it('should return correct title and description for home page', async () => {
+      const res = await request(app).get('/');
+      
+      expect(res.status).toBe(200);
+      expect(res.text).toContain('<title>My App - Home</title>');
+      expect(res.text).toContain('<meta name="description" content="Welcome to My App" />');
+    });
+
+    it('should return correct Open Graph tags for home page', async () => {
+      const res = await request(app).get('/');
+      
+      expect(res.status).toBe(200);
+      expect(res.text).toContain('<meta property="og:title" content="My App - Home" />');
+      expect(res.text).toContain('<meta property="og:description" content="Welcome to My App" />');
+      // Assuming a default OG image exists or is generated
+      expect(res.text).toContain('<meta property="og:image" content="https://example.com/assets/og-default.png" />');
+    });
+  });
+
+  describe('Dynamic Page Metadata (Blog)', () => {
+    it('should return dynamic title and description for blog post', async () => {
+      const slug = 'test-post';
+      const res = await request(app).get(`/blog/${slug}`);
+      
+      expect(res.status).toBe(200);
+      // Assuming the implementation should inject the slug or fetched data into metadata
+      expect(res.text).toContain(`<title>My App - ${slug}</title>`);
+      expect(res.text).toContain('<meta name="description" content="Details about test post" />');
+    });
+
+    it('should return dynamic OG tags for blog post', async () => {
+      const slug = 'test-post';
+      const res = await request(app).get(`/blog/${slug}`);
+      
+      expect(res.status).toBe(200);
+      expect(res.text).toContain(`<meta property="og:title" content="My App - ${slug}" />`);
+      expect(res.text).toContain('<meta property="og:description" content="Details about test post" />');
+    });
+  });
+
+  describe('Open Graph Image Generation Route', () => {
+    it('should generate an OG image with correct title', async () => {
+      const title = 'Test OG Title';
+      const res = await request(app)
+        .get(`/og/image.png`)
+        .query({ title })
+        .set('Accept', 'image/png');
+      
+      expect(res.status).toBe(200);
+      expect(res.headers['content-type']).toMatch(/image\/png/);
+      // Basic check: image buffer should not be empty
+      expect(res.body.length).toBeGreaterThan(0);
+    });
+
+    it('should handle special characters in OG title', async () => {
+      const title = 'Test & "Special" <Chars>';
+      const res = await request(app)
+        .get(`/og/image.png`)
+        .query({ title })
+        .set('Accept', 'image/png');
+      
+      expect(res.status).toBe(200);
+      expect(res.headers['content-type']).toMatch(/image\/png/);
+    });
+  });
+
+  describe('Robots.txt', () => {
+    it('should return valid robots.txt', async () => {
+      const res = await request(app).get('/robots.txt');
+      
+      expect(res.status).toBe(200);
+      expect(res.headers['content-type']).toContain('text/plain');
+      expect(res.text).toContain('User-agent: *');
+      expect(res.text).toContain('Disallow: /admin/'); // Example disallow
+    });
+  });
+
+  describe('Sitemap', () => {
+    it('should return valid sitemap.xml', async () => {
+      const res = await request(app).get('/sitemap.xml');
+      
+      expect(res.status).toBe(200);
+      expect(res.headers['content-type']).toContain('application/xml');
+      expect(res.text).toContain('<?xml version="1.0" encoding="UTF-8"?>');
+      expect(res.text).toContain('<urlset');
+      // Check for at least one URL entry
+      expect(res.text).toContain('<loc>https://example.com/</loc>');
+    });
+
+    it('should include dynamic blog post URLs in sitemap', async () => {
+      const res = await request(app).get('/sitemap.xml');
+      
+      expect(res.status).toBe(200);
+      // Assuming 'test-post' is a known slug that should be in the sitemap
+      expect(res.text).toContain('<loc>https://example.com/blog/test-post</loc>');
+    });
+  });
+});
+```
+
+## 3. Verification Commands
+
+1.  **Ensure dependencies are installed**:
+    ```bash
+    npm install --save-dev supertest @types/supertest
+    ```
+
+2.  **Run the new tests (expecting failure)**:
+    ```bash
+    npm test -- src/__tests__/seo.spec.ts
+    ```
+
+3.  **Verify failure modes**:
+    *   If the server is not running or routes are missing, `supertest` will return 404 or 500.
+    *   If routes exist but metadata is missing, assertions on `<title>` or `<meta>` will fail.
+    *   If OG image route doesn't exist, it will return 404.
+
+4.  **Confirm RED state**:
+    The test suite should exit with a non-zero code and display failures for all 8+ test cases defined above.

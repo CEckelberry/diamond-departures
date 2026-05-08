@@ -10,12 +10,30 @@
 		onselect?: (playerId: number) => void;
 	} = $props();
 
+	const rowAriaLabel = $derived(
+		`rank ${row.rank.trim()}, ${row.player}, ${row.team}, ${row.position}, stat ${row.stat}`
+	);
+
 	function handleSelect() {
 		onselect?.(row.playerId);
 	}
+
+	function handleKeydown(event: KeyboardEvent) {
+		if (event.key === 'Enter' || event.key === ' ') {
+			event.preventDefault();
+			handleSelect();
+		}
+	}
 </script>
 
-<div class="board-row" role="row" onclick={handleSelect}>
+<div
+	class="board-row"
+	role="button"
+	tabindex="0"
+	aria-label={rowAriaLabel}
+	onclick={handleSelect}
+	onkeydown={handleKeydown}
+>
 	<div class="cell rank" role="gridcell">
 		<Word value={row.rank} width={3} cellWidth={20} cellHeight={30} />
 	</div>
@@ -41,8 +59,17 @@
 		display: grid;
 		grid-template-columns: 3.5rem 20rem 6rem 6rem 8rem;
 		height: 36px;
+		min-height: 44px;
 		align-items: center;
 		gap: 0.45rem;
+		padding: 0.1rem 0.15rem;
+		cursor: pointer;
+		border-radius: 0.35rem;
+	}
+
+	.board-row:focus-visible {
+		outline: 2px solid color-mix(in oklab, var(--cell-text) 70%, white);
+		outline-offset: 2px;
 	}
 
 	.cell {
@@ -74,8 +101,18 @@
 
 	@media (max-width: 920px) {
 		.board-row {
-			grid-template-columns: 2.8rem 15rem 4.2rem 4.2rem 6.2rem;
-			gap: 0.35rem;
+			grid-template-columns: 1fr;
+			gap: 0.25rem;
+			padding: 0.5rem;
+			background: color-mix(in oklab, var(--chrome-bg) 82%, black);
+			border: 1px solid color-mix(in oklab, var(--chrome-text) 16%, transparent);
+		}
+
+		.rank,
+		.team,
+		.position,
+		.stat {
+			font-size: 0.7rem;
 		}
 	}
 </style>

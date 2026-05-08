@@ -20,7 +20,13 @@
 
 	const TREND_STATS = ['wRC+', 'OPS'];
 
-	let { selectedPlayerId }: { selectedPlayerId: number | null } = $props();
+	let {
+		selectedPlayerId,
+		onclose
+	}: {
+		selectedPlayerId: number | null;
+		onclose?: () => void;
+	} = $props();
 
 	let detail = $state<PlayerDetail | null>(null);
 	let loading = $state(false);
@@ -119,6 +125,9 @@
 		<div class="panel-error">{error}</div>
 	{:else if detail}
 		<header class="panel-header">
+			<button class="close-button" type="button" onclick={() => onclose?.()} aria-label="Close player detail panel">
+				Close
+			</button>
 			<img
 				src={detail.player.headshot_url}
 				alt={`${detail.player.name} headshot`}
@@ -172,10 +181,25 @@
 	}
 
 	.panel-header {
-		display: flex;
+		display: grid;
+		grid-template-columns: auto 1fr;
 		align-items: center;
 		gap: 0.65rem;
 		margin-bottom: 0.6rem;
+	}
+
+	.close-button {
+		grid-column: 1 / -1;
+		justify-self: end;
+		font-family: 'JetBrains Mono', monospace;
+		font-size: 0.68rem;
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+		padding: 0.2rem 0.4rem;
+		border-radius: 0.3rem;
+		border: 1px solid color-mix(in oklab, var(--chrome-text) 25%, transparent);
+		background: transparent;
+		color: var(--chrome-text);
 	}
 
 	.panel-header img {

@@ -1,0 +1,200 @@
+# Packet P7-02 — Accessibility Pass GREEN
+
+## 1. Plan
+
+### Assumptions
+1.  **Framework**: Svelte 4+ (standard component lifecycle).
+2.  **Styling**: CSS classes are present but may lack semantic hooks. We will add `role` and `tabindex` attributes directly to elements where CSS classes alone are insufficient for screen readers.
+3.  **State Management**: A global or parent-level store/event bus exists for the "Player Detail Panel" state. We will assume a simple event-based or store-based approach for closing the panel.
+4.  **Existing Code**: There are existing `Row` components and a `PlayerDetailPanel` component that currently lack proper keyboard interaction or ARIA labels.
+
+### Risks & Failure Modes
+1.  **Focus Trap**: If the Player Detail Panel opens, focus must move into it. If it closes, focus must return to the trigger element. *Mitigation*: Implement basic focus management logic in the panel component.
+2.  **Double Activation**: `click` and `Enter`/`Space` might trigger duplicate actions if not handled carefully. *Mitigation*: Use a single handler bound to both events, or rely on native `<button>` semantics where possible.
+3.  **Svelte-Check False Positives**: Removing warnings requires ensuring that `aria-*` attributes are correctly typed and used. *Mitigation*: Explicitly add `role`, `aria-label`, and `aria-expanded` where needed.
+4.  **Event Propagation**: `keydown` events on rows might bubble up unexpectedly. *Mitigation*: Use `on:keydown` with specific key checks.
+
+### Implementation Strategy
+1.  **Row Component (`src/lib/components/Row.svelte`)**:
+    *   Convert the interactive wrapper to a `<button>` or add `role="button"` and `tabindex="0"`.
+    *   Add `on:keydown` handler for `Enter` and `Space`.
+    *   Add `aria-label` based on props.
+2.  **Player Detail Panel (`src/lib/components/PlayerDetailPanel.svelte`)**:
+    *   Add `role="dialog"` and `aria-modal="true"`.
+    *   Add `on:keydown` listener for `Escape` to close the panel.
+    *   Ensure focus is managed (move to panel on open, return on close).
+3.  **Announcements**:
+    *   Use a live region (`aria-live="polite"`) to announce row selections or panel openings if not handled by native UI semantics.
+
+---
+
+## 2. Exact File Edits
+
+### File: `src/lib/components/Row.svelte`
+
+```diff
+--- a/src/lib/components/Row.svelte
++++ b/src/lib/components/Row.svelte
+@@ -1,10 +1,15 @@
+ <script>
+-  export let onClick;
+-  export let label;
++  export let onClick;
++  export let label;
++  export let ariaLabel;
++
++  function handleKeyDown(event) {
++    if (event.key === 'Enter' || event.key === ' ') {
++      event.preventDefault();
++      onClick();
++    }
++  }
+ </script>
+ 
+-<div class="row" on:click={onClick}>
+-  <span>{label}</span>
++<button
++  class="row"
++  role="button"
++  tabindex="0"
++  aria-label={ariaLabel || label}
++  on:click={onClick}
++  on:keydown={handleKeyDown}
++>
++  <span>{label}</span>
+ </button>
+```
+
+### File: `src/lib/components/PlayerDetailPanel.svelte`
+
+```diff
+--- a/src/lib/components/PlayerDetailPanel.svelte
++++ b/src/lib/components/PlayerDetailPanel.svelte
+@@ -1,15 +1,35 @@
+ <script>
+-  export let isOpen = false;
+-  export let player;
+-  export let onClose;
++  import { createEventDispatcher } from 'svelte';
++  import { tick } from 'svelte';
++
++  export let isOpen = false;
++  export let player;
++  export let onClose;
++  const dispatch = createEventDispatcher();
++
++  let panelRef;
++  let previousFocusElement;
++
++  function handleKeyDown(event) {
++    if (event.key === 'Escape') {
++      closePanel();
++    }
++  }
++
++  function closePanel() {
++    onClose();
++    // Return focus to the trigger element after close
++    if (previousFocusElement) {
++      previousFocusElement.focus();
++    }
++  }
++
++  $: if (isOpen) {
++    previousFocusElement = document.activeElement;
++    tick().then(() => {
++      if (panelRef) {
++        panelRef.focus();
++      }
++    });
++  }
+ </script>
+ 
+-{#if isOpen}
+-  <div class="panel-overlay" on:click={onClose}>
+-    <div class="panel-content">
+-      <h2>{player.name}</h2>
+-      <p>{player.stats}</p>
+-      <button on:click={onClose}>Close</button>
+-    </div>
+-  </div>
+-{/if}
++{#if isOpen}
++  <div class="panel-overlay" on:click={onClose} on:keydown={handleKeyDown}>
++    <div 
++      class="panel-content" 
++      role="dialog" 
++      aria-modal="true" 
++      aria-label="Player Details"
++      bind:this={panelRef}
++      tabindex="-1"
++    >
++      <h2>{player.name}</h2>
++      <p>{player.stats}</p>
++      <button on:click={closePanel}>Close</button>
++    </div>
++  </div>
++{/if}
+```
+
+### File: `src/lib/components/Row.svelte` (Updated for ARIA Live Region if needed)
+
+*Note: If the Row component is part of a list that updates dynamically, we might need a live region. However, for simple selection, the button semantics are usually sufficient. We will assume the above changes are sufficient for the "row/flap accessibility labels" requirement.*
+
+### File: `src/routes/index.svelte` (Example Usage Update)
+
+```diff
+--- a/src/routes/index.svelte
++++ b/src/routes/index.svelte
+@@ -1,5 +1,5 @@
+ <script>
+-  import Row from '$lib/components/Row.svelte';
++  import Row from '$lib/components/Row.svelte';
+   import PlayerDetailPanel from '$lib/components/PlayerDetailPanel.svelte';
+ 
+   let selectedPlayer = null;
+@@ -10,7 +10,7 @@
+       <h1>Player List</h1>
+       {#each players as player}
+-        <Row label={player.name} on:click={() => selectedPlayer = player} />
++        <Row label={player.name} ariaLabel={`Select ${player.name}`} on:click={() => selectedPlayer = player} />
+       {/each}
+ 
+       <PlayerDetailPanel 
+         isOpen={!!selectedPlayer} 
+         player={selectedPlayer} 
+         onClose={() => selectedPlayer = null} 
+       />
+```
+
+---
+
+## 3. Verification Commands
+
+1.  **Run Svelte-Check to verify no new accessibility warnings**:
+    ```bash
+    pnpm --filter web check
+    ```
+    *Expected*: No new `a11y` warnings in the touched components. Existing warnings should be resolved.
+
+2.  **Run Unit Tests**:
+    ```bash
+    pnpm --filter web test
+    ```
+    *Expected*: All tests pass, including any new tests for keyboard interaction.
+
+3.  **Manual Keyboard Test**:
+    - Navigate to the player list using `Tab`.
+    - Verify that each row is focusable and highlighted.
+    - Press `Enter` or `Space` on a row.
+    - Verify that the Player Detail Panel opens.
+    - Verify that focus is moved into the panel (e.g., to the close button or first interactive element).
+    - Press `Escape`.
+    - Verify that the panel closes and focus returns to the previously focused row.
+
+4.  **Screen Reader Test**:
+    - Use NVDA (Windows) or VoiceOver (Mac).
+    - Navigate to the player list.
+    - Verify that each row is announced as a "button" with the correct label.
+    - Open the panel and verify it is announced as a "dialog".
+    - Close the panel and verify focus return.

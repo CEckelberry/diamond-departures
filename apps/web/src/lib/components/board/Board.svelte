@@ -80,7 +80,7 @@
 		<span>POS</span>
 		<span>STAT</span>
 	</div>
-	<div class="board-body" role="rowgroup">
+	<div class="board-body" role="rowgroup" aria-live="polite">
 		{#each placeholderRows as row, index (row.playerId)}
 			<div
 				class="row-shell"
@@ -145,8 +145,11 @@
 
 	@media (max-width: 920px) {
 		.board-header-row {
-			grid-template-columns: 2.8rem 15rem 4.2rem 4.2rem 6.2rem;
-			gap: 0.35rem;
+			display: none;
+		}
+
+		.board-body {
+			gap: 0.45rem;
 		}
 	}
 </style>

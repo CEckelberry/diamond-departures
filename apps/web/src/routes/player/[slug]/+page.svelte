@@ -4,6 +4,7 @@
 	import StatPicker from '$lib/components/board/StatPicker.svelte';
 	import Board from '$lib/components/board/Board.svelte';
 	import Panel from '$lib/components/player/Panel.svelte';
+	import SEO from '$lib/components/shell/SEO.svelte';
 	import { boardRows as boardRowsStore, seedBoard } from '$lib/stores/board';
 
 	type BoardEntryPayload = {
@@ -44,7 +45,17 @@
 	function handleSelectPlayer(playerId: number) {
 		selectedPlayerId = playerId;
 	}
+
+	function closePanel() {
+		selectedPlayerId = null;
+	}
 </script>
+
+<SEO
+	title="Diamond Departures · Player Detail"
+	description="Single-player departure board view with trend panel and live row updates."
+	path="/player"
+/>
 
 <section class="board-screen">
 	<Header />
@@ -55,7 +66,7 @@
 
 	<div class="board-layout">
 		<Board rows={boardRows} onselect={handleSelectPlayer} />
-		<Panel {selectedPlayerId} />
+		<Panel {selectedPlayerId} onclose={closePanel} />
 	</div>
 
 	<a class="back-link" href="/">Close panel</a>

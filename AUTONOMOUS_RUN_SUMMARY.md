@@ -201,6 +201,30 @@ Branch: `main`
 - Added perf script contract file `apps/web/tests/perf-busy-ingest.spec.ts`.
 - Verification: `node --test apps/web/tests/performance-pass.test.mjs`, full web node suite, and `pnpm --filter web check` (PASS, warning-only).
 
+### P7-02 (RED → GREEN completed)
+
+- Added RED accessibility contracts for keyboard row activation, polite live updates, and Escape-to-close behavior.
+- Updated row interaction semantics (`tabindex`, keyboard handler, aria labels) and board/panel close wiring.
+- Verification: `node --test apps/web/tests/accessibility-pass.test.mjs` and `pnpm --filter web check` (PASS, warning-only).
+
+### P7-03 (RED → GREEN completed)
+
+- Added RED mobile contracts for 375px behavior, tap target sizing, and no-horizontal-scroll constraints.
+- Implemented mobile card-style row layout, hidden desktop header row on mobile, and global overflow guard.
+- Verification: `node --test apps/web/tests/mobile-experience.test.mjs` and full web node suite (PASS).
+
+### P7-04 (RED → GREEN completed)
+
+- Added RED SEO/OG contracts and implemented reusable SEO head component.
+- Added `robots.txt`, `sitemap.xml`, and dynamic top-3 OG SVG endpoint.
+- Verification: `node --test apps/web/tests/seo-og.test.mjs` (PASS).
+
+### P7-05 (RED → GREEN completed)
+
+- Added RED methodology route contracts and implemented `/methodology` page content.
+- Added links to DATA/STATS docs and project GitHub; verified footer methodology link.
+- Verification: `node --test apps/web/tests/methodology-page.test.mjs` (PASS).
+
 ## Additional verification
 
 - `node --test apps/web/tests/board-structure.test.mjs apps/web/tests/board-rest-load.test.mjs apps/web/tests/board-sse-wiring.test.mjs apps/web/tests/board-reshuffle-animation.test.mjs` (PASS, 10 tests)

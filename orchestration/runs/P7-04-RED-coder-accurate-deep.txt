@@ -1,0 +1,169 @@
+# Packet P7-04-RED — SEO + Open Graph tests first
+
+## 1. Plan
+
+### Assumptions
+*   **Framework**: Jest (standard for Node.js/TypeScript stacks).
+*   **Testing Strategy**: Contract testing against the HTTP layer (simulated requests via `supertest` or direct handler invocation) rather than unit testing internal functions. This ensures the *wiring* is correct.
+*   **Tech Stack**: Express.js (or compatible Koa/Fastify structure) with a standard `app.get` routing pattern.
+*   **Environment**: Tests run in a controlled environment where `process.env` variables for OG images can be mocked.
+
+### Risks & Failure Modes
+1.  **False Positives**: If the test suite doesn't strictly assert headers (e.g., `og:image` content type or size), it might pass even if the image is broken. *Mitigation*: Assert specific header values and status codes.
+2.  **Hardcoded URLs**: OG images often require absolute URLs. If the test environment doesn't provide a base URL, assertions will fail. *Mitigation*: Use a configurable `BASE_URL` or mock the request host.
+3.  **Race Conditions**: If metadata generation is async and not properly awaited in the route handler, tests might read stale data. *Mitigation*: Ensure handlers are `async` and `await`ed.
+4.  **Sitemap/Robots Static vs Dynamic**: If these are served as static files, tests must check file existence. If dynamic, they must check response content. *Assumption*: We treat them as dynamic routes for flexibility, but the test covers both by checking content structure.
+
+### Implementation Plan
+1.  Create `tests/seo-contract.test.js`.
+2.  Implement test suite for `/` (Home) and a sample dynamic route `/product/:id` to verify per-route metadata injection.
+3.  Implement test suite for `/og-image.png` (or similar) to verify the OG image generation endpoint.
+4.  Implement test suite for `/robots.txt` and `/sitemap.xml` to verify content-type and structure.
+5.  **Goal**: All tests must fail initially because the routes/handlers do not exist or return empty/incorrect responses.
+
+## 2. Exact File Edits
+
+### File: `tests/seo-contract.test.js` (New)
+
+```javascript
+/**
+ * P7-04-RED: SEO + Open Graph Contract Tests
+ * 
+ * These tests verify that the application correctly serves metadata,
+ * OG images, robots.txt, and sitemap.xml according to standard contracts.
+ * 
+ * FAILING STATE EXPECTATION:
+ * - 404s for non-existent routes.
+ * - Missing headers for existing routes.
+ * - Incorrect content types.
+ */
+
+const request = require('supertest'); // Assumes supertest is available
+const app = require('../app'); // Assumes main app export
+
+// Mock environment variables for OG image generation
+const ORIGINAL_BASE_URL = process.env.BASE_URL;
+const MOCK_BASE_URL = 'http://localhost:3000';
+
+describe('SEO & Open Graph Contract Tests', () => {
+  beforeAll(() => {
+    process.env.BASE_URL = MOCK_BASE_URL;
+  });
+
+  afterAll(() => {
+    process.env.BASE_URL = ORIGINAL_BASE_URL;
+  });
+
+  describe('Per-Route Metadata', () => {
+    it('should return correct title and description for the home page', async () => {
+      const res = await request(app).get('/');
+      
+      // Contract: Home page must have specific meta tags
+      expect(res.status).toBe(200);
+      expect(res.text).toContain('<title>My Awesome App - Home</title>');
+      expect(res.text).toContain('<meta name="description" content="The best app for doing things." />');
+      
+      // Contract: OG Tags must be present
+      expect(res.text).toContain('<meta property="og:title" content="My Awesome App - Home" />');
+      expect(res.text).toContain('<meta property="og:description" content="The best app for doing things." />');
+      expect(res.text).toContain('<meta property="og:type" content="website" />');
+    });
+
+    it('should return dynamic title and description for product routes', async () => {
+      // Test with a sample ID
+      const productId = '12345';
+      const res = await request(app).get(`/product/${productId}`);
+      
+      expect(res.status).toBe(200);
+      // Contract: Title should include product name and site name
+      expect(res.text).toContain('<title>Super Widget - My Awesome App</title>');
+      expect(res.text).toContain('<meta property="og:title" content="Super Widget - My Awesome App" />');
+      
+      // Contract: OG Image must be set for products
+      expect(res.text).toContain(`<meta property="og:image" content="${MOCK_BASE_URL}/api/og/product/${productId}" />`);
+    });
+
+    it('should return 404 for non-existent product with proper meta', async () => {
+      const res = await request(app).get('/product/nonexistent');
+      
+      // Even on 404, we should serve a template with generic SEO tags
+      expect(res.status).toBe(404);
+      expect(res.text).toContain('<title>Page Not Found - My Awesome App</title>');
+      expect(res.text).toContain('<meta property="og:title" content="Page Not Found - My Awesome App" />');
+    });
+  });
+
+  describe('Open Graph Image Route', () => {
+    it('should generate and serve an OG image for a valid product ID', async () => {
+      const productId = '12345';
+      const res = await request(app).get(`/api/og/product/${productId}`);
+      
+      // Contract: Must return an image content type
+      expect(res.status).toBe(200);
+      expect(res.headers['content-type']).toMatch(/image\/(png|jpeg|webp)/i);
+      
+      // Contract: Image must not be empty
+      expect(res.body.length).toBeGreaterThan(0);
+    });
+
+    it('should return 400 for missing product ID in OG image route', async () => {
+      const res = await request(app).get('/api/og/product/');
+      
+      expect(res.status).toBe(400);
+      expect(res.text).toContain('Product ID is required');
+    });
+  });
+
+  describe('Robots.txt', () => {
+    it('should serve a valid robots.txt file', async () => {
+      const res = await request(app).get('/robots.txt');
+      
+      expect(res.status).toBe(200);
+      expect(res.headers['content-type']).toContain('text/plain');
+      
+      // Contract: Must allow crawling of main content
+      expect(res.text).toContain('User-agent: *');
+      expect(res.text).toContain('Disallow: /admin/');
+      expect(res.text).toContain('Sitemap: http://localhost:3000/sitemap.xml');
+    });
+  });
+
+  describe('Sitemap', () => {
+    it('should serve a valid sitemap.xml file', async () => {
+      const res = await request(app).get('/sitemap.xml');
+      
+      expect(res.status).toBe(200);
+      expect(res.headers['content-type']).toContain('application/xml');
+      
+      // Contract: Must contain XML declaration and urlset tag
+      expect(res.text).toContain('<?xml version="1.0" encoding="UTF-8"?>');
+      expect(res.text).toContain('<urlset');
+      
+      // Contract: Must include home page and sample product
+      expect(res.text).toContain('<loc>http://localhost:3000/</loc>');
+      expect(res.text).toContain('<loc>http://localhost:3000/product/12345</loc>');
+    });
+  });
+});
+```
+
+## 3. Verification Commands
+
+To verify that the tests are correctly set up to **fail** (RED state), run the following commands in your project root:
+
+```bash
+# Install dependencies if not already present
+npm install --save-dev supertest jest
+
+# Run the specific test file
+npx jest tests/seo-contract.test.js --verbose
+
+# Expected Output:
+# All tests should FAIL.
+# - Home page test fails because <title>My Awesome App - Home</title> is missing or route returns 404.
+# - Product route test fails because dynamic metadata is not injected.
+# - OG Image test fails because /api/og/product/:id does not exist or returns wrong content-type.
+# - Robots/Sitemap tests fail because routes do not exist or return wrong content-types.
+```
+
+**Note**: If any test passes, it indicates that the implementation already exists (or the test is too loose). Adjust the assertions to be stricter if necessary before proceeding to the GREEN phase.

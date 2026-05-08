@@ -618,10 +618,65 @@ packets:
     title: accessibility pass
     source_task: "Task 7.2"
     owner: local-coder
-    status: todo
+    status: done
+    files:
+      - apps/web/src/lib/components/board/Row.svelte
+      - apps/web/src/lib/components/board/Board.svelte
+      - apps/web/src/routes/+page.svelte
+      - apps/web/src/lib/components/player/Panel.svelte
+      - apps/web/tests/accessibility-pass.test.mjs
+    verify:
+      - "node --test apps/web/tests/accessibility-pass.test.mjs"
+      - "pnpm --filter web check"
 
   - id: P7-03
     title: mobile experience
     source_task: "Task 7.3"
+    owner: local-coder
+    status: done
+    files:
+      - apps/web/src/lib/components/board/Row.svelte
+      - apps/web/src/lib/components/board/Board.svelte
+      - apps/web/src/app.css
+      - apps/web/tests/mobile-experience.test.mjs
+    verify:
+      - "node --test apps/web/tests/mobile-experience.test.mjs"
+      - "node --test apps/web/tests/*.test.mjs"
+
+  - id: P7-04
+    title: SEO + Open Graph
+    source_task: "Task 7.4"
+    owner: local-coder
+    status: done
+    files:
+      - apps/web/src/lib/components/shell/SEO.svelte
+      - apps/web/src/routes/robots.txt/+server.ts
+      - apps/web/src/routes/sitemap.xml/+server.ts
+      - apps/web/src/routes/og/top3.svg/+server.ts
+      - apps/web/tests/seo-og.test.mjs
+    verify:
+      - "node --test apps/web/tests/seo-og.test.mjs"
+
+  - id: P7-05
+    title: methodology page
+    source_task: "Task 7.5"
+    owner: local-coder
+    status: done
+    files:
+      - apps/web/src/routes/methodology/+page.svelte
+      - apps/web/src/lib/components/shell/Footer.svelte
+      - apps/web/tests/methodology-page.test.mjs
+    verify:
+      - "node --test apps/web/tests/methodology-page.test.mjs"
+
+  - id: P7-06
+    title: write the case study
+    source_task: "Task 7.6"
+    owner: local-coder
+    status: todo
+
+  - id: P7-07
+    title: launch checklist
+    source_task: "Task 7.7"
     owner: local-coder
     status: todo

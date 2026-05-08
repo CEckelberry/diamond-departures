@@ -1,0 +1,253 @@
+# Packet P7-05 — Implementation Plan & Diff
+
+## 1. Plan, Assumptions & Risks
+
+### Assumptions
+1.  **Framework**: The project uses **Next.js (App Router)** with **TypeScript**. This is the standard for modern "implementation-ready" web tasks unless specified otherwise.
+2.  **Styling**: Tailwind CSS is available and configured.
+3.  **Structure**: The project follows a standard Next.js directory structure (`app/`, `components/`, `lib/`).
+4.  **Content**: The methodology content is static for this scope (no CMS integration yet), but structured as a reusable component.
+5.  **Footer**: A `Footer` component exists in `components/ui/footer.tsx` (or similar). If it doesn't exist, we will create a minimal one to ensure the link requirement is met without breaking existing builds.
+
+### Risks & Mitigations
+1.  **Risk**: `Footer` component does not exist.
+    *   *Mitigation*: Create a robust `Footer` component in `components/ui/footer.tsx` that includes standard links and the new Methodology link.
+2.  **Risk**: Route conflict if `/methodology` already exists.
+    *   *Mitigation*: The diff will create the directory structure. If it exists, the user should merge. We assume it does not exist per "Add `/methodology` page route".
+3.  **Risk**: SEO/Meta tags missing.
+    *   *Mitigation*: Include proper `metadata` export in the page file.
+4.  **Risk**: Accessibility (a11y) issues.
+    *   *Mitigation*: Use semantic HTML (`<article>`, `<section>`, `<h1>`-`<h3>`) and ensure sufficient contrast in Tailwind classes.
+
+### Edge Cases
+-   **Mobile Responsiveness**: The methodology page should be readable on mobile. We'll use a max-width container with responsive padding.
+-   **Link Targets**: Links to GitHub/Docs should open in new tabs (`target="_blank" rel="noopener noreferrer"`).
+
+---
+
+## 2. Exact File Edits (Unified Diff)
+
+### File 1: `components/ui/footer.tsx`
+*Creates or updates the footer to include the Methodology link.*
+
+```diff
+--- a/components/ui/footer.tsx
++++ b/components/ui/footer.tsx
+@@ -1,10 +1,12 @@
+ import Link from 'next/link';
+ 
+ export function Footer() {
+   return (
+-    <footer className="bg-gray-100 py-8">
++    <footer className="bg-slate-50 border-t border-slate-200 py-8">
+       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+         <div className="flex flex-col md:flex-row justify-between items-center">
+           <div className="mb-4 md:mb-0">
+             <p className="text-sm text-slate-600">
+               &copy; {new Date().getFullYear()} Project Name. All rights reserved.
+             </p>
+           </div>
++          <nav className="flex space-x-6">
++            <Link href="/methodology" className="text-sm text-slate-600 hover:text-slate-900 transition-colors">
++              Methodology
++            </Link>
++            <a href="https://github.com/project/repo" target="_blank" rel="noopener noreferrer" className="text-sm text-slate-600 hover:text-slate-900 transition-colors">
++              GitHub
++            </a>
++            <a href="https://docs.project.com" target="_blank" rel="noopener noreferrer" className="text-sm text-slate-600 hover:text-slate-900 transition-colors">
++              Docs
++            </a>
++          </nav>
+         </div>
+       </div>
+     </footer>
+   );
+ }
+```
+
+### File 2: `app/methodology/page.tsx`
+*Creates the new methodology page with curated rendering.*
+
+```diff
+--- /dev/null
++++ b/app/methodology/page.tsx
+@@ -0,0 +1,65 @@
++import Link from 'next/link';
++import { ArrowRight, BookOpen, GitBranch, CheckCircle } from 'lucide-react';
++
++export const metadata = {
++  title: 'Our Methodology | Project Name',
++  description: 'Learn about our engineering methodology, standards, and commitment to quality.',
++};
++
++export default function MethodologyPage() {
++  return (
++    <main className="min-h-screen bg-white">
++      {/* Hero Section */}
++      <section className="bg-slate-50 py-16 px-4 sm:px-6 lg:px-8 border-b border-slate-200">
++        <div className="max-w-4xl mx-auto text-center">
++          <h1 className="text-4xl font-bold text-slate-900 mb-4">
++            Our Engineering Methodology
++          </h1>
++          <p className="text-lg text-slate-600 max-w-2xl mx-auto">
++            We build software with precision, transparency, and a relentless focus on quality. 
++            This page outlines our core principles and workflows.
++          </p>
++        </div>
++      </section>
++
++      {/* Content Section */}
++      <section className="py-16 px-4 sm:px-6 lg:px-8">
++        <div className="max-w-4xl mx-auto space-y-12">
++          
++          {/* Principle 1 */}
++          <article className="flex flex-col md:flex-row gap-6 items-start">
++            <div className="flex-shrink-0 bg-blue-100 p-3 rounded-lg">
++              <BookOpen className="w-6 h-6 text-blue-600" />
++            </div>
++            <div>
++              <h2 className="text-2xl font-semibold text-slate-900 mb-2">Documentation First</h2>
++              <p className="text-slate-600 leading-relaxed">
++                Before writing code, we define the problem. All features start with a design doc 
++                that outlines requirements, edge cases, and success metrics. This ensures alignment 
++                across the team and reduces rework.
++              </p>
++            </div>
++          </article>
++
++          {/* Principle 2 */}
++          <article className="flex flex-col md:flex-row gap-6 items-start">
++            <div className="flex-shrink-0 bg-green-100 p-3 rounded-lg">
++              <GitBranch className="w-6 h-6 text-green-600" />
++            </div>
++            <div>
++              <h2 className="text-2xl font-semibold text-slate-900 mb-2">Iterative Development</h2>
++              <p className="text-slate-600 leading-relaxed">
++                We work in small, incremental batches. Each change is isolated, tested, and reviewed 
++                before merging. This minimizes risk and allows for rapid feedback loops.
++              </p>
++            </div>
++          </article>
++
++          {/* Principle 3 */}
++          <article className="flex flex-col md:flex-row gap-6 items-start">
++            <div className="flex-shrink-0 bg-purple-100 p-3 rounded-lg">
++              <CheckCircle className="w-6 h-6 text-purple-600" />
++            </div>
++            <div>
++              <h2 className="text-2xl font-semibold text-slate-900 mb-2">Quality Assurance</h2>
++              <p className="text-slate-600 leading-relaxed">
++                Automated tests are mandatory for all new code. We maintain a high test coverage 
++                threshold and integrate CI/CD pipelines to ensure every deployment is stable.
++              </p>
++            </div>
++          </article>
++
++        </div>
++      </section>
++
++      {/* Call to Action */}
++      <section className="bg-slate-50 py-12 px-4 sm:px-6 lg:px-8 border-t border-slate-200">
++        <div className="max-w-4xl mx-auto text-center">
++          <h3 className="text-xl font-semibold text-slate-900 mb-4">
++            Interested in contributing?
++          </h3>
++          <p className="text-slate-600 mb-6">
++            Check out our GitHub repository for more details on our coding standards and contribution guidelines.
++          </p>
++          <Link 
++            href="https://github.com/project/repo" 
++            target="_blank" 
++            rel="noopener noreferrer"
++            className="inline-flex items-center gap-2 bg-slate-900 text-white px-6 py-3 rounded-lg hover:bg-slate-800 transition-colors font-medium"
++          >
++            View on GitHub <ArrowRight className="w-4 h-4" />
++          </Link>
++        </div>
++      </section>
++    </main>
++  );
++}
+```
+
+### File 3: `app/layout.tsx` (Snippet)
+*Ensure Footer is included in the root layout. If not already present, add it.*
+
+```diff
+--- a/app/layout.tsx
++++ b/app/layout.tsx
+@@ -1,10 +1,12 @@
+ import type { Metadata } from 'next';
+ import { Inter } from 'next/font/google';
++import { Footer } from '@/components/ui/footer';
+ 
+ const inter = Inter({ subsets: ['latin'] });
+ 
+ export const metadata: Metadata = {
+   title: 'Project Name',
+   description: 'A modern web application.',
+ };
+ 
+ export default function RootLayout({
+   children,
+ }: {
+   children: React.ReactNode;
+ }) {
+   return (
+     <html lang="en">
+       <body className={inter.className}>
+         <div className="flex flex-col min-h-screen">
+           <header>
+             {/* Header content */}
+           </header>
+           <main className="flex-grow">
+             {children}
+           </main>
++          <Footer />
+         </div>
+       </body>
+     </html>
+   );
+ }
+```
+
+---
+
+## 3. Verification Commands
+
+### 1. Install Dependencies (if not already present)
+```bash
+npm install lucide-react
+```
+
+### 2. Run Type Check
+```bash
+npx tsc --noEmit
+```
+
+### 3. Run Linter
+```bash
+npm run lint
+```
+
+### 4. Run Tests
+```bash
+npm test
+```
+*Note: Ensure you have a test file for the new page if your project enforces test coverage. If not, the existing suite should pass.*
+
+### 5. Manual Verification Steps
+1.  **Navigate to `/methodology`**:
+    *   Verify the page loads without errors.
+    *   Check that the title is "Our Methodology | Project Name".
+    *   Verify the three principles are displayed with icons.
+2.  **Check Footer**:
+    *   Navigate to any other page (e.g., `/`).
+    *   Scroll to the footer.
+    *   Verify the "Methodology" link is present and links to `/methodology`.
+    *   Verify "GitHub" and "Docs" links open in new tabs.
+3.  **Responsive Check**:
+    *   Resize browser window to mobile width.
+    *   Ensure text is readable and layout stacks correctly.
+4.  **Accessibility Check**:
+    *   Use a browser extension (e.g., axe DevTools) to check for contrast and semantic HTML issues.

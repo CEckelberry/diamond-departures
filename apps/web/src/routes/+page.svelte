@@ -3,6 +3,7 @@
 	import { navigating, page } from '$app/stores';
 	import Header from '$lib/components/board/Header.svelte';
 	import ViewTabs from '$lib/components/board/ViewTabs.svelte';
+	import SEO from '$lib/components/shell/SEO.svelte';
 	import StatPicker from '$lib/components/board/StatPicker.svelte';
 	import Board from '$lib/components/board/Board.svelte';
 	import Panel from '$lib/components/player/Panel.svelte';
@@ -66,6 +67,10 @@
 		previewMode = !previewMode;
 	}
 
+	function closePanel() {
+		selectedPlayerId = null;
+	}
+
 	async function refreshSeasonMode() {
 		try {
 			const response = await fetch('/api/season-state');
@@ -82,9 +87,16 @@
 		const interval = window.setInterval(() => {
 			void refreshSeasonMode();
 		}, 30000);
+		const handleEscape = (event: KeyboardEvent) => {
+			if (event.key === 'Escape') {
+				selectedPlayerId = null;
+			}
+		};
+		window.addEventListener('keydown', handleEscape);
 		return () => {
 			stop();
 			window.clearInterval(interval);
+			window.removeEventListener('keydown', handleEscape);
 		};
 	});
 
@@ -116,6 +128,12 @@
 	});
 </script>
 
+<SEO
+	title="Diamond Departures · Live Board"
+	description="Track live fantasy baseball risers with streaming board updates and player trend details."
+	path="/"
+/>
+
 <section class="board-screen">
 	<Header previewRunning={previewMode} onTogglePreview={togglePreviewMode} />
 	{#if previewMode}
@@ -137,7 +155,7 @@
 		{:else}
 			<Board rows={filteredRows} onselect={handleSelectPlayer} />
 		{/if}
-		<Panel selectedPlayerId={selectedPlayerId} />
+		<Panel selectedPlayerId={selectedPlayerId} onclose={closePanel} />
 	</div>
 </section>
 
