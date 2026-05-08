@@ -8,6 +8,7 @@ def test_load_settings_defaults(monkeypatch):
     monkeypatch.delenv("PROVIDER_SOURCE", raising=False)
     monkeypatch.delenv("LIVE_SCANNER_MODE", raising=False)
     monkeypatch.delenv("SCANNER_CHECKPOINT_PATH", raising=False)
+    monkeypatch.delenv("RECONCILE_EVERY_N_SCANS", raising=False)
 
     settings = load_settings()
 
@@ -18,6 +19,7 @@ def test_load_settings_defaults(monkeypatch):
     assert settings.provider_source == "mlb_stats"
     assert settings.live_scanner_mode == "changes"
     assert settings.scanner_checkpoint_path == "orchestration/state/ingest-scanner-checkpoint.json"
+    assert settings.reconcile_every_n_scans == 10
 
 
 def test_load_settings_env_overrides(monkeypatch):
@@ -29,6 +31,7 @@ def test_load_settings_env_overrides(monkeypatch):
     monkeypatch.setenv("LIVE_SCANNER_MODE", "schedule")
     monkeypatch.setenv("GAME_CHANGES_LOOKBACK_SECONDS", "90")
     monkeypatch.setenv("SCANNER_CHECKPOINT_PATH", "tmp/checkpoint.json")
+    monkeypatch.setenv("RECONCILE_EVERY_N_SCANS", "3")
 
     settings = load_settings()
 
@@ -40,3 +43,4 @@ def test_load_settings_env_overrides(monkeypatch):
     assert settings.live_scanner_mode == "schedule"
     assert settings.game_changes_lookback_seconds == 90
     assert settings.scanner_checkpoint_path == "tmp/checkpoint.json"
+    assert settings.reconcile_every_n_scans == 3

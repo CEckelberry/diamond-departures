@@ -17,6 +17,7 @@ class IngestSettings:
     live_scanner_mode: str
     game_changes_lookback_seconds: int
     scanner_checkpoint_path: str
+    reconcile_every_n_scans: int
 
 
 def load_settings() -> IngestSettings:
@@ -35,4 +36,5 @@ def load_settings() -> IngestSettings:
             "SCANNER_CHECKPOINT_PATH",
             "orchestration/state/ingest-scanner-checkpoint.json",
         ),
+        reconcile_every_n_scans=max(1, int(os.getenv("RECONCILE_EVERY_N_SCANS", "10"))),
     )

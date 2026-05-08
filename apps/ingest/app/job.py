@@ -61,6 +61,8 @@ def run_once(
     changes_status: int | None = None
     error: str | None = None
     checkpoint_saved = False
+    scan_count = _safe_int(checkpoint.get('scan_count', 0), 0) + 1
+    reconcile_triggered = False
 
     if settings.live_scanner_mode.lower() == 'changes':
         since = (
@@ -75,6 +77,10 @@ def run_once(
             changed_game_ids = extract_changed_game_ids(changes.payload)
             live_lookup = set(live_game_ids)
             games_to_scan = [game_pk for game_pk in changed_game_ids if game_pk in live_lookup]
+
+            reconcile_triggered = scan_count % settings.reconcile_every_n_scans == 0
+            if reconcile_triggered:
+                games_to_scan = list(live_game_ids)
         except RuntimeError as cause:
             error = str(cause)
             save_checkpoint(
@@ -84,6 +90,7 @@ def run_once(
                     'last_success_at': checkpoint.get('last_success_at'),
                     'consecutive_failures': _safe_int(checkpoint.get('consecutive_failures', 0), 0)
                     + 1,
+                    'scan_count': scan_count,
                 },
             )
             checkpoint_saved = True
@@ -104,6 +111,9 @@ def run_once(
                 'changed_games_count': 0,
                 'feed_failures_count': 0,
                 'checkpoint_saved': checkpoint_saved,
+                'scanner_scan_count': scan_count,
+                'reconcile_triggered': False,
+                'reconcile_games_count': 0,
                 'delta_payload': build_delta_payload([], player_positions={}),
                 'error': error,
             }
@@ -129,6 +139,7 @@ def run_once(
                 'updated_since': now_iso,
                 'last_success_at': now_iso,
                 'consecutive_failures': 0,
+                'scan_count': scan_count,
             },
         )
         checkpoint_saved = True
@@ -152,6 +163,9 @@ def run_once(
         'changed_games_count': len(changed_game_ids),
         'feed_failures_count': feed_failures_count,
         'checkpoint_saved': checkpoint_saved,
+        'scanner_scan_count': scan_count,
+        'reconcile_triggered': reconcile_triggered,
+        'reconcile_games_count': len(games_to_scan) if reconcile_triggered else 0,
         'delta_payload': delta_payload,
         'error': error,
     }

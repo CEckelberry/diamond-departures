@@ -191,6 +191,11 @@ Repo: `/home/roger/Documents/coding/cole-portfolio-apps/diamond-departures`
   - Wired job output to emit `delta_payload` with `changed_player_ids` + `affected_views` in success/degraded paths.
   - Verification artifact: `orchestration/runs/P-LIVE-03-verify.md`.
 
+- **P-LIVE-04 (Live data source hardening) — completed**
+  - Added periodic reconciliation cadence in changes-mode scanning via `RECONCILE_EVERY_N_SCANS`.
+  - Added checkpoint `scan_count` persistence and telemetry fields (`scanner_scan_count`, `reconcile_triggered`, `reconcile_games_count`).
+  - Verification artifact: `orchestration/runs/P-LIVE-04-verify.md`.
+
 ## TDD evidence
 
 - P4-05 RED: board REST load tests failed (`+page.ts` missing, no data-driven board wiring).
@@ -210,6 +215,7 @@ Repo: `/home/roger/Documents/coding/cole-portfolio-apps/diamond-departures`
 - P-LIVE-01 RED: provider/scanner tests failed before provider abstraction + game-change flow were implemented.
 - P-LIVE-02 RED: checkpoint/reliability tests failed before cursor persistence + failure accounting were implemented.
 - P-LIVE-03 RED: delta payload tests failed before changed-player/affected-view output wiring was implemented.
+- P-LIVE-04 RED: reconciliation cadence tests failed before scan-count persistence and periodic full-sweep behavior were implemented.
 - GREEN: all new packet suites pass after implementation.
 
 ## Validation commands run

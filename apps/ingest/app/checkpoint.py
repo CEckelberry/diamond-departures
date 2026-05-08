@@ -18,6 +18,7 @@ def load_checkpoint(path: str) -> dict[str, object]:
             "updated_since": None,
             "last_success_at": None,
             "consecutive_failures": 0,
+            "scan_count": 0,
         }
 
     payload = json.loads(target.read_text(encoding="utf-8"))
@@ -25,6 +26,7 @@ def load_checkpoint(path: str) -> dict[str, object]:
         "updated_since": payload.get("updated_since"),
         "last_success_at": payload.get("last_success_at"),
         "consecutive_failures": _to_int(payload.get("consecutive_failures", 0), 0),
+        "scan_count": _to_int(payload.get("scan_count", 0), 0),
     }
 
 
@@ -36,6 +38,7 @@ def save_checkpoint(path: str, payload: dict[str, object]) -> None:
         "updated_since": payload.get("updated_since"),
         "last_success_at": payload.get("last_success_at"),
         "consecutive_failures": _to_int(payload.get("consecutive_failures", 0), 0),
+        "scan_count": _to_int(payload.get("scan_count", 0), 0),
     }
 
     tmp = target.with_suffix(target.suffix + ".tmp")

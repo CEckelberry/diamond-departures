@@ -11,6 +11,7 @@ def test_load_checkpoint_defaults_when_missing(tmp_path):
     assert checkpoint['updated_since'] is None
     assert checkpoint['last_success_at'] is None
     assert checkpoint['consecutive_failures'] == 0
+    assert checkpoint['scan_count'] == 0
 
 
 def test_save_and_load_checkpoint_roundtrip(tmp_path):
@@ -19,6 +20,7 @@ def test_save_and_load_checkpoint_roundtrip(tmp_path):
         'updated_since': '2026-05-08T11:00:00Z',
         'last_success_at': '2026-05-08T11:00:10Z',
         'consecutive_failures': 2,
+        'scan_count': 7,
     }
 
     save_checkpoint(str(path), payload)
@@ -32,14 +34,25 @@ def test_save_checkpoint_atomic_overwrite(tmp_path):
 
     save_checkpoint(
         str(path),
-        {'updated_since': '2026-05-08T11:00:00Z', 'last_success_at': None, 'consecutive_failures': 0},
+        {
+            'updated_since': '2026-05-08T11:00:00Z',
+            'last_success_at': None,
+            'consecutive_failures': 0,
+            'scan_count': 1,
+        },
     )
     save_checkpoint(
         str(path),
-        {'updated_since': '2026-05-08T11:00:30Z', 'last_success_at': '2026-05-08T11:00:31Z', 'consecutive_failures': 1},
+        {
+            'updated_since': '2026-05-08T11:00:30Z',
+            'last_success_at': '2026-05-08T11:00:31Z',
+            'consecutive_failures': 1,
+            'scan_count': 2,
+        },
     )
 
     loaded = json.loads(path.read_text(encoding='utf-8'))
     assert loaded['updated_since'] == '2026-05-08T11:00:30Z'
     assert loaded['last_success_at'] == '2026-05-08T11:00:31Z'
     assert loaded['consecutive_failures'] == 1
+    assert loaded['scan_count'] == 2

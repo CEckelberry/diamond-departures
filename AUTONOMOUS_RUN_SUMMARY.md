@@ -243,6 +243,13 @@ Branch: `main`
 - Implemented `apps/ingest/app/live_delta.py` and wired `delta_payload` emission in `apps/ingest/app/job.py` for success/degraded paths.
 - Verification: `.venv/bin/pytest apps/ingest/tests -q` and `node --test apps/web/tests/*.test.mjs` (PASS).
 
+### P-LIVE-04 (RED → GREEN completed)
+
+- Added RED tests for reconciliation cadence and scan-count telemetry.
+- Implemented periodic full-live reconciliation sweeps in changes mode (`RECONCILE_EVERY_N_SCANS`) and persisted `scan_count` in checkpoint state.
+- Added run telemetry fields: `scanner_scan_count`, `reconcile_triggered`, `reconcile_games_count`.
+- Verification: `.venv/bin/pytest apps/ingest/tests -q` and `node --test apps/web/tests/*.test.mjs` (PASS).
+
 ## Additional verification
 
 - `node --test apps/web/tests/board-structure.test.mjs apps/web/tests/board-rest-load.test.mjs apps/web/tests/board-sse-wiring.test.mjs apps/web/tests/board-reshuffle-animation.test.mjs` (PASS, 10 tests)
