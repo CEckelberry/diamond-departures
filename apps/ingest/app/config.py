@@ -13,6 +13,9 @@ class IngestSettings:
     request_timeout_seconds: int
     max_http_retries: int
     retry_backoff_seconds: float
+    provider_source: str
+    live_scanner_mode: str
+    game_changes_lookback_seconds: int
 
 
 def load_settings() -> IngestSettings:
@@ -24,4 +27,7 @@ def load_settings() -> IngestSettings:
         request_timeout_seconds=int(os.getenv("REQUEST_TIMEOUT_SECONDS", "10")),
         max_http_retries=int(os.getenv("MAX_HTTP_RETRIES", "3")),
         retry_backoff_seconds=float(os.getenv("RETRY_BACKOFF_SECONDS", "1.0")),
+        provider_source=os.getenv("PROVIDER_SOURCE", "mlb_stats"),
+        live_scanner_mode=os.getenv("LIVE_SCANNER_MODE", "changes"),
+        game_changes_lookback_seconds=int(os.getenv("GAME_CHANGES_LOOKBACK_SECONDS", "30")),
     )
