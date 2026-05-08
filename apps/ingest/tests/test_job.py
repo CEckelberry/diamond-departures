@@ -109,6 +109,9 @@ def _settings(
         game_changes_lookback_seconds=30,
         scanner_checkpoint_path=checkpoint_path,
         reconcile_every_n_scans=reconcile_every_n_scans,
+        scan_interval_live_seconds=15,
+        scan_interval_idle_seconds=60,
+        scanner_report_path='orchestration/state/ingest-scanner-report.json',
     )
 
 

@@ -18,6 +18,9 @@ class IngestSettings:
     game_changes_lookback_seconds: int
     scanner_checkpoint_path: str
     reconcile_every_n_scans: int
+    scan_interval_live_seconds: int
+    scan_interval_idle_seconds: int
+    scanner_report_path: str
 
 
 def load_settings() -> IngestSettings:
@@ -37,4 +40,10 @@ def load_settings() -> IngestSettings:
             "orchestration/state/ingest-scanner-checkpoint.json",
         ),
         reconcile_every_n_scans=max(1, int(os.getenv("RECONCILE_EVERY_N_SCANS", "10"))),
+        scan_interval_live_seconds=max(1, int(os.getenv("SCAN_INTERVAL_LIVE_SECONDS", "15"))),
+        scan_interval_idle_seconds=max(1, int(os.getenv("SCAN_INTERVAL_IDLE_SECONDS", "60"))),
+        scanner_report_path=os.getenv(
+            "SCANNER_REPORT_PATH",
+            "orchestration/state/ingest-scanner-report.json",
+        ),
     )

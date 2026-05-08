@@ -250,6 +250,13 @@ Branch: `main`
 - Added run telemetry fields: `scanner_scan_count`, `reconcile_triggered`, `reconcile_games_count`.
 - Verification: `.venv/bin/pytest apps/ingest/tests -q` and `node --test apps/web/tests/*.test.mjs` (PASS).
 
+### P-LIVE-05 (RED → GREEN completed)
+
+- Added RED tests for a continuous scanner loop and per-iteration report artifact.
+- Implemented `apps/ingest/app/runner.py` with live/idle cadence control and atomic report writes.
+- Added config/env knobs: `SCAN_INTERVAL_LIVE_SECONDS`, `SCAN_INTERVAL_IDLE_SECONDS`, `SCANNER_REPORT_PATH`.
+- Verification: `.venv/bin/pytest apps/ingest/tests -q` and `node --test apps/web/tests/*.test.mjs` (PASS).
+
 ## Additional verification
 
 - `node --test apps/web/tests/board-structure.test.mjs apps/web/tests/board-rest-load.test.mjs apps/web/tests/board-sse-wiring.test.mjs apps/web/tests/board-reshuffle-animation.test.mjs` (PASS, 10 tests)

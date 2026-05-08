@@ -1,0 +1,333 @@
+# Implementation Plan for Packet P-LIVE-05
+
+## 1. Plan with Assumptions & Risks
+
+### Assumptions
+- Existing scanner module exposes `scan()` method returning list of items
+- Project uses Python 3.8+ with standard logging
+- Environment variables control cadence (e.g., `SCANNER_LOOP_INTERVAL=30`)
+- JSON serialization is acceptable for ops reporting
+- No external dependencies beyond standard library
+
+### Risks
+- **Risk 1**: Scanner `scan()` method may block indefinitely → Add timeout and retry logic
+- **Risk 2**: JSON report may grow unbounded → Add size limit and rotation
+- **Risk 3**: Loop may consume excessive CPU → Add configurable sleep between iterations
+- **Risk 4**: Graceful shutdown on SIGINT/SIGTERM → Add signal handlers
+
+### Edge Cases
+- Scanner returns empty list → Still log report with empty array
+- Network failure → Retry with exponential backoff
+- Invalid JSON output → Log error and continue
+- Negative or zero interval → Default to 30 seconds
+
+## 2. Exact File Edits (Unified Diff)
+
+### File: `src/scanner/loop.py`
+```python
+<<<<<<< SEARCH
+# Add new file
+=======
+import json
+import logging
+import os
+import signal
+import sys
+import time
+from typing import List, Optional
+
+import requests
+from tenacity import retry, stop_after_attempt, wait_exponential
+
+from .scanner import scan
+
+logger = logging.getLogger(__name__)
+
+DEFAULT_INTERVAL = 30  # seconds
+REPORT_FILE = os.getenv("SCANNER_REPORT_FILE", "/tmp/scanner_report.json")
+MAX_REPORT_SIZE = int(os.getenv("SCANNER_REPORT_MAX_SIZE", 1048576))  # 1MB
+
+
+class ScannerLoop:
+    def __init__(self, interval: int = DEFAULT_INTERVAL):
+        self.interval = interval
+        self.running = False
+        self.report_file = REPORT_FILE
+        
+    def _setup_signal_handlers(self):
+        def signal_handler(signum, frame):
+            logger.info(f"Received signal {signum}, shutting down gracefully")
+            self.running = False
+            
+        signal.signal(signal.SIGINT, signal_handler)
+        signal.signal(signal.SIGTERM, signal_handler)
+    
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=10))
+    def _scan_once(self) -> List[dict]:
+        try:
+            items = scan()
+            logger.debug(f"Scanner returned {len(items)} items")
+            return items
+        except Exception as e:
+            logger.error(f"Scanner failed: {e}")
+            raise
+    
+    def _write_report(self, items: List[dict]) -> None:
+        report = {
+            "timestamp": time.time(),
+            "items": items,
+            "metadata": {
+                "interval": self.interval,
+                "hostname": os.uname().nodename
+            }
+        }
+        
+        # Check file size before writing
+        if os.path.exists(self.report_file):
+            current_size = os.path.getsize(self.report_file)
+            if current_size + len(json.dumps(report)) > MAX_REPORT_SIZE:
+                # Simple rotation: keep last 5 files
+                import glob
+                files = sorted(glob.glob(f"{self.report_file}.*"))
+                for old_file in files[:-5]:
+                    os.remove(old_file)
+        
+        with open(self.report_file, "w") as f:
+            json.dump(report, f)
+            f.write("\n")  # JSONL format
+    
+    def run(self) -> None:
+        self.running = True
+        self._setup_signal_handlers()
+        
+        logger.info(f"Starting scanner loop with {self.interval}s interval")
+        
+        while self.running:
+            try:
+                items = self._scan_once()
+                self._write_report(items)
+            except Exception as e:
+                logger.error(f"Scanner loop iteration failed: {e}")
+            
+            if self.running:
+                time.sleep(self.interval)
+        
+        logger.info("Scanner loop stopped")
+
+
+def main():
+    interval = int(os.getenv("SCANNER_LOOP_INTERVAL", DEFAULT_INTERVAL))
+    loop = ScannerLoop(interval=interval)
+    loop.run()
+
+
+if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
+    main()
+>>>>>>> REPLACE
+```
+
+### File: `src/scanner/__init__.py`
+```python
+<<<<<<< SEARCH
+# Add scanner module exports
+from .scanner import scan
+from .loop import ScannerLoop
+
+__all__ = ["scan", "ScannerLoop"]
+=======
+from .scanner import scan
+from .loop import ScannerLoop
+
+__all__ = ["scan", "ScannerLoop"]
+>>>>>>> REPLACE
+```
+
+### File: `tests/test_scanner_loop.py`
+```python
+<<<<<<< SEARCH
+# Add new test file
+=======
+import json
+import os
+import tempfile
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+from scanner.loop import ScannerLoop
+
+
+class TestScannerLoop:
+    @pytest.fixture
+    def mock_scanner(self):
+        with patch("scanner.loop.scan") as mock:
+            mock.return_value = [{"id": 1, "data": "test"}]
+            yield mock
+    
+    @pytest.fixture
+    def temp_report_file(self):
+        with tempfile.NamedTemporaryFile(delete=False) as f:
+            yield f.name
+    
+    @pytest.mark.parametrize("interval", [10, 30, 60])
+    def test_scanner_loop_cadence(self, mock_scanner, temp_report_file, interval):
+        with patch.dict(os.environ, {"SCANNER_LOOP_INTERVAL": str(interval),
+                                    "SCANNER_REPORT_FILE": temp_report_file}):
+            loop = ScannerLoop(interval=interval)
+            
+            # Run for 2 iterations
+            loop.run()
+            
+            # Verify scanner was called twice
+            assert mock_scanner.call_count == 2
+            
+            # Verify report file was created
+            assert os.path.exists(temp_report_file)
+            
+            # Verify report format
+            with open(temp_report_file) as f:
+                report = json.load(f)
+                assert "timestamp" in report
+                assert "items" in report
+                assert report["metadata"]["interval"] == interval
+    
+    def test_empty_scanner_results(self, mock_scanner, temp_report_file):
+        mock_scanner.return_value = []
+        
+        with patch.dict(os.environ, {"SCANNER_LOOP_INTERVAL": "1",
+                                    "SCANNER_REPORT_FILE": temp_report_file}):
+            loop = ScannerLoop(interval=1)
+            loop.run()
+            
+            assert mock_scanner.call_count == 1
+            
+            with open(temp_report_file) as f:
+                report = json.load(f)
+                assert report["items"] == []
+    
+    def test_signal_handling(self, mock_scanner, temp_report_file):
+        with patch.dict(os.environ, {"SCANNER_LOOP_INTERVAL": "1",
+                                    "SCANNER_REPORT_FILE": temp_report_file}):
+            loop = ScannerLoop(interval=1)
+            
+            # Mock time.sleep to speed up test
+            with patch("time.sleep"):
+                # Start loop in thread
+                import threading
+                thread = threading.Thread(target=loop.run)
+                thread.start()
+                
+                # Let it run briefly
+                time.sleep(0.1)
+                
+                # Send SIGINT
+                import signal
+                os.kill(os.getpid(), signal.SIGINT)
+                
+                # Wait for thread to finish
+                thread.join(timeout=2)
+                
+                assert not thread.is_alive()
+>>>>>>> REPLACE
+```
+
+### File: `src/scanner/scanner.py`
+```python
+<<<<<<< SEARCH
+# Ensure scanner module has scan function
+def scan():
+    # Implementation depends on actual scanner hardware
+    pass
+=======
+def scan() -> list:
+    """
+    Perform scanner operation and return list of items.
+    
+    Raises:
+        ScannerError: If scanner hardware is unavailable
+    """
+    # Implementation depends on actual scanner hardware
+    # For now, return mock data for testing
+    return [{"id": 1, "status": "ok"}]
+>>>>>>> REPLACE
+```
+
+## 3. Verification Commands
+
+### Run Unit Tests
+```bash
+# Run scanner loop tests
+python -m pytest tests/test_scanner_loop.py -v
+
+# Run all tests to ensure no regressions
+python -m pytest tests/ -v
+
+# Run with coverage
+python -m pytest tests/ --cov=scanner --cov-report=html
+```
+
+### Integration Test
+```bash
+# Set environment variables
+export SCANNER_LOOP_INTERVAL=5
+export SCANNER_REPORT_FILE=/tmp/test_scanner_report.json
+export SCANNER_REPORT_MAX_SIZE=1024  # 1KB for testing
+
+# Run scanner loop for 10 seconds
+timeout 10s python -m scanner.loop
+
+# Verify report was created
+ls -la /tmp/test_scanner_report.json
+cat /tmp/test_scanner_report.json
+
+# Verify report format
+python -c "import json; print(json.load(open('/tmp/test_scanner_report.json')))"
+```
+
+### Performance Test
+```bash
+# Monitor CPU usage during loop
+top -p $(pgrep -f scanner.loop)
+
+# Test with different intervals
+for interval in 1 5 10; do
+    export SCANNER_LOOP_INTERVAL=$interval
+    time python -m scanner.loop &
+    sleep 2
+    kill %1
+done
+```
+
+### Signal Handling Test
+```bash
+# Test graceful shutdown
+python -m scanner.loop &
+LOOP_PID=$!
+
+# Let it run briefly
+sleep 2
+
+# Send SIGTERM
+kill -TERM $LOOP_PID
+wait $LOOP_PID
+```
+
+### Log Verification
+```bash
+# Check logs during operation
+python -m scanner.loop 2>&1 | grep -E "(INFO|ERROR|DEBUG)"
+
+# Verify no errors in logs
+python -m scanner.loop 2>&1 | grep ERROR || echo "No errors found"
+```
+
+### Cleanup
+```bash
+# Remove test files
+rm -f /tmp/test_scanner_report.json
+rm -rf htmlcov/
+```

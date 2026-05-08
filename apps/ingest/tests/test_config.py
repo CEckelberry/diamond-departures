@@ -9,6 +9,9 @@ def test_load_settings_defaults(monkeypatch):
     monkeypatch.delenv("LIVE_SCANNER_MODE", raising=False)
     monkeypatch.delenv("SCANNER_CHECKPOINT_PATH", raising=False)
     monkeypatch.delenv("RECONCILE_EVERY_N_SCANS", raising=False)
+    monkeypatch.delenv("SCAN_INTERVAL_LIVE_SECONDS", raising=False)
+    monkeypatch.delenv("SCAN_INTERVAL_IDLE_SECONDS", raising=False)
+    monkeypatch.delenv("SCANNER_REPORT_PATH", raising=False)
 
     settings = load_settings()
 
@@ -20,6 +23,9 @@ def test_load_settings_defaults(monkeypatch):
     assert settings.live_scanner_mode == "changes"
     assert settings.scanner_checkpoint_path == "orchestration/state/ingest-scanner-checkpoint.json"
     assert settings.reconcile_every_n_scans == 10
+    assert settings.scan_interval_live_seconds == 15
+    assert settings.scan_interval_idle_seconds == 60
+    assert settings.scanner_report_path == "orchestration/state/ingest-scanner-report.json"
 
 
 def test_load_settings_env_overrides(monkeypatch):
@@ -32,6 +38,9 @@ def test_load_settings_env_overrides(monkeypatch):
     monkeypatch.setenv("GAME_CHANGES_LOOKBACK_SECONDS", "90")
     monkeypatch.setenv("SCANNER_CHECKPOINT_PATH", "tmp/checkpoint.json")
     monkeypatch.setenv("RECONCILE_EVERY_N_SCANS", "3")
+    monkeypatch.setenv("SCAN_INTERVAL_LIVE_SECONDS", "12")
+    monkeypatch.setenv("SCAN_INTERVAL_IDLE_SECONDS", "45")
+    monkeypatch.setenv("SCANNER_REPORT_PATH", "tmp/report.json")
 
     settings = load_settings()
 
@@ -44,3 +53,6 @@ def test_load_settings_env_overrides(monkeypatch):
     assert settings.game_changes_lookback_seconds == 90
     assert settings.scanner_checkpoint_path == "tmp/checkpoint.json"
     assert settings.reconcile_every_n_scans == 3
+    assert settings.scan_interval_live_seconds == 12
+    assert settings.scan_interval_idle_seconds == 45
+    assert settings.scanner_report_path == "tmp/report.json"

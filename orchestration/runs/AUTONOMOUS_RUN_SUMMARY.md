@@ -196,6 +196,11 @@ Repo: `/home/roger/Documents/coding/cole-portfolio-apps/diamond-departures`
   - Added checkpoint `scan_count` persistence and telemetry fields (`scanner_scan_count`, `reconcile_triggered`, `reconcile_games_count`).
   - Verification artifact: `orchestration/runs/P-LIVE-04-verify.md`.
 
+- **P-LIVE-05 (Live data source hardening) — completed**
+  - Added continuous scanner runner loop (`apps/ingest/app/runner.py`) with live/idle cadence switching.
+  - Added per-iteration scanner ops report artifact (`SCANNER_REPORT_PATH`) and report persistence.
+  - Verification artifact: `orchestration/runs/P-LIVE-05-verify.md`.
+
 ## TDD evidence
 
 - P4-05 RED: board REST load tests failed (`+page.ts` missing, no data-driven board wiring).
@@ -216,6 +221,7 @@ Repo: `/home/roger/Documents/coding/cole-portfolio-apps/diamond-departures`
 - P-LIVE-02 RED: checkpoint/reliability tests failed before cursor persistence + failure accounting were implemented.
 - P-LIVE-03 RED: delta payload tests failed before changed-player/affected-view output wiring was implemented.
 - P-LIVE-04 RED: reconciliation cadence tests failed before scan-count persistence and periodic full-sweep behavior were implemented.
+- P-LIVE-05 RED: runner/report tests failed before continuous loop cadence and report-writing behavior were implemented.
 - GREEN: all new packet suites pass after implementation.
 
 ## Validation commands run
