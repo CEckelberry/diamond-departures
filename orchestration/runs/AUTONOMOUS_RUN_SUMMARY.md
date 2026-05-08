@@ -146,6 +146,11 @@ Repo: `/home/roger/Documents/coding/cole-portfolio-apps/diamond-departures`
   - Implemented Header preview controls + status and page-level stream endpoint switching (`/api/board/sse` vs `/api/board/preview-sse`).
   - Verification artifact: `orchestration/runs/P6-02-verify.md`.
 
+- **P6-03 (Task 6.3) — completed**
+  - Added RED tests for between/off-game idle-state messaging and slower idle reconnect policy.
+  - Implemented Header idle-state copy and page/SSE idle-mode streaming behavior.
+  - Verification artifact: `orchestration/runs/P6-03-verify.md`.
+
 ## TDD evidence
 
 - P4-05 RED: board REST load tests failed (`+page.ts` missing, no data-driven board wiring).
@@ -156,6 +161,7 @@ Repo: `/home/roger/Documents/coding/cole-portfolio-apps/diamond-departures`
 - P5-03 RED: position filter tests failed (no selected-position payload and no filtered rows path).
 - P6-01 RED: off-season tests failed (missing banner copy and no season-mode SSE guard).
 - P6-02 RED: preview-mode tests failed (missing preview controls and preview SSE wiring).
+- P6-03 RED: between/off-game tests failed (missing idle copy and idle-mode stream policy hooks).
 - GREEN: all new packet suites pass after implementation.
 
 ## Validation commands run

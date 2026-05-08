@@ -1,0 +1,220 @@
+# Packet P6-03-RED — Implementation Plan & Code
+
+## 1. Plan, Assumptions, and Risks
+
+### Assumptions
+1.  **Architecture**: The frontend uses a React-based architecture with a custom `useSSE` hook for server-sent events and a `Header` component that displays game status.
+2.  **State Management**: Game state is derived from a store (e.g., Redux/Zustand) exposing `isOffSeason`, `nextGameTime`, and `currentGameState`.
+3.  **SSE Contract**: The SSE connection is expected to remain open during "between games" or "no games today" states, but the heartbeat interval should be reduced (slower) compared to active game states to save resources.
+4.  **Sorting**: The stat picker component relies on a sorting utility that must remain functional regardless of game state.
+
+### Risks & Failure Modes
+1.  **SSE Connection Drop**: If the backend closes the SSE connection during idle states, the frontend will fail to reconnect or show stale data. *Mitigation*: Test the `onclose` and `reconnect` logic explicitly for idle states.
+2.  **Header Copy Ambiguity**: "No Games Today" vs. "Between Games" might look similar to users if not distinct. *Mitigation*: Ensure exact string matching in tests.
+3.  **Heartbeat Timing Drift**: If the "slower" heartbeat is implemented as a simple timeout without proper cleanup, it may leak timers or cause race conditions during state transitions. *Mitigation*: Verify `useEffect` cleanup functions.
+4.  **Stat Picker Sorting Regression**: Changes to game state logic might inadvertently affect the sorting algorithm's stability. *Mitigation*: Isolate sorting tests from game state mocks.
+
+### Edge Cases
+-   **Transition from Active Game to Idle**: Ensure SSE doesn't drop abruptly.
+-   **No Games Today vs. Off-Season**: The header copy must differ (Off-season implies long break; No Games Today implies short break).
+-   **Timezone Changes**: If the user changes timezone during "No Games Today", does the state update correctly? (Out of scope for this packet, but noted).
+
+## 2. Exact File Edits (Unified Diff)
+
+We will create two new test files:
+1.  `src/components/Header/Header.test.tsx` - Tests header copy contracts.
+2.  `src/hooks/useSSE/useSSE.test.ts` - Tests SSE behavior in idle states.
+3.  `src/utils/sorting.test.ts` - Ensures stat picker sorting remains active (regression test).
+
+### File: `src/components/Header/Header.test.tsx`
+
+```diff
+--- a/src/components/Header/Header.test.tsx
++++ b/src/components/Header/Header.test.tsx
+@@ -1,6 +1,8 @@
+ import React from 'react';
+ import { render, screen } from '@testing-library/react';
+ import { Header } from './Header';
++import { useGameStore } from '../../stores/gameStore';
++import { vi } from 'vitest';
+
+ // Mock the store
+ vi.mock('../../stores/gameStore', () => ({
+   useGameStore: vi.fn(),
+@@ -10,6 +12,35 @@ vi.mock('../../stores/gameStore', () => ({
+ }));
+
+ describe('Header Component', () => {
++  describe('Idle State Copy Contracts', () => {
++    it('should display "No Games Today" when no games are scheduled for today', () => {
++      (useGameStore as any).mockImplementation(() => ({
++        isOffSeason: false,
++        nextGameTime: null,
++        currentGameState: 'NO_GAMES_TODAY',
++      }));
++
++      render(<Header />);
++
++      expect(screen.getByText('No Games Today')).toBeInTheDocument();
++    });
++
++    it('should display "Between Games" when between active games', () => {
++      (useGameStore as any).mockImplementation(() => ({
++        isOffSeason: false,
++        nextGameTime: new Date(Date.now() + 3600000), // 1 hour from now
++        currentGameState: 'BETWEEN_GAMES',
++      }));
++
++      render(<Header />);
++
++      expect(screen.getByText('Between Games')).toBeInTheDocument();
++    });
++
++    it('should NOT display idle copy during off-season', () => {
++      (useGameStore as any).mockImplementation(() => ({
++        isOffSeason: true,
++        nextGameTime: null,
++        currentGameState: 'OFF_SEASON',
++      }));
++
++      render(<Header />);
++
++      expect(screen.queryByText('No Games Today')).not.toBeInTheDocument();
++      expect(screen.queryByText('Between Games')).not.toBeInTheDocument();
++    });
++  });
+ });
+```
+
+### File: `src/hooks/useSSE/useSSE.test.ts`
+
+```diff
+--- a/src/hooks/useSSE/useSSE.test.ts
++++ b/src/hooks/useSSE/useSSE.test.ts
+@@ -1,5 +1,7 @@
+ import { renderHook, act } from '@testing-library/react';
+ import { useSSE } from './useSSE';
++import { useGameStore } from '../../stores/gameStore';
++import { vi } from 'vitest';
+
+ // Mock fetch and EventSource
+ global.EventSource = vi.fn().mockImplementation(() => ({
+   addEventListener: vi.fn(),
+@@ -10,6 +12,35 @@ global.EventSource = vi.fn().mockImplementation(() => ({
+   close: vi.fn(),
+ }));
+
++// Mock the store
++vi.mock('../../stores/gameStore', () => ({
++  useGameStore: vi.fn(),
++}));
++
+ describe('useSSE Hook', () => {
++  describe('Idle State Behavior', () => {
++    it('should keep SSE connection open during "No Games Today"', () => {
++      (useGameStore as any).mockImplementation(() => ({
++        isOffSeason: false,
++        currentGameState: 'NO_GAMES_TODAY',
++      }));
++
++      const { result } = renderHook(() => useSSE('/events'));
++
++      // Expect EventSource to be initialized
++      expect(EventSource).toHaveBeenCalledWith('/events');
++    });
++
++    it('should use slower heartbeat interval during idle states', () => {
++      (useGameStore as any).mockImplementation(() => ({
++        isOffSeason: false,
++        currentGameState: 'BETWEEN_GAMES',
++      }));
++
++      const { result } = renderHook(() => useSSE('/events'));
++
++      // Assuming useSSE sets a heartbeat interval. We need to verify it's slower.
++      // This test assumes the implementation uses setInterval for heartbeats.
++      // If the implementation doesn't expose the interval, we might need to spy on setInterval.
++      // For now, we assert that the connection is open (above) and assume the logic handles it.
++      // To make this fail initially, we check if the heartbeat is *not* the active game rate.
++      // Since we haven't implemented the slower heartbeat yet, this test will fail if we assume a default fast rate.
++      // However, to strictly follow "fail before implementation", we can check for a specific constant.
++      
++      // Let's assume the hook exposes a `heartbeatInterval` property or we spy on setInterval.
++      // For simplicity, we'll assert that the connection is open and trust the next step.
++      // But to make it fail: Check if the heartbeat is set to a specific "idle" value.
++      
++      // Mock setInterval to capture the interval
++      const originalSetInterval = global.setInterval;
++      let capturedInterval: number | null = null;
++      global.setInterval = vi.fn().mockImplementation((cb, ms) => {
++        capturedInterval = ms;
++        return originalSetInterval(cb, ms);
++      });
++
++      renderHook(() => useSSE('/events'));
++
++      // If the implementation doesn't change the interval, it will default to something else (e.g., 5000ms).
++      // We expect it to be slower (e.g., 10000ms) in idle states.
++      expect(capturedInterval).toBe(10000); // Fails if not implemented
++
++      global.setInterval = originalSetInterval;
++    });
++  });
+
+   it('should open SSE connection when not off-season', () => {
+     (useGameStore as any).mockImplementation(() => ({
+       isOffSeason: false,
+```
+
+### File: `src/utils/sorting.test.ts`
+
+```diff
+--- a/src/utils/sorting.test.ts
++++ b/src/utils/utils/sorting.test.ts
+@@ -1,5 +1,7 @@
+ import { sortStats } from './sorting';
+
++// Mock data for stat picker
++const mockStats = [
++  { id: 1, name: 'Points', value: 10 },
++  { id: 2, name: 'Rebounds', value: 5 },
++  { id: 3, name: 'Assists', value: 8 },
++];
+
+ describe('Stat Picker Sorting', () => {
+   it('should sort stats by value in descending order', () => {
+-    const sorted = sortStats(mockStats); // Assuming mockStats is defined elsewhere or passed
++    const sorted = sortStats(mockStats);
+     expect(sorted[0].name).toBe('Points');
+     expect(sorted[1].name).toBe('Assists');
+     expect(sorted[2].name).toBe('Rebounds');
+   });
+
+   it('should remain active during idle states', () => {
+     // This test ensures sorting logic is not gated by game state
+     const sorted = sortStats(mockStats);
+     expect(sorted.length).toBe(3);
+   });
+ });
+```
+
+## 3. Verification Commands
+
+1.  **Install Dependencies** (if not already present):
+    ```bash
+    npm install --save-dev @testing-library/react vitest jsdom
+    ```
+
+2.  **Run Tests**:
+    ```bash
+    npx vitest run src/components/Header/Header.test.tsx src/hooks/useSSE/useSSE.test.ts src/utils/sorting.test.ts
+    ```
+
+3.  **Expected Outcome**:
+    -   `Header.test.tsx`: Fails because the `Header` component does not yet render "No Games Today" or "Between Games".
+    -   `useSSE.test.ts`: Fails because the SSE heartbeat interval is not yet adjusted for idle states (or connection logic is not yet implemented).
+    -   `sorting.test.ts`: Passes (assuming sorting utility exists and works), confirming no regression.
+
+4.  **Debugging**:
+    -   If tests pass unexpectedly, check that mocks are correctly applied and that the `Header` component does not have default props that match the test expectations.
+    -   Ensure `vi.mock` is correctly scoped to avoid polluting other tests.

@@ -90,8 +90,12 @@
 		seedBoard(data.boardView, data.boardSort, data.entries);
 		selectedPlayerId = data.entries[0]?.player.id ?? null;
 		stop();
-		if (seasonMode === 'off-season' && !previewMode) return;
+		const isOffSeason = seasonMode === 'off-season';
+		const shouldStream = previewMode || seasonMode !== 'off-season';
+		if (isOffSeason && !previewMode) return;
+		if (!shouldStream) return;
 		const endpoint = previewMode ? '/api/board/preview-sse' : '/api/board/sse';
+		const idleMode = !previewMode && (seasonMode === 'between' || seasonMode === 'off-game');
 		stop = openBoardStream(
 			data.boardView,
 			data.boardSort,
@@ -99,7 +103,7 @@
 				onSnapshot: (payload) => applySnapshot(payload),
 				onDelta: (payload) => applyDelta(payload)
 			},
-			{ endpoint }
+			{ endpoint, idleMode }
 		);
 	});
 </script>

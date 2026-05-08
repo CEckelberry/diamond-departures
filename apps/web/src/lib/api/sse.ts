@@ -37,6 +37,7 @@ type StreamHandlers = {
 
 type StreamOptions = {
 	endpoint?: string;
+	idleMode?: boolean;
 };
 
 export function openBoardStream(
@@ -82,7 +83,9 @@ export function openBoardStream(
 			handlers.onError?.(event);
 			source?.close();
 			if (stopped) return;
-			const delay = Math.min(8000, 500 * 2 ** attempts);
+			const delay = options?.idleMode
+				? Math.min(60000, 2000 * 2 ** attempts)
+				: Math.min(8000, 500 * 2 ** attempts);
 			attempts += 1;
 			retryTimer = window.setTimeout(connect, delay);
 		};

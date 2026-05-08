@@ -185,6 +185,14 @@ Branch: `main`
 - Extended SSE helper to accept optional endpoint override while preserving existing stream contract.
 - Verification: `node --test apps/web/tests/preview-mode.test.mjs`, full web node suite, and `pnpm --filter web check` (PASS, warning-only).
 
+### P6-03 (RED → GREEN completed)
+
+- Added RED tests for between/off-game idle copy and slower idle-mode stream policy.
+- Updated Header to show idle copy: `No games until ... · in N hours` and `No games today` fallback.
+- Updated board page stream logic to stay connected in non-off-season states and pass `idleMode` to SSE.
+- Updated SSE helper with idle reconnect backoff policy when `idleMode` is active.
+- Verification: `node --test apps/web/tests/between-games-state.test.mjs`, full web node suite, and `pnpm --filter web check` (PASS, warning-only).
+
 ## Additional verification
 
 - `node --test apps/web/tests/board-structure.test.mjs apps/web/tests/board-rest-load.test.mjs apps/web/tests/board-sse-wiring.test.mjs apps/web/tests/board-reshuffle-animation.test.mjs` (PASS, 10 tests)

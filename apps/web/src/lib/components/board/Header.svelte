@@ -9,6 +9,7 @@
 		gamesInProgress: number;
 		currentSeason?: number;
 		nextSeasonStartsAt?: string;
+		nextGameAt?: string;
 		updatedAt?: string;
 	};
 	type Freshness = {
@@ -62,6 +63,18 @@
 			? `next season ${new Date(seasonState.nextSeasonStartsAt).toLocaleDateString()}`
 			: 'next season pending schedule'
 	);
+	const idleHoursToNextGame = $derived(
+		seasonState.nextGameAt
+			? Math.max(0, Math.ceil((Date.parse(seasonState.nextGameAt) - Date.now()) / (1000 * 60 * 60)))
+			: null
+	);
+	const idleBannerCopy = $derived(
+		idleHoursToNextGame === null
+			? 'No games today'
+			: idleHoursToNextGame >= 24
+				? 'No games today'
+				: `No games until ${new Date(seasonState.nextGameAt ?? '').toLocaleTimeString()} · in ${idleHoursToNextGame} hours`
+	);
 
 	function toggleSound() {
 		setSoundEnabled(!$soundEnabled);
@@ -92,6 +105,8 @@
 							? nextSeason.current_season
 							: undefined,
 					nextSeasonStartsAt:
+						typeof nextSeason.next_game_at === 'string' ? nextSeason.next_game_at : undefined,
+					nextGameAt:
 						typeof nextSeason.next_game_at === 'string' ? nextSeason.next_game_at : undefined,
 					updatedAt: nextSeason.updatedAt
 				};
@@ -136,6 +151,8 @@
 			{#if previewRunning}
 				<span class="status-pill preview-running">Preview running · replay mode</span>
 			{/if}
+		{:else if seasonState.mode === 'between' || seasonState.mode === 'off-game'}
+			<span class="status-pill idle-banner">{idleBannerCopy}</span>
 		{:else}
 			<span class="status-pill">{seasonState.gamesInProgress} games live</span>
 		{/if}
