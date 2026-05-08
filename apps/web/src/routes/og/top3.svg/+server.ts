@@ -1,17 +1,20 @@
-import type { RequestHandler } from '@sveltejs/kit';
+import type { RequestHandler } from "@sveltejs/kit";
 
 export const prerender = false;
 
 export const GET: RequestHandler = async ({ fetch }) => {
-	let names = ['Aaron Judge', 'Shohei Ohtani', 'Bobby Witt Jr.'];
+	let names = ["Aaron Judge", "Shohei Ohtani", "Bobby Witt Jr."];
 
 	try {
-		const response = await fetch('/api/board?view=hitters&sort=wrc_plus');
+		const response = await fetch("/api/board?view=hitters&sort=wrc_plus");
 		if (response.ok) {
 			const payload = (await response.json()) as {
 				entries?: Array<{ player?: { name?: string } }>;
 			};
-			const topThree = payload.entries?.slice(0, 3).map((entry) => entry.player?.name).filter(Boolean);
+			const topThree = payload.entries
+				?.slice(0, 3)
+				.map((entry) => entry.player?.name)
+				.filter(Boolean);
 			if (topThree && topThree.length === 3) {
 				names = topThree as string[];
 			}
@@ -24,8 +27,8 @@ export const GET: RequestHandler = async ({ fetch }) => {
 
 	return new Response(svg, {
 		headers: {
-			'content-type': 'image/svg+xml; charset=utf-8',
-			'cache-control': 'public, max-age=3600'
-		}
+			"content-type": "image/svg+xml; charset=utf-8",
+			"cache-control": "public, max-age=3600",
+		},
 	});
 };

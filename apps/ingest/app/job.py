@@ -6,6 +6,7 @@ from .checkpoint import load_checkpoint, save_checkpoint
 from .config import load_settings
 from .game_processor import extract_stat_change_events
 from .provider import build_provider
+from .live_delta import build_delta_payload
 from .schedule import extract_changed_game_ids, extract_live_game_ids
 from .state_diff import diff_player_updates
 from .store import init_store
@@ -103,6 +104,7 @@ def run_once(
                 'changed_games_count': 0,
                 'feed_failures_count': 0,
                 'checkpoint_saved': checkpoint_saved,
+                'delta_payload': build_delta_payload([], player_positions={}),
                 'error': error,
             }
     else:
@@ -131,6 +133,8 @@ def run_once(
         )
         checkpoint_saved = True
 
+    delta_payload = build_delta_payload(updates, player_positions={})
+
     return {
         'status': 'ok',
         'scanner_mode': settings.live_scanner_mode.lower(),
@@ -148,6 +152,7 @@ def run_once(
         'changed_games_count': len(changed_game_ids),
         'feed_failures_count': feed_failures_count,
         'checkpoint_saved': checkpoint_saved,
+        'delta_payload': delta_payload,
         'error': error,
     }
 

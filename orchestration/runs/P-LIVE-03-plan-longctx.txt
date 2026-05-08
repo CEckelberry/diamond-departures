@@ -1,0 +1,68 @@
+I'll implement the scanner delta payload GREEN task. Let me break this down into a clear plan with edge cases and failure modes.
+
+## Plan with Assumptions + Risks
+
+### Assumptions
+1. **Data Model**: Players have unique IDs, timestamps, and view relationships (many-to-many)
+2. **Storage**: Players and views are stored in a relational database (PostgreSQL)
+3. **Ingest Pipeline**: Uses a job-based architecture where scanner jobs output JSON payloads
+4. **Dependencies**: Current codebase has existing scanner job infrastructure and test framework
+5. **Delta Logic**: A player is "changed" if any of their views were modified since last scan
+
+### Risks & Edge Cases
+- **Race Conditions**: Multiple scanner jobs running concurrently could produce inconsistent deltas
+- **Data Loss**: If a player is deleted between scans, we might miss their delta
+- **Circular Dependencies**: View updates could trigger player deltas, creating infinite loops
+- **Performance**: Large player/view datasets could cause memory issues
+- **Idempotency**: Duplicate deltas could cause downstream systems to process same data multiple times
+
+### Implementation Strategy
+1. Create `ScannerDeltaHelper` module with methods to:
+   - Calculate player deltas (added/updated/removed)
+   - Identify affected views for each player
+   - Generate deterministic payload structure
+2. Integrate helper into existing scanner job
+3. Add comprehensive tests covering edge cases
+
+## Exact File Edits (Unified Diff)
+
+### 1. Create ScannerDeltaHelper module
+```ruby
+# lib/scanner_delta_helper.rb
+```
+
+### 2. Update scanner job to use delta helper
+```ruby
+# app/jobs/scanner_job.rb
+```
+
+### 3. Add tests for delta helper
+```ruby
+# test/lib/scanner_delta_helper_test.rb
+```
+
+### 4. Add integration tests for scanner job
+```ruby
+# test/jobs/scanner_job_test.rb
+```
+
+## Verification Commands
+
+```bash
+# Run unit tests for delta helper
+bundle exec rspec test/lib/scanner_delta_helper_test.rb
+
+# Run integration tests for scanner job
+bundle exec rspec test/jobs/scanner_job_test.rb
+
+# Run all tests to ensure nothing broke
+bundle exec rspec
+
+# Check code coverage
+bundle exec rspec --coverage
+
+# Run specific test for edge cases
+bundle exec rspec test/lib/scanner_delta_helper_test.rb:42  # if test file has line numbers
+```
+
+The implementation will ensure deterministic payloads by using consistent sorting and timestamp-based ordering, handle edge cases like player deletions through soft deletes, and maintain idempotency via unique identifiers in payloads.

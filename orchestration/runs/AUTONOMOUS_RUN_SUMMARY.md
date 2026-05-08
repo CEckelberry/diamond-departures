@@ -186,6 +186,11 @@ Repo: `/home/roger/Documents/coding/cole-portfolio-apps/diamond-departures`
   - Wired cursor reuse, failure accounting, and reliability metrics (`scanner_lag_seconds`, `changed_games_count`, `feed_failures_count`).
   - Verification artifact: `orchestration/runs/P-LIVE-02-verify.md`.
 
+- **P-LIVE-03 (Live data source hardening) — completed**
+  - Added scanner delta payload builder (`apps/ingest/app/live_delta.py`).
+  - Wired job output to emit `delta_payload` with `changed_player_ids` + `affected_views` in success/degraded paths.
+  - Verification artifact: `orchestration/runs/P-LIVE-03-verify.md`.
+
 ## TDD evidence
 
 - P4-05 RED: board REST load tests failed (`+page.ts` missing, no data-driven board wiring).
@@ -204,6 +209,7 @@ Repo: `/home/roger/Documents/coding/cole-portfolio-apps/diamond-departures`
 - P7-05 RED: methodology page contracts failed before route and doc links were added.
 - P-LIVE-01 RED: provider/scanner tests failed before provider abstraction + game-change flow were implemented.
 - P-LIVE-02 RED: checkpoint/reliability tests failed before cursor persistence + failure accounting were implemented.
+- P-LIVE-03 RED: delta payload tests failed before changed-player/affected-view output wiring was implemented.
 - GREEN: all new packet suites pass after implementation.
 
 ## Validation commands run

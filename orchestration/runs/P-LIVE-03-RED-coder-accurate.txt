@@ -1,0 +1,221 @@
+# Packet P-LIVE-03-RED — Scanner delta payload tests first
+
+## 1. Plan
+
+### Assumptions
+1. **Architecture**: The system uses a `Scanner` that processes game events and produces a `DeltaPayload`.
+2. **Data Model**:
+   - `Player`: Has an `id`, `score`, and `status`.
+   - `BoardView`: Represents a sorted view of players (e.g., "Leaderboard", "Top 10"). It is derived from the global player list via a `LeaderboardMapper`.
+   - `DeltaPayload`: Contains `changed_player_ids` (Set<String>) and `affected_view_ids` (Set<String>).
+3. **Dependencies**: We assume a standard testing framework (JUnit 5 + Mockito) and a build system (Maven/Gradle). The implementation classes (`Scanner`, `LeaderboardMapper`, `DeltaPayload`) are assumed to exist but may be stubs or incomplete.
+4. **Edge Cases**:
+   - No changes: If no players change, the payload should reflect empty sets.
+   - View invalidation: If a player leaves the top N, views covering that rank must be invalidated.
+   - Concurrent updates: Not tested here (focus on single-threaded delta generation).
+
+### Risks & Failure Modes
+1. **False Positives**: Tests pass if `DeltaPayload` fields are not properly populated. *Mitigation*: Explicitly assert field contents.
+2. **Mocking Leakage**: Over-mocking `LeaderboardMapper` might hide integration issues. *Mitigation*: Use real mapper in tests where possible, or mock only external dependencies.
+3. **Idempotency**: Re-processing the same event should not produce duplicate deltas. *Mitigation*: Test sequential updates.
+
+### Implementation Strategy
+1. Create `ScannerDeltaPayloadTest.java`.
+2. Write test cases:
+   - `testEmptyUpdateProducesEmptyDelta`: No changes → empty payload.
+   - `testScoreChangeUpdatesChangedPlayerIds`: Score change → player ID in `changed_player_ids`.
+   - `testRankChangeInvalidatesAffectedViews`: Rank change → view IDs in `affected_view_ids`.
+   - `testMultipleChangesAggregateAll`: Multiple players change → all IDs aggregated.
+
+## 2. Exact File Edits
+
+### File: `src/test/java/com/example/game/scanner/ScannerDeltaPayloadTest.java`
+
+```diff
+--- /dev/null
++++ b/src/test/java/com/example/game/scanner/ScannerDeltaPayloadTest.java
+@@ -0,0 +1,156 @@
++package com.example.game.scanner;
++
++import com.example.game.model.DeltaPayload;
++import com.example.game.model.Player;
++import com.example.game.model.BoardView;
++import com.example.game.mapper.LeaderboardMapper;
++import org.junit.jupiter.api.BeforeEach;
++import org.junit.jupiter.api.Test;
++import org.junit.jupiter.api.extension.ExtendWith;
++import org.mockito.Mock;
++import org.mockito.junit.jupiter.MockitoExtension;
++
++import java.util.*;
++
++import static org.junit.jupiter.api.Assertions.*;
++import static org.mockito.Mockito.*;
++
++/**
++ * Tests for Scanner-produced downstream delta payloads.
++ * Focus: changed player IDs and affected board views.
++ */
++@ExtendWith(MockitoExtension.class)
++class ScannerDeltaPayloadTest {
++
++    @Mock
++    private LeaderboardMapper leaderboardMapper;
++
++    private Scanner scanner;
++
++    @BeforeEach
++    void setUp() {
++        // Assume Scanner constructor takes LeaderboardMapper
++        scanner = new Scanner(leaderboardMapper);
++    }
++
++    /**
++     * Edge Case: No changes in the update batch.
++     * Expected: Empty changed_player_ids and empty affected_view_ids.
++     */
++    @Test
++    void testEmptyUpdateProducesEmptyDelta() {
++        // Given: An empty list of updates
++        List<Player> updates = Collections.emptyList();
++
++        // When: Scanner processes the update
++        DeltaPayload payload = scanner.processUpdates(updates);
++
++        // Then: Payload should be empty
++        assertNotNull(payload);
++        assertTrue(payload.getChangedPlayerIds().isEmpty(), "Changed player IDs should be empty");
++        assertTrue(payload.getAffectedViewIds().isEmpty(), "Affected view IDs should be empty");
++    }
++
++    /**
++     * Core Functionality: A single player score change.
++     * Expected: Player ID in changed_player_ids.
++     */
++    @Test
++    void testScoreChangeUpdatesChangedPlayerIds() {
++        // Given: One player update
++        Player updatedPlayer = new Player("p1", 100, "active");
++        List<Player> updates = Collections.singletonList(updatedPlayer);
++
++        // When: Scanner processes the update
++        DeltaPayload payload = scanner.processUpdates(updates);
++
++        // Then: Changed player IDs should contain 'p1'
++        assertNotNull(payload);
++        assertEquals(1, payload.getChangedPlayerIds().size(), "Should have 1 changed player");
++        assertTrue(payload.getChangedPlayerIds().contains("p1"), "Changed player IDs should include 'p1'");
++    }
++
++    /**
++     * Core Functionality: Multiple players change.
++     * Expected: All changed player IDs aggregated.
++     */
++    @Test
++    void testMultipleChangesAggregateAll() {
++        // Given: Multiple player updates
++        Player p1 = new Player("p1", 100, "active");
++        Player p2 = new Player("p2", 200, "active");
++        List<Player> updates = Arrays.asList(p1, p2);
++
++        // When: Scanner processes the updates
++        DeltaPayload payload = scanner.processUpdates(updates);
++
++        // Then: Both player IDs should be present
++        assertNotNull(payload);
++        assertEquals(2, payload.getChangedPlayerIds().size(), "Should have 2 changed players");
++        assertTrue(payload.getChangedPlayerIds().contains("p1"));
++        assertTrue(payload.getChangedPlayerIds().contains("p2"));
++    }
++
++    /**
++     * Edge Case: Rank change invalidates board views.
++     * Assumption: LeaderboardMapper returns affected view IDs based on rank changes.
++     */
++    @Test
++    void testRankChangeInvalidatesAffectedViews() {
++        // Given: A player update that triggers a rank change
++        Player updatedPlayer = new Player("p1", 100, "active");
++        List<Player> updates = Collections.singletonList(updatedPlayer);
++
++        // Mock: LeaderboardMapper returns affected views for this player
++        Set<String> expectedViews = new HashSet<>(Arrays.asList("leaderboard_top10", "leaderboard_all"));
++        when(leaderboardMapper.getAffectedViewIds(updatedPlayer)).thenReturn(expectedViews);
++
++        // When: Scanner processes the update
++        DeltaPayload payload = scanner.processUpdates(updates);
++
++        // Then: Affected view IDs should match mocked result
++        assertNotNull(payload);
++        assertEquals(expectedViews, payload.getAffectedViewIds(), "Affected view IDs should match mapper output");
++    }
++
++    /**
++     * Edge Case: No affected views for a change.
++     * Expected: Empty affected_view_ids.
++     */
++    @Test
++    void testNoAffectedViewsForMinorChange() {
++        // Given: A player update that does not affect any views (e.g., minor score tweak below threshold)
++        Player updatedPlayer = new Player("p2", 50, "active");
++        List<Player> updates = Collections.singletonList(updatedPlayer);
++
++        // Mock: LeaderboardMapper returns no affected views
++        when(leaderboardMapper.getAffectedViewIds(updatedPlayer)).thenReturn(Collections.emptySet());
++
++        // When: Scanner processes the update
++        DeltaPayload payload = scanner.processUpdates(updates);
++
++        // Then: Affected view IDs should be empty
++        assertNotNull(payload);
++        assertTrue(payload.getAffectedViewIds().isEmpty(), "Affected view IDs should be empty");
++    }
++
++    /**
++     * Failure Mode: Duplicate players in update list.
++     * Expected: Unique player IDs in changed_player_ids.
++     */
++    @Test
++    void testDuplicatePlayersInUpdateList() {
++        // Given: Same player updated twice
++        Player p1 = new Player("p1", 100, "active");
++        List<Player> updates = Arrays.asList(p1, p1);
++
++        // When: Scanner processes the updates
++        DeltaPayload payload = scanner.processUpdates(updates);
++
++        // Then: Only one ID should be present
++        assertNotNull(payload);
++        assertEquals(1, payload.getChangedPlayerIds().size(), "Should have 1 unique changed player");
++        assertTrue(payload.getChangedPlayerIds().contains("p1"));
++    }
++}
+```
+
+## 3. Verification Commands
+
+### Prerequisites
+- Ensure `Scanner.java`, `DeltaPayload.java`, `Player.java`, `LeaderboardMapper.java` exist in the source tree.
+- Ensure JUnit 5 and Mockito dependencies are in `pom.xml` or `build.gradle`.
+
+### Run Tests
+```bash
+# Maven
+mvn test -Dtest=ScannerDeltaPayloadTest
+
+# Gradle
+./gradlew test --tests ScannerDeltaPayloadTest
+```
+
+### Expected Outcome
+- **All tests FAIL** (Red).
+  - `testEmptyUpdateProducesEmptyDelta`: Fails if `scanner.processUpdates` returns null or non-empty sets.
+  - `testScoreChangeUpdatesChangedPlayerIds`: Fails if `changed_player_ids` is empty or missing "p1".
+  - `testMultipleChangesAggregateAll`: Fails if duplicates are not deduplicated or IDs are missing.
+  - `testRankChangeInvalidatesAffectedViews`: Fails if `affected_view_ids` is empty or incorrect.
+  - `testNoAffectedViewsForMinorChange`: Fails if `affected_view_ids` is not empty.
+  - `testDuplicatePlayersInUpdateList`: Fails if duplicates are not handled (size > 1).
+
+### Next Steps
+- Implement `Scanner.processUpdates()` to populate `DeltaPayload` correctly.
+- Re-run tests to achieve Green.

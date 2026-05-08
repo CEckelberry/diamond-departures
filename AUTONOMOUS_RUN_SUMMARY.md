@@ -237,6 +237,12 @@ Branch: `main`
 - Implemented `apps/ingest/app/checkpoint.py` and wired checkpoint load/save + reliability metrics into `apps/ingest/app/job.py`.
 - Verification: `.venv/bin/pytest apps/ingest/tests -q` (PASS).
 
+### P-LIVE-03 (RED → GREEN completed)
+
+- Added RED tests for scanner-emitted delta payloads (`changed_player_ids`, `affected_views`).
+- Implemented `apps/ingest/app/live_delta.py` and wired `delta_payload` emission in `apps/ingest/app/job.py` for success/degraded paths.
+- Verification: `.venv/bin/pytest apps/ingest/tests -q` and `node --test apps/web/tests/*.test.mjs` (PASS).
+
 ## Additional verification
 
 - `node --test apps/web/tests/board-structure.test.mjs apps/web/tests/board-rest-load.test.mjs apps/web/tests/board-sse-wiring.test.mjs apps/web/tests/board-reshuffle-animation.test.mjs` (PASS, 10 tests)

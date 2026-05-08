@@ -1,4 +1,5 @@
 import json
+from typing import Any, cast
 
 from apps.ingest.app.config import IngestSettings
 from apps.ingest.app.job import run_once
@@ -96,6 +97,9 @@ def test_run_once_wires_provider_and_store(monkeypatch, tmp_path):
     assert result['schedule_status'] == 200
     assert result['games_scanned'] == [662001]
     assert ('feed', 662001) in fake_provider.calls
+    delta = cast(dict[str, Any], result['delta_payload'])
+    assert delta['changed_player_ids'] == [660271]
+    assert ('hitters', 'wRC+') in delta['affected_views']
 
 
 def test_run_once_changes_mode_uses_checkpoint_cursor(monkeypatch, tmp_path):
@@ -156,6 +160,9 @@ def test_run_once_changes_mode_failure_increments_checkpoint_failures(monkeypatc
     assert result['changed_games'] == []
     assert result['games_scanned'] == []
     assert result['checkpoint_saved'] is True
+    delta = cast(dict[str, Any], result['delta_payload'])
+    assert delta['changed_player_ids'] == []
+    assert delta['affected_views'] == []
     assert 'timeout' in str(result['error'])
 
     updated = json.loads(checkpoint_path.read_text(encoding='utf-8'))

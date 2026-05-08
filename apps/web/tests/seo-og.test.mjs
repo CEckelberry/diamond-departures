@@ -36,7 +36,7 @@ test("robots and sitemap routes are present", async () => {
 
 test("og top3 svg route is present and returns svg metadata shell", async () => {
 	const src = await readFile(ogPath, "utf8");
-	assert.match(src, /content-type': 'image\/svg\+xml/);
+	assert.match(src, /['"]content-type['"]:\s*['"]image\/svg\+xml/);
 	assert.match(src, /Today’s top 3 hitters/);
-	assert.match(src, /fetch\('\/api\/board\?view=hitters&sort=wrc_plus'\)/);
+	assert.match(src, /fetch\((['"])\/api\/board\?view=hitters&sort=wrc_plus\1\)/);
 });
