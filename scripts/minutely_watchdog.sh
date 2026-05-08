@@ -13,9 +13,9 @@ echo "[$(date -Iseconds)] watchdog started" >>"$LOG"
 
 while true; do
   ts="$(date -Iseconds)"
-  gpu_line="$(rocm-smi -u --json 2>/dev/null | python3 -c 'import sys,json; d=json.load(sys.stdin); print(f"{d.get("card0",{}).get("GPU use (%)","na")},{d.get("card1",{}).get("GPU use (%)","na")}")' 2>/dev/null || echo 'na,na')"
+  gpu_line="$(rocm-smi -u --json 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print(str(d.get('card0',{}).get('GPU use (%)','na')) + ',' + str(d.get('card1',{}).get('GPU use (%)','na')))" 2>/dev/null || echo 'na,na')"
 
-  queue_pid="$(pgrep -af "run_local_llm_queue.py --queue-file ${QUEUE_FILE}" | awk 'NR==1{print $1}')"
+  queue_pid="$(pgrep -af "run_local_llm_queue.py --queue-file ${QUEUE_FILE}" | awk 'NR==1{print $1}' || true)"
   task_line="$(pgrep -af "python3 scripts/local_llm_task.py" | head -n 1 | cut -c1-220 || true)"
 
   if [[ -z "${queue_pid:-}" ]]; then

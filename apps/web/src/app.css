@@ -1,7 +1,7 @@
-@import 'tailwindcss';
-@import '@fontsource/inter';
-@import '@fontsource/instrument-serif';
-@import '@fontsource/jetbrains-mono';
+@import "tailwindcss";
+@import "@fontsource/inter";
+@import "@fontsource/instrument-serif";
+@import "@fontsource/jetbrains-mono";
 
 :root {
 	--board-bg: #0e0820;
@@ -15,10 +15,10 @@
 	--row-new: #f4c0d1;
 	--chrome-bg: #120a29;
 	--chrome-text: #f8f5ff;
-	font-family: 'Inter', system-ui, sans-serif;
+	font-family: "Inter", system-ui, sans-serif;
 }
 
-:root[data-theme='light'] {
+:root[data-theme="light"] {
 	--chrome-bg: #f7f3ff;
 	--chrome-text: #140e2f;
 }
@@ -53,14 +53,14 @@ body {
 	height: 2.5rem;
 	background: var(--cell-bg);
 	color: var(--cell-text);
-	font-family: 'JetBrains Mono', monospace;
+	font-family: "JetBrains Mono", monospace;
 	font-weight: 700;
 	border-radius: 0.25rem;
 	position: relative;
 }
 
 .flap-cell::before {
-	content: '';
+	content: "";
 	position: absolute;
 	left: 0;
 	right: 0;

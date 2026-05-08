@@ -1,0 +1,4 @@
+timestamp,task_name,gpu_use_card0,gpu_use_card1
+2026-05-08T13:18:15,p7-02-impl-accurate-deep,3,0
+2026-05-08T13:18:17,p7-02-impl-accurate-deep,3,0
+2026-05-08T13:18:20,p7-02-impl-accurate-deep,3,0
