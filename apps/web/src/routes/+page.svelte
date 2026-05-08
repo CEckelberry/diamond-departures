@@ -53,10 +53,15 @@
 
 	let selectedPlayerId = $state<number | null>(null);
 	let seasonMode = $state<SeasonMode>('off-season');
+	let previewMode = $state(false);
 	let stop = () => {};
 
 	function handleSelectPlayer(playerId: number) {
 		selectedPlayerId = playerId;
+	}
+
+	function togglePreviewMode() {
+		previewMode = !previewMode;
 	}
 
 	async function refreshSeasonMode() {
@@ -85,16 +90,25 @@
 		seedBoard(data.boardView, data.boardSort, data.entries);
 		selectedPlayerId = data.entries[0]?.player.id ?? null;
 		stop();
-		if (seasonMode === 'off-season') return;
-		stop = openBoardStream(data.boardView, data.boardSort, {
-			onSnapshot: (payload) => applySnapshot(payload),
-			onDelta: (payload) => applyDelta(payload)
-		});
+		if (seasonMode === 'off-season' && !previewMode) return;
+		const endpoint = previewMode ? '/api/board/preview-sse' : '/api/board/sse';
+		stop = openBoardStream(
+			data.boardView,
+			data.boardSort,
+			{
+				onSnapshot: (payload) => applySnapshot(payload),
+				onDelta: (payload) => applyDelta(payload)
+			},
+			{ endpoint }
+		);
 	});
 </script>
 
 <section class="board-screen">
-	<Header />
+	<Header previewRunning={previewMode} onTogglePreview={togglePreviewMode} />
+	{#if previewMode}
+		<p class="preview-label" aria-live="polite">preview running · Replay mode</p>
+	{/if}
 	<div class="controls">
 		<ViewTabs />
 		<StatPicker {view} />
@@ -119,6 +133,15 @@
 	.board-screen {
 		display: grid;
 		gap: 0.8rem;
+	}
+
+	.preview-label {
+		margin: 0;
+		font-family: 'JetBrains Mono', monospace;
+		font-size: 0.68rem;
+		text-transform: uppercase;
+		letter-spacing: 0.07em;
+		color: color-mix(in oklab, #fcd34d 80%, var(--chrome-text));
 	}
 
 	.controls {

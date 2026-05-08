@@ -1,0 +1,316 @@
+Here is the implementation plan and code changes for **Packet P6-03**.
+
+### 1. Plan & Assumptions
+
+**Assumptions:**
+1.  **Backend API Contract:** The `/api/season-state` endpoint returns a JSON object with the following structure (based on Task 6.3 spec):
+    ```json
+    {
+      "mode": "between", // or "off-game", "live", "off-season"
+      "games_in_progress": 0,
+      "next_game_at": "2023-10-27T19:00:00Z", // ISO string, null if no games today
+      "updated_at": "..."
+    }
+    ```
+2.  **SSE Reconnection:** The `openBoardStream` function currently uses exponential backoff. We need to expose a way to configure the *initial* delay or the *max* delay for idle states to satisfy the "slower heartbeat" requirement.
+3.  **State Management:** The `Header.svelte` is the source of truth for the UI banner. The `+page.svelte` needs to listen to this state to adjust the SSE connection parameters (specifically the reconnect strategy).
+
+**Risks & Edge Cases:**
+1.  **Timezone Handling:** `next_game_at` is likely UTC. The banner must display local time.
+2.  **Stale Data:** If the user sits on the page for hours during "no games", the `next_game_at` might become invalid (e.g., game started 5 mins ago but API hasn't updated). The SSE connection *must* remain active to catch the transition to `live`.
+3.  **SSE "Heartbeat" vs "Reconnect":** The spec asks for a "slower heartbeat". In SSE, this usually means the server sends a comment every X seconds, or the client reconnects less aggressively. Since we control the client, we will implement a **longer initial reconnect delay** for idle states to reduce server load and noise.
+4.  **Race Conditions:** If `seasonState` updates from `live` to `between` while the SSE stream is active, we need to ensure the stream doesn't drop unnecessarily.
+
+**Implementation Steps:**
+1.  **Update `Header.svelte`:**
+    *   Add logic to calculate "Next Game ETA" (Hours/Minutes).
+    *   Render the specific banner text: "No games until [Time] · in [N hours]".
+    *   Expose the `seasonState` via a Svelte store or prop so `+page.svelte` can react to it.
+2.  **Update `+page.svelte`:**
+    *   Import the season state logic (or lift it up).
+    *   Pass a `reconnectStrategy` to `openBoardStream`.
+    *   If `mode` is `between` or `off-game`, use a slower reconnect policy (e.g., 2-minute initial delay, capped at 5 mins).
+3.  **Update `openBoardStream`:**
+    *   Accept an optional `reconnectDelay` configuration object.
+
+### 2. Exact File Edits
+
+#### File: `src/lib/api/sse.ts`
+*Change:* Add support for custom reconnect delays.
+
+```diff
+--- a/src/lib/api/sse.ts
++++ b/src/lib/api/sse.ts
+@@ -1,6 +1,7 @@
+ type SnapshotPayload = {
+ 	view: string;
+ 	sort: string;
+ 	entries: Array<{
+@@ -23,6 +24,11 @@ type StreamHandlers = {
+ };
+ 
+ type StreamOptions = {
++	/**
++	 * Custom reconnect strategy for idle states.
++	 * If provided, overrides default exponential backoff.
++	 */
++	reconnectDelay?: { initialMs: number; maxMs: number };
+ 	endpoint?: string;
+ };
+ 
+@@ -36,6 +42,10 @@ export function openBoardStream(
+ 	let attempts = 0;
+ 	let retryTimer: number | null = null;
+ 	let source: EventSource | null = null;
++
++	const reconnectConfig = options?.reconnectDelay ?? { initialMs: 500, maxMs: 8000 };
+ 
+ 	const connect = () => {
+ 		if (stopped) return;
+@@ -61,7 +71,13 @@ export function openBoardStream(
+ 			source?.close();
+ 			if (stopped) return;
+-			const delay = Math.min(8000, 500 * 2 ** attempts);
++			
++			let delay: number;
++			if (options?.reconnectDelay) {
++				// For idle states, use linear or fixed slow delay
++				delay = Math.min(reconnectConfig.maxMs, reconnectConfig.initialMs * (attempts + 1));
++			} else {
++				delay = Math.min(8000, 500 * 2 ** attempts);
++			}
+ 			attempts += 1;
+ 			retryTimer = window.setTimeout(connect, delay);
+ 		};
+```
+
+#### File: `src/lib/stores/season.ts` (New File)
+*Change:* Centralize season state logic to share between Header and Page.
+
+```typescript
+import { writable } from 'svelte/store';
+
+export type SeasonMode = 'live' | 'between' | 'off-game' | 'off-season';
+
+export interface SeasonState {
+	mode: SeasonMode;
+	gamesInProgress: number;
+	nextGameAt: string | null;
+	updatedAt: string | null;
+}
+
+const initialState: SeasonState = {
+	mode: 'off-season',
+	gamesInProgress: 0,
+	nextGameAt: null,
+	updatedAt: null
+};
+
+export const seasonState = writable<SeasonState>(initialState);
+
+export async function fetchSeasonState() {
+	try {
+		const res = await fetch('/api/season-state');
+		if (!res.ok) return;
+		const data = await res.json();
+		
+		seasonState.set({
+			mode: data.mode ?? 'off-season',
+			gamesInProgress: Number(data.games_in_progress ?? 0),
+			nextGameAt: typeof data.next_game_at === 'string' ? data.next_game_at : null,
+			updatedAt: data.updated_at ?? null
+		});
+	} catch (e) {
+		console.error('Failed to fetch season state', e);
+	}
+}
+```
+
+#### File: `src/lib/components/board/Header.svelte`
+*Change:* Use the new store, calculate ETA, render banner.
+
+```diff
+--- a/src/lib/components/board/Header.svelte
++++ b/src/lib/components/board/Header.svelte
+@@ -1,10 +1,11 @@
+ <script lang="ts">
+ 	import { onMount } from 'svelte';
+ 	import FreshnessPanel from '$lib/components/board/FreshnessPanel.svelte';
+ 	import { soundEnabled, setSoundEnabled } from '$lib/stores/sound';
++	import { seasonState, fetchSeasonState, type SeasonMode } from '$lib/stores/season';
+ 
+-	type SeasonMode = 'live' | 'between' | 'off-game' | 'off-season';
+-	type SeasonState = {
+-		mode: SeasonMode;
+-		gamesInProgress: number;
+-		currentSeason?: number;
+-		nextSeasonStartsAt?: string;
+-		updatedAt?: string;
+-	};
++	// Re-export for +page.svelte if needed, or just use the store directly
++	export { seasonState };
+ 
+ 	type Freshness = {
+ 		fresh: number;
+@@ -23,46 +24,78 @@ const MODE_CLASS = {
+ 		'off-season': 'mode-off-season'
+ 	} as const;
+ 
+-	let {
+-		previewRunning = false,
+-		onTogglePreview
+-	}: {
+-		previewRunning?: boolean;
+-		onTogglePreview?: () => void;
+-	} = $props();
++	let { previewRunning = false, onTogglePreview }: { previewRunning?: boolean; onTogglePreview?: () => void } = $props();
+ 
+-	let seasonState = $state<SeasonState>({
+-		mode: 'off-season',
+-		gamesInProgress: 0
+-	});
++	// Subscribe to the store
++	$: s = $seasonState;
+ 
+ 	let freshness = $state<Freshness>({
+ 		fresh: 0,
+@@ -73,26 +106,56 @@ const MODE_CLASS = {
+ 			? new Date(seasonState.updatedAt ?? freshness.updatedAt ?? '').toLocaleTimeString()
+ 			: 'waiting for first sync'
+ 	);
+-	const offSeasonYear = $derived(seasonState.currentSeason ?? new Date().getFullYear());
+-	const nextSeasonCountdown = $derived(
+-		seasonState.nextSeasonStartsAt
+-			? `next season ${new Date(seasonState.nextSeasonStartsAt).toLocaleDateString()}`
+-			: 'next season pending schedule'
+-	);
++
++	// Task 6.3: Calculate ETA for "Between" or "Off-Game" states
++	const nextGameEta = $derived(() => {
++		if (!s.nextGameAt) return null;
++		const now = Date.now();
++		const target = new Date(s.nextGameAt).getTime();
++		const diff = target - now;
++		
++		if (diff <= 0) return 'Starting soon';
++		
++		const hours = Math.floor(diff / (1000 * 60 * 60));
++		const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
++		
++		if (hours > 0) {
++			return `${hours}h ${minutes}m`;
++		}
++		return `${minutes}m`;
++	});
++
++	const nextGameTimeStr = $derived(
++		s.nextGameAt ? new Date(s.nextGameAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''
++	);
+ 
+ 	function toggleSound() {
+ 		setSoundEnabled(!$soundEnabled);
+ 	}
+ 
+ 	function toggleFreshnessDebug() {
+ 		freshnessDebugOpen = !freshnessDebugOpen;
+ 	}
+ 
+-	async function refreshStatus() {
++	async function refreshStatus() {
++		await fetchSeasonState();
+ 		try {
+-			const seasonRes = await fetch('/api/season-state');
+-			const freshRes = await fetch('/api/freshness');
+-
+-			if (seasonRes.ok) {
+-				const nextSeason = (await seasonRes.json()) as {
+-					mode?: SeasonMode;
+-					gamesInProgress?: number;
+-					updatedAt?: string;
+-					current_season?: number;
+-					next_game_at?: string;
+-				};
+-				seasonState = {
+-					mode: nextSeason.mode ?? 'off-season',
+-					gamesInProgress: Number(nextSeason.gamesInProgress ?? 0),
+-					currentSeason:
+-						typeof nextSeason.current_season === 'number'
+-							? nextSeason.current_season
+-							: undefined,
+-					nextSeasonStartsAt:
+-						typeof nextSeason.next_game_at === 'string' ? nextSeason.next_game_at : undefined,
+-					updatedAt: nextSeason.updatedAt
+-				};
+-			}
+-
+-			if (freshRes.ok) {
+-				const nextFreshness = (await freshRes.json()) as Partial<Freshness>;
+-				freshness = {
+-					fresh: Number(nextFreshness.fresh ?? 0),
+-					stale: Number(nextFreshness.stale ?? 0),
+-					old: Number(nextFreshness.old ?? 0),
+-					total: Number(nextFreshness.total ?? 0),
+-					updatedAt: nextFreshness.updatedAt
+-				};
+-			}
+-
+-			loadError = '';
+-		} catch (error) {
+-			loadError = error instanceof Error ? error.message : 'status unavailable';
+-		}
++			const freshRes = await fetch('/api/freshness');
++			if (freshRes.ok) {
++				const nextFreshness = (await freshRes.json()) as Partial<Freshness>;
++				freshness = {
++					fresh: Number(nextFreshness.fresh ?? 0),
++					stale: Number(nextFreshness.stale ?? 0),
++					old: Number(nextFreshness.old ?? 0),
++					total: Number(nextFreshness.total ?? 0),
++					updatedAt: nextFreshness.updatedAt
++				};
++			}
++			loadError = '';
++		} catch (error) {
++			loadError = error instanceof Error ? error.message : 'status unavailable';
++		}
+ 	}
+ 
+ 	onMount(() => {
+-		void refreshStatus();
++		void refreshStatus();
+ 		const interval = window.setInterval(() => {
+ 			void refreshStatus();
+ 		}, 30000);
+ 		return () => window.clearInterval(interval);
+ 	});
+ </script>
+ 
+ <section class="board-header" aria-label="Board header">
+ 	<h1>Diamond Departures</h1>
+ 	<div class="status-row">
+ 		<span class={`mode-pill ${modeClass}`}>{s.mode}</span>
+-		{#if s.mode === 'off-season'}
+-			<span class="status-pill off-season-banner">{offSeasonYear} regular season · final</span>
+-			<span class="status-pill">{nextSeasonCountdown}</span>
+-			<button class="status-pill button" type="button" onclick={onTogglePreview}>
+-				{previewRunning ? 'Exit preview mode' : 'Preview mode'}
+-			</button>
+-			{#if previewRunning}
+-				<span class="status-pill preview-running">Preview running · replay mode</span>
+-			{/if}
+-		{:else}
+-			<span class="status-pill">{s.gamesInProgress} games live</span>
+-		{/if}
++		
++		{#if s.mode === 'off-season'}
++			<span class="status-pill off-season-banner">Off Season</span>
++			<button class="status-pill button" type="button" onclick={onTogglePreview}>
++				{previewRunning ? 'Exit preview mode' : 'Preview mode'}
++			</button>
++			{#if previewRunning}
++				<span class="status-pill preview-running">Preview running · replay mode</span>
++			{/if}
++		{:else if s.mode === 'live'}
++			<span class="status-pill live-pill">{s.gamesInProgress} games live</span>
++		{:else if s.nextGameAt}
++			<!--

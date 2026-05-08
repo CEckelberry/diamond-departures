@@ -35,10 +35,15 @@ type StreamHandlers = {
 	onError?: (error: Event) => void;
 };
 
+type StreamOptions = {
+	endpoint?: string;
+};
+
 export function openBoardStream(
 	view: string,
 	sort: string,
 	handlers: StreamHandlers,
+	options?: StreamOptions,
 ): () => void {
 	if (typeof window === "undefined") {
 		return () => {};
@@ -54,7 +59,11 @@ export function openBoardStream(
 		const params = new URLSearchParams();
 		params.set("view", view);
 		params.set("sort", sort);
-		source = new EventSource("/api/board/sse?" + params.toString());
+		if (!options?.endpoint) {
+			source = new EventSource("/api/board/sse?" + params.toString());
+		} else {
+			source = new EventSource(options.endpoint + "?" + params.toString());
+		}
 
 		source.addEventListener("snapshot", (event) => {
 			attempts = 0;

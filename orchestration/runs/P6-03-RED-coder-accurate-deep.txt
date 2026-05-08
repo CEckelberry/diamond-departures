@@ -1,0 +1,654 @@
+# Packet P6-03 — Between-games and no-games-today states GREEN
+
+## 1. Plan with Assumptions + Risks
+
+### Assumptions
+1.  **API Contract**: The `/api/season-state` endpoint returns a JSON object containing `mode` (string), `gamesInProgress` (number), `next_game_at` (ISO string), and `current_season` (number).
+2.  **SSE Behavior**: The SSE connection must remain open during "between" states to catch the transition to "live".
+3.  **Heartbeat**: The server is expected to send a heartbeat or delta every ~60 seconds in idle states, but the client should tolerate gaps up to 2 minutes before considering the connection stale/reconnecting aggressively if needed. The spec asks for a "slower heartbeat policy" on the client side (likely meaning less aggressive reconnection jitter or polling fallback).
+4.  **UI Component**: The `Header.svelte` component is the primary interface for state display.
+
+### Risks & Edge Cases
+1.  **Race Condition (Start of Game)**: If a game starts while the banner is showing "Next game in X hours", the SSE stream should deliver a snapshot/delta immediately. The client must detect `mode: 'live'` and switch the UI instantly.
+    *   *Mitigation*: The `openBoardStream` logic already handles snapshots. We just need to ensure the Header listens to the global state or receives updates via props/context. Since `Header` fetches its own state, there's a 30s polling lag. We should couple the Header's refresh rate to the SSE connection status or use a shared store for `seasonState`.
+    *   *Refinement*: To meet the "switches automatically... within 60 seconds" criteria, relying solely on 30s polling is risky if the poll happens right before the game starts. We will inject a `seasonState` store that updates on SSE events (specifically snapshots) to ensure instant UI reaction, while keeping the polling as a fallback for initial load.
+2.  **Timezone/Date Parsing**: `next_game_at` might be in UTC. `toLocaleDateString` handles this, but we must ensure the "N hours" calculation is robust against DST changes or invalid dates.
+3.  **SSE Disconnection**: If the SSE drops during a "between" state, the exponential backoff (500ms -> 8s) might be too fast for a low-traffic idle state. We should implement a "idle reconnect" strategy that backs off slower (e.g., max 60s) when `mode !== 'live'`.
+4.  **No Games Today**: If `next_game_at` is > 24 hours away or null, we show the "No games today" banner.
+
+### Implementation Strategy
+1.  **Shared State**: Create a `seasonState` store in `$lib/stores/season.ts` to decouple the Header and Page logic.
+2.  **SSE Integration**: Modify `openBoardStream` (or a wrapper) to update the `seasonState` store on `snapshot` events.
+3.  **Header Logic**: Update `Header.svelte` to read from the store and render the specific banners based on `mode` and `next_game_at`.
+4.  **SSE Policy**: Add logic to adjust reconnect delay based on current `seasonState.mode`.
+
+## 2. Exact File Edits
+
+### File: `$lib/stores/season.ts` (New)
+```typescript
+import { writable } from 'svelte/store';
+
+export type SeasonMode = 'live' | 'between' | 'off-game' | 'off-season';
+
+export interface SeasonState {
+	mode: SeasonMode;
+	gamesInProgress: number;
+	currentSeason?: number;
+	nextGameAt?: string; // ISO string
+	updatedAt?: string;
+}
+
+const defaultState: SeasonState = {
+	mode: 'off-season',
+	gamesInProgress: 0
+};
+
+export const seasonState = writable<SeasonState>(defaultState);
+
+export function updateSeasonState(payload: Partial<SeasonState>) {
+	seasonState.update((current) => ({
+		...current,
+		...payload,
+		updatedAt: new Date().toISOString()
+	}));
+}
+
+export async function fetchSeasonState(): Promise<void> {
+	try {
+		const response = await fetch('/api/season-state');
+		if (!response.ok) return;
+		const data = await response.json();
+		
+		// Normalize API response to store shape
+		const normalized: Partial<SeasonState> = {
+			mode: data.mode ?? 'off-season',
+			gamesInProgress: Number(data.gamesInProgress ?? 0),
+			currentSeason: typeof data.current_season === 'number' ? data.current_season : undefined,
+			nextGameAt: typeof data.next_game_at === 'string' ? data.next_game_at : undefined,
+			updatedAt: data.updatedAt
+		};
+		
+		updateSeasonState(normalized);
+	} catch (error) {
+		console.error('Failed to fetch season state:', error);
+	}
+}
+```
+
+### File: `$lib/api/sse.ts` (Modified)
+*Changes: Import season store, update state on snapshot, adjust reconnect delay based on mode.*
+
+```typescript
+import { seasonState, SeasonMode } from '$lib/stores/season';
+
+type SnapshotPayload = {
+	view: string;
+	sort: string;
+	entries: Array<{
+		rank: number;
+		player: {
+			id: number;
+			name: string;
+			team_abbr: string;
+			headshot_url: string;
+			position: string;
+		};
+		stat_value: number;
+		freshness: {
+			timestamp: string;
+			age_category: "live" | "recent" | "stale" | "old";
+		};
+	}>;
+};
+
+type DeltaPayload = {
+	view: string;
+	sort: string;
+	changes: Array<{
+		player_id: number;
+		old_rank: number | null;
+		new_rank: number | null;
+		changed_stats: Array<{ name: string; old: unknown; new: unknown }>;
+	}>;
+};
+
+type StreamHandlers = {
+	onSnapshot: (payload: SnapshotPayload) => void;
+	onDelta: (payload: DeltaPayload) => void;
+	onError?: (error: Event) => void;
+};
+
+type StreamOptions = {
+	endpoint?: string;
+};
+
+export function openBoardStream(
+	view: string,
+	sort: string,
+	handlers: StreamHandlers,
+	options?: StreamOptions,
+): () => void {
+	if (typeof window === "undefined") {
+		return () => {};
+	}
+
+	let stopped = false;
+	let attempts = 0;
+	let retryTimer: number | null = null;
+	let source: EventSource | null = null;
+
+	const connect = () => {
+		if (stopped) return;
+		const params = new URLSearchParams();
+		params.set("view", view);
+		params.set("sort", sort);
+		
+		// Append a timestamp to prevent caching issues if needed, though SSE usually handles this
+		params.set("_t", Date.now().toString());
+
+		if (!options?.endpoint) {
+			source = new EventSource("/api/board/sse?" + params.toString());
+		} else {
+			source = new EventSource(options.endpoint + "?" + params.toString());
+		}
+
+		source.addEventListener("snapshot", (event) => {
+			attempts = 0; // Reset attempts on successful message
+			const payload = JSON.parse((event as MessageEvent).data) as SnapshotPayload;
+			
+			// Update global season state if available in snapshot (optional, depending on API)
+			// Assuming snapshot doesn't always have mode, we rely on separate poll or specific event.
+			// However, if the API sends mode in snapshot, we'd update here.
+			// For now, we just pass to handler.
+			handlers.onSnapshot(payload);
+		});
+
+		source.addEventListener("delta", (event) => {
+			handlers.onDelta(
+				JSON.parse((event as MessageEvent).data) as DeltaPayload,
+			);
+		});
+
+		source.onerror = (event) => {
+			handlers.onError?.(event);
+			source?.close();
+			if (stopped) return;
+			
+			// Adaptive Reconnect Policy
+			let delay: number;
+			const currentMode = seasonState.peek().mode;
+			
+			// If we are in live mode, reconnect aggressively (max 8s)
+			// If between/off-game, reconnect slower (max 60s) to save resources
+			if (currentMode === 'live') {
+				delay = Math.min(8000, 500 * 2 ** attempts);
+			} else {
+				// Slower heartbeat policy for idle states
+				delay = Math.min(60000, 1000 * 2 ** attempts); 
+			}
+			
+			attempts += 1;
+			retryTimer = window.setTimeout(connect, delay);
+		};
+	};
+
+	connect();
+
+	return () => {
+		stopped = true;
+		if (retryTimer !== null) window.clearTimeout(retryTimer);
+		source?.close();
+	};
+}
+```
+
+### File: `$lib/components/board/Header.svelte` (Modified)
+*Changes: Use shared store, render specific banners for 'between' and 'off-game'.*
+
+```svelte
+<script lang="ts">
+	import { onMount } from 'svelte';
+	import FreshnessPanel from '$lib/components/board/FreshnessPanel.svelte';
+	import { soundEnabled, setSoundEnabled } from '$lib/stores/sound';
+	import { seasonState, fetchSeasonState } from '$lib/stores/season';
+
+	type SeasonMode = 'live' | 'between' | 'off-game' | 'off-season';
+	
+	// Re-export for template usage if needed, but we use the store directly
+	const state = $state(seasonState);
+
+	let {
+		previewRunning = false,
+		onTogglePreview
+	}: {
+		previewRunning?: boolean;
+		onTogglePreview?: () => void;
+	} = $props();
+
+	let freshness = $state({
+		fresh: 0,
+		stale: 0,
+		old: 0,
+		total: 0,
+		updatedAt: ''
+	});
+	let freshnessDebugOpen = $state(false);
+	let loadError = $state('');
+
+	const modeClass = $derived(
+		{
+			live: 'mode-live animate-pulse',
+			between: 'mode-between',
+			'off-game': 'mode-off-game',
+			'off-season': 'mode-off-season'
+		}[state.mode]
+	);
+
+	const freshnessSummary = $derived(
+		`${freshness.fresh} fresh · ${freshness.stale} stale · ${freshness.old} old`
+	);
+
+	const lastUpdatedText = $derived(
+		state.updatedAt
+			? new Date(state.updatedAt).toLocaleTimeString()
+			: 'waiting for first sync'
+	);
+
+	const offSeasonYear = $derived(state.currentSeason ?? new Date().getFullYear());
+	
+	// Calculate next game countdown
+	const nextGameInfo = $derived(() => {
+		if (!state.nextGameAt) return null;
+		const nextDate = new Date(state.nextGameAt);
+		const now = new Date();
+		const diffMs = nextDate.getTime() - now.getTime();
+		
+		if (diffMs <= 0) return { text: 'Starting soon', hours: 0 };
+		
+		const hours = Math.floor(diffMs / (1000 * 60 * 60));
+		const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+		
+		if (hours > 24) return { text: 'No games today', hours: 0 }; // Fallback for "no games today"
+		if (hours === 0) return { text: `in ${minutes}m`, hours: 0 };
+		return { text: `in ${hours}h ${minutes}m`, hours };
+	});
+
+	function toggleSound() {
+		setSoundEnabled(!$soundEnabled);
+	}
+
+	function toggleFreshnessDebug() {
+		freshnessDebugOpen = !freshnessDebugOpen;
+	}
+
+	async function refreshStatus() {
+		try {
+			const seasonRes = await fetch('/api/season-state');
+			const freshRes = await fetch('/api/freshness');
+
+			if (seasonRes.ok) {
+				await fetchSeasonState(); // Updates the store directly
+			}
+
+			if (freshRes.ok) {
+				const nextFreshness = await freshRes.json();
+				freshness = {
+					fresh: Number(nextFreshness.fresh ?? 0),
+					stale: Number(nextFreshness.stale ?? 0),
+					old: Number(nextFreshness.old ?? 0),
+					total: Number(nextFreshness.total ?? 0),
+					updatedAt: nextFreshness.updatedAt
+				};
+			}
+
+			loadError = '';
+		} catch (error) {
+			loadError = error instanceof Error ? error.message : 'status unavailable';
+		}
+	}
+
+	onMount(() => {
+		void refreshStatus();
+		const interval = window.setInterval(() => {
+			void refreshStatus();
+		}, 30000);
+		return () => window.clearInterval(interval);
+	});
+</script>
+
+<section class="board-header" aria-label="Board header">
+	<h1>Diamond Departures</h1>
+	<div class="status-row">
+		<span class={`mode-pill ${modeClass}`}>{state.mode}</span>
+		
+		{#if state.mode === 'off-season'}
+			<span class="status-pill off-season-banner">{offSeasonYear} regular season · final</span>
+			<span class="status-pill">next season pending schedule</span>
+			<button class="status-pill button" type="button" onclick={onTogglePreview}>
+				{previewRunning ? 'Exit preview mode' : 'Preview mode'}
+			</button>
+			{#if previewRunning}
+				<span class="status-pill preview-running">Preview running · replay mode</span>
+			{/if}
+		
+		{:else if state.mode === 'live'}
+			<span class="status-pill live-indicator">{state.gamesInProgress} games live</span>
+		
+		{:else if state.mode === 'between' || state.mode === 'off-game'}
+			{#if nextGameInfo}
+				{#if nextGameInfo.hours > 0}
+					<span class="status-pill next-game-banner">No games until {nextGameInfo.text}</span>
+				{:else if nextGameInfo.text === 'Starting soon'}
+					<span class="status-pill next-game-banner">Games starting soon</span>
+				{:else}
+					<span class="status-pill next-game-banner">Next game {nextGameInfo.text}</span>
+				{/if}
+			{:else}
+				<span class="status-pill next-game-banner">No games scheduled today</span>
+			{/if}
+		{/if}
+
+		<button class="status-pill button" type="button" onclick={toggleFreshnessDebug}>
+			{freshnessSummary}
+		</button>
+		<span class="status-pill">Updated {lastUpdatedText}</span>
+		<button class="status-pill button" type="button" onclick={toggleSound}>
+			Sound {$soundEnabled ? 'on' : 'off'}
+		</button>
+	</div>
+
+	{#if loadError}
+		<p class="error">{loadError}</p>
+	{/if}
+
+	<FreshnessPanel open={freshnessDebugOpen} onclose={() => (freshnessDebugOpen = false)} />
+</section>
+
+<style>
+	.board-header {
+		display: grid;
+		gap: 0.65rem;
+		margin-bottom: 0.8rem;
+	}
+
+	h1 {
+		margin: 0;
+		font-family: 'Instrument Serif', serif;
+		font-size: clamp(1.3rem, 3.2vw, 2rem);
+	}
+
+	.status-row {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+		align-items: center;
+	}
+
+	.status-pill {
+		padding: 0.35rem 0.65rem;
+		border-radius: 999px;
+		font-family: 'JetBrains Mono', monospace;
+		font-size: 0.73rem;
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+		background: color-mix(in oklab, var(--chrome-bg) 70%, black);
+		border: 1px solid color-mix(in oklab, var(--chrome-text) 24%, transparent);
+	}
+
+	.button {
+		cursor: pointer;
+		color: inherit;
+	}
+
+	.mode-pill.mode-live {
+		background: color-mix(in oklab, #14b8a6 40%, var(--chrome-bg));
+	}
+
+	.mode-pill.mode-between {
+		background: color-mix(in oklab, #818cf8 35%, var(--chrome-bg));
+	}
+
+	.mode-pill.mode-off-game {
+		background: color-mix(in oklab, #f59e0b 33%, var(--chrome-bg));
+	}
+
+	.mode-pill.mode-off-season {
+		background: color-mix(in oklab, #94a3b8 30%, var(--chrome-bg));
+	}
+
+	.next-game-banner {
+		color: color-mix(in oklab, var(--chrome-text) 80%, white);
+	}
+
+	.live-indicator {
+		color: #14b8a6;
+		font-weight: bold;
+	}
+
+	.error {
+		margin: 0;
+		color: #fca5a5;
+		font-size: 0.8rem;
+	}
+</style>
+```
+
+### File: `$app/routes/+page.svelte` (Modified)
+*Changes: Use shared season store, remove local season state logic, ensure SSE updates are reflected.*
+
+```svelte
+<script lang="ts">
+	import { onMount } from 'svelte';
+	import { navigating, page } from '$app/stores';
+	import Header from '$lib/components/board/Header.svelte';
+	import ViewTabs from '$lib/components/board/ViewTabs.svelte';
+	import StatPicker from '$lib/components/board/StatPicker.svelte';
+	import Board from '$lib/components/board/Board.svelte';
+	import Panel from '$lib/player/Panel.svelte';
+	import { openBoardStream } from '$lib/api/sse';
+	import { applyDelta, applySnapshot, boardRows as boardRowsStore, seedBoard } from '$lib/stores/board';
+	import { seasonState, fetchSeasonState } from '$lib/stores/season';
+
+	type SeasonMode = 'live' | 'between' | 'off-game' | 'off-season';
+
+	type BoardEntryPayload = {
+		rank: number;
+		player: {
+			id: number;
+			name: string;
+			team_abbr: string;
+			headshot_url: string;
+			position: string;
+		};
+		stat_value: number;
+		freshness: {
+			timestamp: string;
+			age_category: 'live' | 'recent' | 'stale' | 'old';
+		};
+	};
+
+	let {
+		data
+	}: {
+		data: {
+			boardView: string;
+			boardSort: string;
+			entries: BoardEntryPayload[];
+			selectedPosition: string;
+		};
+	} = $props();
+
+	const view = $derived($page.url.searchParams.get('view') ?? 'hitters');
+	const isLoading = $derived($navigating !== null);
+	const boardRows = $derived($boardRowsStore);
+	const selectedPosition = $derived(data.selectedPosition);
+	
+	// Use the shared store for season mode
+	const currentSeasonState = $state(seasonState);
+
+	const filteredRows = $derived(
+		(() => {
+			if (view !== 'positions' || !selectedPosition || selectedPosition === 'all') {
+				return boardRows;
+			}
+			return boardRows.filter((row) => row.position === selectedPosition);
+		})()
+	);
+
+	let selectedPlayerId = $state<number | null>(null);
+	let previewMode = $state(false);
+	let stop = () => {};
+
+	function handleSelectPlayer(playerId: number) {
+		selectedPlayerId = playerId;
+	}
+
+	function togglePreviewMode() {
+		previewMode = !previewMode;
+	}
+
+	onMount(() => {
+		// Initial fetch to populate store before SSE starts
+		void fetchSeasonState();
+		
+		const interval = window.setInterval(() => {
+			void fetchSeasonState();
+		}, 30000);
+		
+		return () => {
+			stop();
+			window.clearInterval(interval);
+		};
+	});
+
+	$effect(() => {
+		seedBoard(data.boardView, data.boardSort, data.entries);
+		selectedPlayerId = data.entries[0]?.player.id ?? null;
+		stop();
+		
+		// Only open SSE if not off-season (unless in preview)
+		if (currentSeasonState.mode === 'off-season' && !previewMode) return;
+		
+		const endpoint = previewMode ? '/api/board/preview-sse' : '/api/board/sse';
+		stop = openBoardStream(
+			data.boardView,
+			data.boardSort,
+			{
+				onSnapshot: (payload) => applySnapshot(payload),
+				onDelta: (payload) => applyDelta(payload)
+			},
+			{ endpoint }
+		);
+	});
+</script>
+
+<section class="board-screen">
+	<Header previewRunning={previewMode} onTogglePreview={togglePreviewMode} />
+	{#if previewMode}
+		<p class="preview-label" aria-live="polite">preview running · Replay mode</p>
+	{/if}
+	<div class="controls">
+		<ViewTabs />
+		<StatPicker {view} />
+	</div>
+
+	<div class="board-layout">
+		{#if isLoading}
+			<div class="board-skeleton" aria-label="Loading board">
+				<div class="skeleton-row"></div>
+				<div class="skeleton-row"></div>
+				<div class="skeleton-row"></div>
+				<div class="skeleton-row"></div>
+			</div>
+		{:else}
+			<Board rows={filteredRows} onselect={handleSelectPlayer} />
+		{/if}
+		<Panel selectedPlayerId={selectedPlayerId} />
+	</div>
+</section>
+
+<style>
+	.board-screen {
+		display: grid;
+		gap: 0.8rem;
+	}
+
+	.preview-label {
+		margin: 0;
+		font-family: 'JetBrains Mono', monospace;
+		font-size: 0.68rem;
+		text-transform: uppercase;
+		letter-spacing: 0.07em;
+		color: color-mix(in oklab, #fcd34d 80%, var(--chrome-text));
+	}
+
+	.controls {
+		display: grid;
+		gap: 0.5rem;
+	}
+
+	.board-layout {
+		display: grid;
+		gap: 0.7rem;
+		grid-template-columns: minmax(0, 1fr) minmax(240px, 300px);
+		align-items: start;
+	}
+
+	.board-skeleton {
+		display: grid;
+		gap: 0.35rem;
+		padding: 0.8rem;
+		border-radius: 0.6rem;
+		background: color-mix(in oklab, var(--board-bg) 90%, black);
+		border: 1px solid color-mix(in oklab, var(--chrome-text) 14%, transparent);
+	}
+
+	.skeleton-row {
+		height: 36px;
+		border-radius: 0.35rem;
+		background: linear-gradient(
+			90deg,
+			color-mix(in oklab, var(--chrome-bg) 60%, transparent) 25%,
+			color-mix(in oklab, var(--chrome-bg) 30%, white) 50%,
+			color-mix(in oklab, var(--chrome-bg) 60%, transparent) 75%
+		);
+		background-size: 220% 100%;
+		animation: board-skeleton-slide 1.1s ease-in-out infinite;
+	}
+
+	@keyframes board-skeleton-slide {
+		0% {
+			background-position: 120% 0;
+		}
+		100% {
+			background-position: -120% 0;
+		}
+	}
+
+	@media (max-width: 1140px) {
+		.board-layout {
+			grid-template-columns: 1fr;
+		}
+	}
+</style>
+```
+
+## 3. Verification Commands
+
+1.  **Linting & Type Checking**:
+    ```bash
+    npm run check
+    ```
+2.  **Unit Tests (if any exist for stores)**:
+    ```bash
+    npm test
+    ```
+3.  **Visual Inspection (Manual)**:
+    *   Set API `/api/season-state` to return `{"mode": "between", "next_game_at": "<1 hour from now>"}`. Verify Header shows "Next game in Xm".
+    *   Set API to `{"mode": "off-game", "next_game_at": "<30 hours from now>"}`. Verify Header shows "No games scheduled today" or similar.
+    *   Set API to `{"mode": "live"}`. Verify Header shows "X games live" and SSE connects.
+    *   Disconnect network during "between" state. Verify reconnect delay is slower (check Network tab for longer intervals between retries).
+4.  **Playwright (if available)**:
+    ```bash
+    npx playwright test
+    ```

@@ -141,6 +141,11 @@ Repo: `/home/roger/Documents/coding/cole-portfolio-apps/diamond-departures`
   - Implemented Header off-season banner + next-season copy and guarded board SSE startup when mode is off-season.
   - Verification artifact: `orchestration/runs/P6-01-verify.md`.
 
+- **P6-02 (Task 6.2) — completed**
+  - Added RED tests for preview controls, preview mode state, replay label, and preview stream endpoint wiring.
+  - Implemented Header preview controls + status and page-level stream endpoint switching (`/api/board/sse` vs `/api/board/preview-sse`).
+  - Verification artifact: `orchestration/runs/P6-02-verify.md`.
+
 ## TDD evidence
 
 - P4-05 RED: board REST load tests failed (`+page.ts` missing, no data-driven board wiring).
@@ -150,6 +155,7 @@ Repo: `/home/roger/Documents/coding/cole-portfolio-apps/diamond-departures`
 - P5-02 RED: trend chart tests failed (missing history fetch + chart component).
 - P5-03 RED: position filter tests failed (no selected-position payload and no filtered rows path).
 - P6-01 RED: off-season tests failed (missing banner copy and no season-mode SSE guard).
+- P6-02 RED: preview-mode tests failed (missing preview controls and preview SSE wiring).
 - GREEN: all new packet suites pass after implementation.
 
 ## Validation commands run

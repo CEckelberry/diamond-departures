@@ -177,6 +177,14 @@ Branch: `main`
 - Updated board page to poll `/api/season-state` and skip `openBoardStream(...)` when mode is `off-season`.
 - Verification: `node --test apps/web/tests/offseason-state.test.mjs`, full web node test suite, and `pnpm --filter web check` (PASS, warning-only).
 
+### P6-02 (RED → GREEN completed)
+
+- Added RED tests for preview controls, preview mode state, replay label, and `/api/board/preview-sse` stream wiring.
+- Updated Header off-season actions with `Preview mode` / `Exit preview mode` and `Preview running` status.
+- Updated board page to toggle `previewMode` and switch stream endpoint between `/api/board/sse` and `/api/board/preview-sse`.
+- Extended SSE helper to accept optional endpoint override while preserving existing stream contract.
+- Verification: `node --test apps/web/tests/preview-mode.test.mjs`, full web node suite, and `pnpm --filter web check` (PASS, warning-only).
+
 ## Additional verification
 
 - `node --test apps/web/tests/board-structure.test.mjs apps/web/tests/board-rest-load.test.mjs apps/web/tests/board-sse-wiring.test.mjs apps/web/tests/board-reshuffle-animation.test.mjs` (PASS, 10 tests)

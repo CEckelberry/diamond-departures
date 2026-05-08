@@ -15,7 +15,7 @@ def main() -> None:
     parser.add_argument("--model", default="coder-fast")
     parser.add_argument("--task-file", required=True)
     parser.add_argument("--out", required=True)
-    parser.add_argument("--timeout", type=int, default=900)
+    parser.add_argument("--timeout", type=int, default=1800)
     parser.add_argument("--temperature", type=float, default=None)
     parser.add_argument("--top-p", type=float, default=None)
     parser.add_argument("--max-tokens", type=int, default=None)
@@ -30,9 +30,9 @@ def main() -> None:
     task_text = pathlib.Path(args.task_file).read_text(encoding="utf-8")
 
     profile_defaults = {
-        "impl": {"temperature": 0.25, "top_p": 0.92, "max_tokens": 4500},
-        "test": {"temperature": 0.35, "top_p": 0.95, "max_tokens": 6000},
-        "plan": {"temperature": 0.30, "top_p": 0.94, "max_tokens": 8000},
+        "impl": {"temperature": 0.22, "top_p": 0.92, "max_tokens": 9000},
+        "test": {"temperature": 0.30, "top_p": 0.94, "max_tokens": 11000},
+        "plan": {"temperature": 0.28, "top_p": 0.93, "max_tokens": 14000},
     }
     chosen = profile_defaults[args.profile]
     temperature = args.temperature if args.temperature is not None else chosen["temperature"]
@@ -46,7 +46,8 @@ def main() -> None:
                 "role": "system",
                 "content": (
                     "You are a senior engineer. Produce implementation-ready output for exactly one task packet. "
-                    "Return: (1) concise plan, (2) exact file edits as unified diff, (3) verification commands."
+                    "Think deeply and be explicit about edge cases and failure modes. "
+                    "Return: (1) plan with assumptions+risks, (2) exact file edits as unified diff, (3) verification commands."
                 ),
             },
             {"role": "user", "content": task_text},

@@ -26,6 +26,14 @@
 		'off-season': 'mode-off-season'
 	} as const;
 
+	let {
+		previewRunning = false,
+		onTogglePreview
+	}: {
+		previewRunning?: boolean;
+		onTogglePreview?: () => void;
+	} = $props();
+
 	let seasonState = $state<SeasonState>({
 		mode: 'off-season',
 		gamesInProgress: 0
@@ -122,6 +130,12 @@
 		{#if seasonState.mode === 'off-season'}
 			<span class="status-pill off-season-banner">{offSeasonYear} regular season · final</span>
 			<span class="status-pill">{nextSeasonCountdown}</span>
+			<button class="status-pill button" type="button" onclick={onTogglePreview}>
+				{previewRunning ? 'Exit preview mode' : 'Preview mode'}
+			</button>
+			{#if previewRunning}
+				<span class="status-pill preview-running">Preview running · replay mode</span>
+			{/if}
 		{:else}
 			<span class="status-pill">{seasonState.gamesInProgress} games live</span>
 		{/if}
