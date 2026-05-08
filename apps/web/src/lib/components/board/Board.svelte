@@ -12,6 +12,8 @@
 		team: string;
 		position: string;
 		stat: string;
+		justQualified?: boolean;
+		qualifiedAt?: string | null;
 	};
 
 	let {
@@ -33,7 +35,9 @@
 					player: `PLAYER ${String(index + 1).padStart(2, '0')}`,
 					team: ['ATL', 'LAD', 'NYY', 'SEA', 'SDP'][index % 5],
 					position: ['SS', 'OF', '1B', 'SP', 'C'][index % 5],
-					stat: (150 - index / 2).toFixed(1)
+					stat: (150 - index / 2).toFixed(1),
+					justQualified: false,
+					qualifiedAt: null
 				}))
 	);
 
@@ -78,7 +82,11 @@
 	</div>
 	<div class="board-body" role="rowgroup">
 		{#each placeholderRows as row, index (row.playerId)}
-			<div class="row-shell" animate:flip={rowFlip(index)}>
+			<div
+				class="row-shell"
+				class:just-qualified-enter={Boolean(row.justQualified)}
+				animate:flip={rowFlip(index)}
+			>
 				<Row {row} onselect={onselect} />
 			</div>
 		{/each}
@@ -116,6 +124,21 @@
 
 	.row-shell {
 		will-change: transform;
+	}
+
+	.row-shell.just-qualified-enter {
+		animation: row-enter 800ms cubic-bezier(0.2, 0.8, 0.2, 1);
+	}
+
+	@keyframes row-enter {
+		0% {
+			opacity: 0;
+			transform: translateY(24px);
+		}
+		100% {
+			opacity: 1;
+			transform: translateY(0);
+		}
 	}
 
 	@media (max-width: 920px) {

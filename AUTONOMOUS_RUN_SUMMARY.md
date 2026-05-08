@@ -149,6 +149,27 @@ Branch: `main`
 - Updated `+page.ts` to return `selectedPosition` alongside resolved API view and updated `+page.svelte` to derive `filteredRows` for `view=positions`.
 - Verification: `node --test apps/web/tests/position-filtered-views.test.mjs apps/web/tests/board-rest-load.test.mjs`, full Phase 4/5 node suite, and `pnpm --filter web check` (PASS, warning-only).
 
+### P5-04 (RED → GREEN completed)
+
+- Added RED tests for `/player/[slug]` route existence and contract wiring (`Board` + `Panel` + close/back path).
+- Implemented `apps/web/src/routes/player/[slug]/+page.ts` loader with board fetch and slug-to-player selection via `slugify`.
+- Implemented `apps/web/src/routes/player/[slug]/+page.svelte` page rendering board context with selected player panel and a close link to `/`.
+- Verification: `node --test apps/web/tests/player-route.test.mjs` and `pnpm --filter web check` (PASS, warning-only).
+
+### P5-05 (RED → GREEN completed)
+
+- Added RED tests for newly qualified delta contract fields, row badge markup, and enter animation hook.
+- Updated board store/types/row mapping to thread `newly_qualified` + `qualified_at` into `justQualified` row metadata.
+- Added `(just qualified)` badge and default 24h fade animation plus 800ms row enter animation.
+- Verification: `node --test apps/web/tests/just-qualified-animation.test.mjs` and `node --test apps/web/tests/board-sse-wiring.test.mjs` (PASS).
+
+### P5-06 (RED → GREEN completed)
+
+- Added RED tests for real freshness panel component and header integration.
+- Implemented `FreshnessPanel.svelte` with `/api/freshness` fetch and sections for ingest runs, per-stat freshness, and schema drift.
+- Replaced Header placeholder diagnostics panel with `FreshnessPanel` (dialog semantics + close button + Escape close).
+- Verification: `node --test apps/web/tests/freshness-debug-panel.test.mjs apps/web/tests/board-header.test.mjs` and `pnpm --filter web check` (PASS, warning-only).
+
 ## Additional verification
 
 - `node --test apps/web/tests/board-structure.test.mjs apps/web/tests/board-rest-load.test.mjs apps/web/tests/board-sse-wiring.test.mjs apps/web/tests/board-reshuffle-animation.test.mjs` (PASS, 10 tests)

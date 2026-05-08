@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import FreshnessPanel from '$lib/components/board/FreshnessPanel.svelte';
 	import { soundEnabled, setSoundEnabled } from '$lib/stores/sound';
 
 	type SeasonMode = 'live' | 'between' | 'off-game' | 'off-season';
@@ -112,13 +113,7 @@
 		<p class="error">{loadError}</p>
 	{/if}
 
-	{#if freshnessDebugOpen}
-		<aside class="debug-panel" aria-label="Freshness details">
-			<h2>Freshness details</h2>
-			<p>Placeholder modal for expanded freshness diagnostics (Task 5.6).</p>
-			<p>Total tracked rows: {freshness.total}</p>
-		</aside>
-	{/if}
+	<FreshnessPanel open={freshnessDebugOpen} onclose={() => (freshnessDebugOpen = false)} />
 </section>
 
 <style>
@@ -178,19 +173,4 @@
 		font-size: 0.8rem;
 	}
 
-	.debug-panel {
-		padding: 0.8rem;
-		border-radius: 0.5rem;
-		border: 1px solid color-mix(in oklab, var(--chrome-text) 20%, transparent);
-		background: color-mix(in oklab, var(--board-bg) 70%, black);
-	}
-
-	.debug-panel h2,
-	.debug-panel p {
-		margin: 0;
-	}
-
-	.debug-panel p + p {
-		margin-top: 0.4rem;
-	}
 </style>

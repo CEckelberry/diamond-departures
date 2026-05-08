@@ -6,7 +6,7 @@
 		row,
 		onselect
 	}: {
-		row: BoardRow;
+		row: BoardRow & { justQualified?: boolean };
 		onselect?: (playerId: number) => void;
 	} = $props();
 
@@ -21,6 +21,9 @@
 	</div>
 	<div class="cell player" role="gridcell">
 		<Word value={row.player} width={18} cellWidth={20} cellHeight={30} />
+		{#if row.justQualified}
+			<span class="just-qualified-badge" style:--badge-fade-duration="24h">(just qualified)</span>
+		{/if}
 	</div>
 	<div class="cell team" role="gridcell">
 		<Word value={row.team} width={4} cellWidth={20} cellHeight={30} />
@@ -44,6 +47,29 @@
 
 	.cell {
 		overflow: hidden;
+	}
+
+	.player {
+		display: flex;
+		align-items: center;
+		gap: 0.28rem;
+	}
+
+	.just-qualified-badge {
+		font-family: 'JetBrains Mono', monospace;
+		font-size: 0.58rem;
+		text-transform: lowercase;
+		opacity: 0.95;
+		animation: badge-fade var(--badge-fade-duration, 24h) linear forwards;
+	}
+
+	@keyframes badge-fade {
+		0% {
+			opacity: 0.95;
+		}
+		100% {
+			opacity: 0.05;
+		}
 	}
 
 	@media (max-width: 920px) {

@@ -15,6 +15,8 @@ export type BoardEntry = {
 		timestamp: string;
 		age_category: "live" | "recent" | "stale" | "old";
 	};
+	newly_qualified?: boolean;
+	qualified_at?: string | null;
 };
 
 type DeltaPayload = {
@@ -24,6 +26,8 @@ type DeltaPayload = {
 		player_id: number;
 		old_rank: number | null;
 		new_rank: number | null;
+		newly_qualified?: boolean;
+		qualified_at?: string | null;
 		changed_stats: Array<{ name: string; old: unknown; new: unknown }>;
 	}>;
 };
@@ -78,6 +82,12 @@ export function applyDelta(payload: DeltaPayload) {
 			);
 			if (!entry) continue;
 			if (typeof change.new_rank === "number") entry.rank = change.new_rank;
+			if (change.newly_qualified) {
+				entry.newly_qualified = true;
+				entry.qualified_at = change.qualified_at ?? new Date().toISOString();
+			} else if (change.qualified_at) {
+				entry.qualified_at = change.qualified_at;
+			}
 
 			for (const stat of change.changed_stats) {
 				if (stat.name !== "stat_value") continue;
@@ -93,6 +103,13 @@ export function applyDelta(payload: DeltaPayload) {
 	});
 }
 
+function isWithin24Hours(timestamp: string | null | undefined): boolean {
+	if (!timestamp) return false;
+	const t = Date.parse(timestamp);
+	if (Number.isNaN(t)) return false;
+	return Date.now() - t <= 24 * 60 * 60 * 1000;
+}
+
 export function toBoardRows(entries: BoardEntry[]): BoardRow[] {
 	return entries.map((entry) => ({
 		playerId: entry.player.id,
@@ -101,5 +118,8 @@ export function toBoardRows(entries: BoardEntry[]): BoardRow[] {
 		team: entry.player.team_abbr,
 		position: entry.player.position,
 		stat: Number(entry.stat_value).toFixed(1),
+		justQualified:
+			Boolean(entry.newly_qualified) && isWithin24Hours(entry.qualified_at ?? null),
+		qualifiedAt: entry.qualified_at ?? null,
 	}));
 }

@@ -120,6 +120,22 @@ Repo: `/home/roger/Documents/coding/cole-portfolio-apps/diamond-departures`
   - Updated `apps/web/src/routes/+page.ts` and `+page.svelte` for selected-position aware API mapping and client-side row filtering.
   - Verification artifact: `orchestration/runs/P5-03-verify.md`.
 
+- **P5-04 (Task 5.4) — completed**
+  - Added RED tests for `/player/[slug]` route existence and expected board/panel wiring.
+  - Implemented `apps/web/src/routes/player/[slug]/+page.ts` with board fetch and slug-based selected-player resolution.
+  - Implemented `apps/web/src/routes/player/[slug]/+page.svelte` board-context page with open panel and close link.
+  - Verification artifact: `orchestration/runs/P5-04-verify.md`.
+
+- **P5-05 (Task 5.5) — completed**
+  - Added RED tests for newly-qualified delta fields, row badge rendering, and row enter animation.
+  - Implemented newly-qualified propagation in board store/types and row UI (`(just qualified)` badge + fade animation).
+  - Verification artifact: `orchestration/runs/P5-05-verify.md`.
+
+- **P5-06 (Task 5.6) — completed**
+  - Added RED tests for freshness panel component and Header integration.
+  - Implemented `FreshnessPanel.svelte` and replaced Header placeholder with real panel wiring.
+  - Verification artifact: `orchestration/runs/P5-06-verify.md`.
+
 ## TDD evidence
 
 - P4-05 RED: board REST load tests failed (`+page.ts` missing, no data-driven board wiring).

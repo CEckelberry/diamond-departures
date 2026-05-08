@@ -1,0 +1,216 @@
+### 1. Concise Plan
+
+1.  **Setup Svelte Testing Environment**: Ensure `@testing-library/svelte` and `jest` (or Vitest) are configured to handle Svelte components. Since this is a "RED" packet, we assume the test runner is present or create the necessary config if missing.
+2.  **Create Mock API**: Implement a mock for `/api/freshness` that returns structured data (ingest runs, stats, schema drift) to allow testing of the fetch logic and rendering without a backend.
+3.  **Implement `FreshnessPanel.svelte` (Stub)**: Create the component file with the required structure (`role="dialog"`, sections for ingest/stats/drift) but initially empty or with placeholder content that fails the specific assertions (e.g., missing data or wrong text). *Correction*: The goal is "failing tests". I will create the component with the correct structure but perhaps missing the actual fetch logic or having incorrect initial state, OR I will write the tests against a non-existent component first. The prompt asks for "FreshnessPanel.svelte exists and fetches...". I will create the component file so it "exists", but the tests will verify behavior. To ensure they *fail*, I will initially leave the fetch logic unimplemented or return empty data, then the tests will fail.
+4.  **Write Tests**:
+    *   `FreshnessPanel.test.svelte`: Test existence, fetch call, and DOM structure (ingest list, stats, drift).
+    *   `Header.test.svelte`: Test that Header imports and renders `FreshnessPanel` instead of placeholder text.
+5.  **Verify Failure**: Run tests to confirm they fail as expected.
+
+### 2. Exact File Edits as Unified Diff
+
+```diff
+diff --git a/src/lib/components/FreshnessPanel.svelte b/src/lib/components/FreshnessPanel.svelte
+new file mode 100644
+index 0000000..e69de29
+--- /dev/null
++++ b/src/lib/components/FreshnessPanel.svelte
+@@ -0,0 +1,15 @@
++<script>
++  import { onMount } from 'svelte';
++
++  export let open = false;
++
++  let ingestRuns = [];
++  let stats = {};
++  let schemaDrift = [];
++
++  onMount(async () => {
++    // TODO: Implement fetch logic for /api/freshness
++    // This is intentionally empty to fail tests initially
++  });
++</script>
++
++<div role="dialog" aria-label="Freshness Debug Panel">
++  <h2>Freshness Debug</h2>
++  <!-- Placeholder content -->
++  <p>Loading...</p>
++</div>
+
+diff --git a/src/lib/components/Header.svelte b/src/lib/components/Header.svelte
+index 1234567..abcdefg 100644
+--- a/src/lib/components/Header.svelte
++++ b/src/lib/components/Header.svelte
+@@ -1,5 +1,6 @@
+ <script>
+-  import PlaceholderPanel from './PlaceholderPanel.svelte';
++  import FreshnessPanel from './FreshnessPanel.svelte';
+ </script>
+ 
+ <header>
+   <h1>Dashboard</h1>
+   <!-- Existing header content -->
+ </header>
+ 
++<FreshnessPanel {open} />
+
+diff --git a/src/lib/components/__tests__/FreshnessPanel.test.svelte b/src/lib/components/__tests__/FreshnessPanel.test.svelte
+new file mode 100644
+index 0000000..a1b2c3d
+--- /dev/null
++++ b/src/lib/components/__tests__/FreshnessPanel.test.svelte
+@@ -0,0 +1,65 @@
++import { render, screen, waitFor } from '@testing-library/svelte';
++import FreshnessPanel from '../FreshnessPanel.svelte';
++import { http, HttpResponse } from 'msw';
++import { setupServer } from 'msw/node';
++
++// Mock API response
++const mockFreshnessData = {
++  ingestRuns: [
++    { id: 1, timestamp: '2023-10-01T00:00:00Z', status: 'success' },
++    { id: 2, timestamp: '2023-10-02T00:00:00Z', status: 'failed' }
++  ],
++  stats: {
++    totalTables: 10,
++    freshTables: 8
++  },
++  schemaDrift: [
++    { table: 'users', column: 'email', change: 'type_changed' }
++  ]
++};
++
++const server = setupServer(
++  http.get('/api/freshness', () => {
++    return HttpResponse.json(mockFreshnessData);
++  })
++);
++
++beforeAll(() => server.listen());
++afterEach(() => server.resetHandlers());
++afterAll(() => server.close());
++
++describe('FreshnessPanel', () => {
++  it('exists and renders', () => {
++    render(FreshnessPanel);
++    expect(screen.getByRole('dialog')).toBeInTheDocument();
++  });
++
++  it('fetches /api/freshness on mount', async () => {
++    render(FreshnessPanel);
++    
++    // Wait for the fetch to complete and data to be processed
++    await waitFor(() => {
++      // Test will fail here because the component doesn't fetch yet
++      expect(screen.getByText('Loading...')).not.toBeInTheDocument();
++    }, { timeout: 2000 });
++
++    // Verify ingest runs are rendered
++    expect(screen.getByText('1')).toBeInTheDocument(); // Or specific ID
++    expect(screen.getByText('2')).toBeInTheDocument();
++
++    // Verify stats section exists
++    expect(screen.getByText('Total Tables: 10')).toBeInTheDocument();
++
++    // Verify schema drift section exists
++    expect(screen.getByText('users')).toBeInTheDocument();
++  });
++
++  it('is accessible', () => {
++    const { container } = render(FreshnessPanel);
++    const dialog = screen.getByRole('dialog');
++    
++    expect(dialog).toHaveAttribute('aria-label', 'Freshness Debug Panel');
++    
++    // Check for close button (assuming standard pattern)
++    const closeButton = container.querySelector('button[aria-label="Close"]');
++    expect(closeButton).toBeInTheDocument();
++  });
++});
+
+diff --git a/src/lib/components/__tests__/Header.test.svelte b/src/lib/components/__tests__/Header.test.svelte
+new file mode 100644
+index 0000000..b2c3d4e
+--- /dev/null
++++ b/src/lib/components/__tests__/Header.test.svelte
+@@ -0,0 +1,25 @@
++import { render, screen } from '@testing-library/svelte';
++import Header from '../Header.svelte';
++import FreshnessPanel from '../FreshnessPanel.svelte';
++
++describe('Header', () => {
++  it('imports and renders FreshnessPanel instead of placeholder text', () => {
++    const { container } = render(Header);
++    
++    // Check that FreshnessPanel is rendered
++    // Since FreshnessPanel renders a div with role="dialog", we can look for that
++    expect(screen.getByRole('dialog')).toBeInTheDocument();
++    
++    // Ensure placeholder text is NOT present
++    // Assuming the old placeholder was "Placeholder Panel" or similar
++    expect(screen.queryByText('Placeholder Panel')).not.toBeInTheDocument();
++    
++    // Verify it's the correct component by checking for specific content from FreshnessPanel
++    expect(screen.getByText('Freshness Debug')).toBeInTheDocument();
++  });
++});
+
+diff --git a/jest.config.js b/jest.config.js
+index 0000000..1111111 100644
+--- /dev/null
++++ b/jest.config.js
+@@ -0,0 +1,15 @@
++export default {
++  testEnvironment: 'jsdom',
++  transform: {
++    '^.+\\.svelte$': 'svelte-jester',
++    '^.+\\.mjs$': 'babel-jest',
++    '^.+\\.js$': 'babel-jest'
++  },
++  moduleFileExtensions: ['js', 'mjs', 'svelte'],
++  setupFilesAfterEnv: ['@testing-library/jest-dom/setup'],
++  moduleNameMapper: {
++    '^\\$lib/(.*)$': '<rootDir>/src/lib/$1'
++  },
++  testMatch: ['**/*.test.svelte', '**/*.test.js']
++};
+
+diff --git a/package.json b/package.json
+index 0000000..2222222 100644
+--- /dev/null
++++ b/package.json
+@@ -0,0 +1,10 @@
++{
++  "name": "freshness-debug-tests",
++  "version": "0.0.1",
++  "scripts": {
++    "test": "jest"
++  },
++  "devDependencies": {
++    "@testing-library/svelte": "^4.0.0",
++    "@testing-library/jest-dom": "^6.0.0",
++    "jest": "^29.0.0",
++    "jest-environment-jsdom": "^29.0.0",
++    "svelte-jester": "^3.0.0",
++    "msw": "^2.0.0"
++  }
++}
+```
+
+### 3. Verification Commands
+
+```bash
+# Install dependencies
+npm install
+
+# Run tests (expect failures)
+npm test
+
+# Expected Output:
+# Tests should fail because:
+# 1. FreshnessPanel does not fetch data from /api/freshness.
+# 2. FreshnessPanel does not render ingest runs, stats, or schema drift.
+# 3. FreshnessPanel might be missing the close button with aria-label="Close".
+# 4. Header might still render placeholder text if the import/edit in Header.svelte is not applied (but we applied it, so the main failure will be in FreshnessPanel.test.svelte).
+```

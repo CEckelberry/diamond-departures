@@ -24,5 +24,5 @@ test('header fetches status/freshness and exposes sound toggle + debug panel', a
 	assert.match(src, /import\s+\{\s*soundEnabled\s*,\s*setSoundEnabled\s*\}\s+from\s+'\$lib\/stores\/sound'/);
 	assert.match(src, /onclick=\{toggleSound\}/);
 	assert.match(src, /onclick=\{toggleFreshnessDebug\}/);
-	assert.match(src, /Freshness details/);
+	assert.match(src, /<FreshnessPanel/);
 });
