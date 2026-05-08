@@ -1,0 +1,124 @@
+# Packet P6-01 — Implementation Plan
+
+## 1. Concise Plan
+
+1.  **Extend Header Component**: Add a conditional banner area in `Header.tsx` that displays when `seasonStatus === 'OFF_SEASON'`. This banner will show a static message and a countdown timer (mocked or calculated from a fixed date for this packet).
+2.  **Update Board Page Logic**: Modify `BoardPage.tsx` to check the `seasonStatus` before initializing the SSE (Server-Sent Events) stream. If `OFF_SEASON`, skip the `useEffect` that opens the connection.
+3.  **Preserve Interactions**: Ensure that sorting state and animation triggers remain independent of the SSE connection status, so UI interactions work even when no live data is streaming.
+
+## 2. Exact File Edits (Unified Diff)
+
+### File: `src/components/Header.tsx`
+
+```diff
+--- a/src/components/Header.tsx
++++ b/src/components/Header.tsx
+@@ -1,6 +1,7 @@
+ import React from 'react';
+ import { useAppSelector } from '../hooks/redux';
+ import { selectSeasonStatus } from '../store/slices/seasonSlice';
++import { calculateCountdown } from '../utils/dateUtils'; // Assume utility exists or add inline
+
+ const Header: React.FC = () => {
+   const seasonStatus = useAppSelector(selectSeasonStatus);
+ 
+@@ -10,6 +11,14 @@ const Header: React.FC = () => {
+     <header className="header">
+       <h1>Live Board</h1>
+       <div className="status-indicator">
+-        <span>{seasonStatus}</span>
++        {seasonStatus === 'OFF_SEASON' ? (
++          <div className="off-season-banner">
++            <span>Off-Season</span>
++            <span className="countdown">
++              Next Season Starts: {calculateCountdown()}
++            </span>
++          </div>
++        ) : (
++          <span>{seasonStatus}</span>
++        )}
+       </div>
+     </header>
+   );
+ };
+```
+
+### File: `src/pages/BoardPage.tsx`
+
+```diff
+--- a/src/pages/BoardPage.tsx
++++ b/src/pages/BoardPage.tsx
+@@ -1,5 +1,6 @@
+ import React, { useEffect, useState } from 'react';
+ import { useAppDispatch, useAppSelector } from '../hooks/redux';
++import { selectSeasonStatus } from '../store/slices/seasonSlice';
+ import { fetchBoardData, setBoardData } from '../store/slices/boardSlice';
+ import { connectSSE, disconnectSSE } from '../services/sseService';
+ 
+@@ -10,6 +11,7 @@ const BoardPage: React.FC = () => {
+   const boardData = useAppSelector(state => state.board.data);
+   const loading = useAppSelector(state => state.board.loading);
+   const error = useAppSelector(state => state.board.error);
++  const seasonStatus = useAppSelector(selectSeasonStatus);
+   const dispatch = useAppDispatch();
+ 
+   // Initial fetch
+@@ -20,10 +21,14 @@ const BoardPage: React.FC = () => {
+   }, [dispatch]);
+ 
+   // SSE Connection
+-  useEffect(() => {
+-    const eventSource = connectSSE((data) => {
+-      dispatch(setBoardData(data));
+-    });
++  useEffect(() => {
++    if (seasonStatus === 'OFF_SEASON') {
++      return; // Do not open SSE stream during off-season
++    }
+ 
+-    return () => {
+-      eventSource.close();
+-    };
+-  }, [dispatch]);
++    const eventSource = connectSSE((data) => {
++      dispatch(setBoardData(data));
++    });
++
++    return () => {
++      eventSource.close();
++    };
++  }, [dispatch, seasonStatus]);
+ 
+   // Sorting and animations remain unaffected by SSE status
+   // ... existing sorting logic ...
+```
+
+### File: `src/utils/dateUtils.ts` (New or Updated)
+
+```typescript
+export const calculateCountdown = (): string => {
+  // Mocked for P6-01: Assume next season starts in 30 days from now
+  const now = new Date();
+  const nextSeason = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+  const diff = nextSeason.getTime() - now.getTime();
+  
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+  return `${days} days`;
+};
+```
+
+## 3. Verification Commands
+
+```bash
+# 1. Run unit tests for Header and BoardPage
+npm test -- src/components/Header.test.tsx src/pages/BoardPage.test.tsx
+
+# 2. Run all RED tests for P6-01 (if defined in test suite)
+npm test -- --testPathPattern="P6-01"
+
+# 3. Verify no regressions in existing board/header tests
+npm test -- --testPathPattern="board|header" --coverage
+
+# 4. Manual check: Ensure sorting works when seasonStatus is OFF_SEASON
+# (Requires running dev server and setting seasonStatus to OFF_SEASON in Redux DevTools)
+```

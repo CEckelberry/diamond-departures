@@ -1,0 +1,161 @@
+# Packet P6-01-RED — Implementation Plan
+
+**Strategy:**
+1.  **Mocking Layer (`__mocks__/sse.ts`):** Create a mock for the Server-Sent Events (SSE) module to track if `openBoardStream` is called, allowing us to verify suppression logic.
+2.  **Component Tests (`OffSeasonBanner.test.tsx`):** Add tests for the Header component asserting that when `mode === 'off-season'`, the specific banner copy and countdown hook are rendered.
+3.  **Integration Tests (`BoardPage.test.tsx`):** Add tests for the Board page asserting that `openBoardStream` is *not* invoked when the application is in off-season mode, while ensuring standard Stat Picker interactions remain functional.
+
+**File Edits:**
+1.  `src/__mocks__/sse.ts` (New)
+2.  `src/components/Header/OffSeasonBanner.test.tsx` (New)
+3.  `src/pages/BoardPage/BoardPage.test.tsx` (Append)
+
+---
+
+# Exact File Edits
+
+## 1. New File: `src/__mocks__/sse.ts`
+
+```typescript
+// src/__mocks__/sse.ts
+
+export const openBoardStream = jest.fn();
+
+export const useSSE = () => ({
+  isConnected: true,
+  lastMessage: null,
+});
+
+export default {
+  openBoardStream,
+  useSSE,
+};
+```
+
+## 2. New File: `src/components/Header/OffSeasonBanner.test.tsx`
+
+```typescript
+// src/components/Header/OffSeasonBanner.test.tsx
+
+import React from 'react';
+import { render, screen } from '@testing-library/react';
+import Header from './Header'; // Adjust path as necessary
+import { AppContext } from '../../context/AppContext';
+
+describe('OffSeasonBanner', () => {
+  const mockSetMode = jest.fn();
+
+  const renderWithOffSeason = (ui: React.ReactElement) => {
+    return render(
+      <AppContext.Provider value={{ mode: 'off-season', setMode: mockSetMode }}>
+        {ui}
+      </AppContext.Provider>
+    );
+  };
+
+  it('should show off-season banner copy when mode is off-season', () => {
+    renderWithOffSeason(<Header />);
+    
+    // Assert banner text presence
+    expect(screen.getByText(/Off Season/i)).toBeInTheDocument();
+    expect(screen.getByText(/Season ends in/i)).toBeInTheDocument();
+  });
+
+  it('should render countdown hook when mode is off-season', () => {
+    renderWithOffSeason(<Header />);
+    
+    // Assert countdown component/hook output is present
+    // Adjust selector based on actual implementation (e.g., data-testid or specific text)
+    expect(screen.getByTestId('countdown-hook')).toBeInTheDocument();
+  });
+
+  it('should NOT show off-season banner when mode is active', () => {
+    render(
+      <AppContext.Provider value={{ mode: 'active', setMode: mockSetMode }}>
+        <Header />
+      </AppContext.Provider>
+    );
+    
+    expect(screen.queryByText(/Off Season/i)).not.toBeInTheDocument();
+    expect(screen.queryByTestId('countdown-hook')).not.toBeInTheDocument();
+  });
+});
+```
+
+## 3. Append to: `src/pages/BoardPage/BoardPage.test.tsx`
+
+```typescript
+// src/pages/BoardPage/BoardPage.test.tsx
+
+// ... existing imports ...
+import * as SSE from '../../utils/sse'; // Adjust path to actual SSE module location
+
+describe('BoardPage Off-Season Behavior', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('should skip openBoardStream when off-season mode is active', async () => {
+    // Mock the context to provide off-season mode
+    const mockSetMode = jest.fn();
+    
+    render(
+      <AppContext.Provider value={{ mode: 'off-season', setMode: mockSetMode }}>
+        <BrowserRouter>
+          <Route path="/board" element={<BoardPage />} />
+          <Route path="*" element={<Navigate to="/board" replace />} />
+        </BrowserRouter>
+      </AppContext.Provider>
+    );
+
+    // Wait for component to mount and potentially call SSE
+    await waitFor(() => {
+      expect(SSE.openBoardStream).not.toHaveBeenCalled();
+    });
+  });
+
+  it('should still allow Stat Picker interactions in off-season state', async () => {
+    const mockSetMode = jest.fn();
+    
+    render(
+      <AppContext.Provider value={{ mode: 'off-season', setMode: mockSetMode }}>
+        <BrowserRouter>
+          <Route path="/board" element={<BoardPage />} />
+          <Route path="*" element={<Navigate to="/board" replace />} />
+        </BrowserRouter>
+      </AppContext.Provider>
+    );
+
+    // Locate Stat Picker (adjust selector based on actual implementation)
+    const statPicker = screen.getByTestId('stat-picker');
+    
+    // Simulate interaction
+    fireEvent.click(statPicker);
+    
+    // Assert that the picker opens or state updates, proving the path is active
+    expect(screen.getByText(/Select Stat/i)).toBeInTheDocument();
+  });
+});
+```
+
+---
+
+# Verification Commands
+
+1.  **Run only the new tests to verify they fail (RED state):**
+    ```bash
+    npm test -- --testPathPattern="OffSeasonBanner.test.tsx|BoardPage.test.tsx" --no-coverage
+    ```
+    *Expected Result:* Tests should fail because the implementation for off-season banner rendering and SSE suppression is not yet present in `Header` and `BoardPage`.
+
+2.  **Verify Mocks are isolated:**
+    ```bash
+    npm test -- --testPathPattern="sse" --no-coverage
+    ```
+    *Expected Result:* If there are existing SSE tests, ensure they still pass or are updated to use the new mock structure. If no existing tests, this step is skipped.
+
+3.  **Check for TypeScript Errors:**
+    ```bash
+    npx tsc --noEmit
+    ```
+    *Expected Result:* No new errors introduced by the test files.
