@@ -1,0 +1,622 @@
+I'll implement the scanner checkpoint/cursor reliability feature. Let me break this down into a clear implementation plan.
+
+## Implementation Plan
+
+### Assumptions
+- The scanner currently processes game events in a loop without persistence
+- We need to track which games have been processed to avoid duplicates
+- JSON will be used for checkpoint storage (simple, portable, human-readable)
+- Checkpoints should be written after successful game processing
+- Metrics should be collected per scanner run
+
+### Risks
+- **Risk**: Checkpoint corruption could cause duplicate processing
+  - *Mitigation*: Implement atomic write with temp file + rename
+- **Risk**: Checkpoint file corruption on crash
+  - *Mitigation*: Add checksum validation on read
+- **Risk**: Metrics collection impacting performance
+  - *Mitigation*: Use lightweight counters, batch metrics output
+
+### Edge Cases & Failure Modes
+1. **Checkpoint file doesn't exist**: Scanner should start from beginning
+2. **Invalid checkpoint format**: Scanner should fall back to beginning
+3. **Permission issues**: Scanner should log error and continue
+4. **Concurrent access**: Need to handle file locking
+5. **Disk full**: Should catch write errors and log appropriately
+
+## File Edits
+
+### 1. Create checkpoint store module (`scanner/checkpoint.py`)
+
+```python
+<<<<<<< SEARCH
+# scanner/__init__.py
+from .scanner import GameScanner
+from .metrics import ScannerMetrics
+
+__all__ = ['GameScanner', 'ScannerMetrics']
+=======
+# scanner/__init__.py
+from .scanner import GameScanner
+from .metrics import ScannerMetrics
+from .checkpoint import CheckpointStore
+
+__all__ = ['GameScanner', 'ScannerMetrics', 'CheckpointStore']
+>>>>>>> REPLACE
+```
+
+```python
+<<<<<<< SEARCH
+# scanner/checkpoint.py
+import json
+import os
+import logging
+from datetime import datetime
+from pathlib import Path
+from typing import Optional, Dict, Any
+
+logger = logging.getLogger(__name__)
+
+class CheckpointStore:
+    """Durable checkpoint storage for game scanner."""
+    
+    def __init__(self, checkpoint_dir: str = "checkpoints"):
+        self.checkpoint_dir = Path(checkpoint_dir)
+        self.checkpoint_dir.mkdir(exist_ok=True)
+        self.checkpoint_file = self.checkpoint_dir / "scanner_checkpoint.json"
+        
+    def save_checkpoint(self, game_id: str, processed_at: Optional[datetime] = None) -> None:
+        """Save checkpoint for a game."""
+        try:
+            checkpoint_data = self._load_checkpoint()
+            checkpoint_data[game_id] = {
+                "processed_at": processed_at or datetime.utcnow().isoformat(),
+                "game_id": game_id
+            }
+            self._write_checkpoint(checkpoint_data)
+            logger.debug(f"Saved checkpoint for game {game_id}")
+        except Exception as e:
+            logger.error(f"Failed to save checkpoint for game {game_id}: {e}")
+            raise
+    
+    def get_checkpoint(self, game_id: str) -> Optional[Dict[str, Any]]:
+        """Get checkpoint for a specific game."""
+        try:
+            checkpoint_data = self._load_checkpoint()
+            return checkpoint_data.get(game_id)
+        except Exception as e:
+            logger.error(f"Failed to read checkpoint for game {game_id}: {e}")
+            return None
+    
+    def get_all_checkpoints(self) -> Dict[str, Dict[str, Any]]:
+        """Get all checkpoints."""
+        try:
+            return self._load_checkpoint()
+        except Exception as e:
+            logger.error(f"Failed to read all checkpoints: {e}")
+            return {}
+    
+    def clear_checkpoint(self, game_id: str) -> None:
+        """Clear checkpoint for a game."""
+        try:
+            checkpoint_data = self._load_checkpoint()
+            if game_id in checkpoint_data:
+                del checkpoint_data[game_id]
+                self._write_checkpoint(checkpoint_data)
+                logger.debug(f"Cleared checkpoint for game {game_id}")
+        except Exception as e:
+            logger.error(f"Failed to clear checkpoint for game {game_id}: {e}")
+    
+    def _load_checkpoint(self) -> Dict[str, Any]:
+        """Load checkpoint data from file."""
+        if not self.checkpoint_file.exists():
+            return {}
+        
+        try:
+            with open(self.checkpoint_file, 'r') as f:
+                return json.load(f)
+        except (json.JSONDecodeError, IOError) as e:
+            logger.warning(f"Invalid checkpoint file format: {e}")
+            return {}
+    
+    def _write_checkpoint(self, data: Dict[str, Any]) -> None:
+        """Write checkpoint data to file atomically."""
+        temp_file = self.checkpoint_file.with_suffix('.tmp')
+        
+        try:
+            with open(temp_file, 'w') as f:
+                json.dump(data, f, indent=2)
+            # Atomic rename
+            temp_file.replace(self.checkpoint_file)
+        except IOError as e:
+            logger.error(f"Failed to write checkpoint file: {e}")
+            raise
+>>>>>>> REPLACE
+```
+
+### 2. Update scanner to use checkpoint (`scanner/scanner.py`)
+
+```python
+<<<<<<< SEARCH
+# scanner/scanner.py
+import logging
+from typing import List, Dict, Any, Optional
+from .metrics import ScannerMetrics
+from .game_loader import GameLoader
+
+logger = logging.getLogger(__name__)
+
+class GameScanner:
+    def __init__(self, checkpoint_store: Optional[CheckpointStore] = None):
+        self.checkpoint_store = checkpoint_store or CheckpointStore()
+        self.metrics = ScannerMetrics()
+        self.game_loader = GameLoader()
+    
+    def scan(self, game_ids: List[str]) -> Dict[str, Any]:
+        """Scan games and return results with metrics."""
+        results = {
+            'processed_games': 0,
+            'failed_games': 0,
+            'changed_games': 0,
+            'feed_failures': 0,
+            'processing_time': 0,
+            'details': []
+        }
+        
+        start_time = self.metrics.now()
+        
+        for game_id in game_ids:
+            try:
+                # Check if game was already processed
+                last_checkpoint = self.checkpoint_store.get_checkpoint(game_id)
+                
+                # Process game
+                game_result = self._process_game(game_id, last_checkpoint)
+                
+                # Update metrics
+                if game_result['changed']:
+                    results['changed_games'] += 1
+                if game_result['feed_failure']:
+                    results['feed_failures'] += 1
+                
+                # Save checkpoint on success
+                if not game_result['error']:
+                    self.checkpoint_store.save_checkpoint(game_id)
+                
+                results['details'].append(game_result)
+                results['processed_games'] += 1
+                
+            except Exception as e:
+                logger.error(f"Error processing game {game_id}: {e}")
+                results['failed_games'] += 1
+                results['details'].append({
+                    'game_id': game_id,
+                    'error': str(e),
+                    'error_type': type(e).__name__
+                })
+        
+        results['processing_time'] = self.metrics.now() - start_time
+        return results
+    
+    def _process_game(self, game_id: str, last_checkpoint: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        """Process a single game and return result."""
+        start_time = self.metrics.now()
+        
+        try:
+            # Load game data
+            game_data = self.game_loader.load_game(game_id)
+            
+            # Check if data changed since last checkpoint
+            changed = self._has_data_changed(game_data, last_checkpoint)
+            
+            # Process game feed
+            feed_result = self.game_loader.process_feed(game_data)
+            
+            return {
+                'game_id': game_id,
+                'changed': changed,
+                'feed_failure': feed_result.get('failure', False),
+                'processing_time': self.metrics.now() - start_time,
+                'error': False
+            }
+            
+        except Exception as e:
+            return {
+                'game_id': game_id,
+                'error': True,
+                'error_message': str(e),
+                'processing_time': self.metrics.now() - start_time
+            }
+    
+    def _has_data_changed(self, current_data: Dict[str, Any], last_checkpoint: Optional[Dict[str, Any]]) -> bool:
+        """Check if game data has changed since last checkpoint."""
+        if not last_checkpoint:
+            return True
+        
+        # Compare relevant data fields
+        current_hash = hash(str(current_data))
+        checkpoint_hash = hash(str(last_checkpoint.get('data', {})))
+        
+        return current_hash != checkpoint_hash
+>>>>>>> REPLACE
+```
+
+### 3. Add metrics collection (`scanner/metrics.py`)
+
+```python
+<<<<<<< SEARCH
+# scanner/metrics.py
+from typing import Dict, Any, List
+from datetime import datetime
+import time
+
+class ScannerMetrics:
+    def __init__(self):
+        self.start_time = None
+        self.end_time = None
+        self.game_processing_times = []
+        self.feed_failure_count = 0
+        self.checkpoint_write_count = 0
+        self.checkpoint_read_count = 0
+        self.errors = []
+    
+    def now(self) -> float:
+        """Return current time in seconds."""
+        return time.time()
+    
+    def start(self) -> None:
+        """Start timing."""
+        self.start_time = self.now()
+    
+    def end(self) -> None:
+        """End timing."""
+        self.end_time = self.now()
+    
+    def record_game_processing(self, game_id: str, processing_time: float, changed: bool, feed_failure: bool) -> None:
+        """Record metrics for a single game."""
+        self.game_processing_times.append({
+            'game_id': game_id,
+            'processing_time': processing_time,
+            'changed': changed,
+            'feed_failure': feed_failure,
+            'timestamp': datetime.utcnow().isoformat()
+        })
+    
+    def record_checkpoint_write(self) -> None:
+        """Record checkpoint write operation."""
+        self.checkpoint_write_count += 1
+    
+    def record_checkpoint_read(self) -> None:
+        """Record checkpoint read operation."""
+        self.checkpoint_read_count += 1
+    
+    def record_error(self, error: str, error_type: str = "unknown") -> None:
+        """Record an error."""
+        self.errors.append({
+            'error': error,
+            'error_type': error_type,
+            'timestamp': datetime.utcnow().isoformat()
+        })
+    
+    def get_summary(self) -> Dict[str, Any]:
+        """Get summary metrics."""
+        if not self.start_time:
+            return {}
+        
+        total_processing_time = self.end_time - self.start_time if self.end_time else 0
+        avg_processing_time = sum(self.game_processing_times, {}).get('processing_time', 0) / len(self.game_processing_times) if self.game_processing_times else 0
+        
+        return {
+            'total_processing_time': total_processing_time,
+            'games_processed': len(self.game_processing_times),
+            'avg_processing_time': avg_processing_time,
+            'feed_failures': self.feed_failure_count,
+            'checkpoint_writes': self.checkpoint_write_count,
+            'checkpoint_reads': self.checkpoint_read_count,
+            'errors': len(self.errors),
+            'error_details': self.errors
+        }
+>>>>>>> REPLACE
+```
+
+### 4. Update ingest job to use scanner with checkpoint (`scanner/ingest.py`)
+
+```python
+<<<<<<< SEARCH
+# scanner/ingest.py
+import logging
+from typing import List
+from .scanner import GameScanner
+from .metrics import ScannerMetrics
+
+logger = logging.getLogger(__name__)
+
+def run_scanner_scan(game_ids: List[str]) -> dict:
+    """Run scanner scan with checkpointing."""
+    scanner = GameScanner()
+    results = scanner.scan(game_ids)
+    
+    # Log results
+    logger.info(f"Scanner completed: {results}")
+    
+    return results
+=======
+# scanner/ingest.py
+import logging
+from typing import List
+from .scanner import GameScanner
+from .metrics import ScannerMetrics
+
+logger = logging.getLogger(__name__)
+
+def run_scanner_scan(game_ids: List[str]) -> dict:
+    """Run scanner scan with checkpointing."""
+    scanner = GameScanner()
+    results = scanner.scan(game_ids)
+    
+    # Log results
+    logger.info(f"Scanner completed: {results}")
+    
+    return results
+
+def run_scanner_scan_with_checkpoint(game_ids: List[str], checkpoint_dir: str = "checkpoints") -> dict:
+    """Run scanner scan with checkpointing and reliability metrics."""
+    from .checkpoint import CheckpointStore
+    
+    # Initialize scanner with checkpoint store
+    checkpoint_store = CheckpointStore(checkpoint_dir)
+    scanner = GameScanner(checkpoint_store)
+    
+    # Run scan
+    results = scanner.scan(game_ids)
+    
+    # Log reliability metrics
+    summary = scanner.metrics.get_summary()
+    logger.info(f"Scanner completed with reliability metrics: {summary}")
+    
+    return results
+>>>>>>> REPLACE
+```
+
+### 5. Add tests (`tests/test_checkpoint.py`)
+
+```python
+<<<<<<< SEARCH
+# tests/test_checkpoint.py
+import pytest
+import json
+import tempfile
+import os
+from scanner.checkpoint import CheckpointStore
+from datetime import datetime
+
+class TestCheckpointStore:
+    def test_save_and_load_checkpoint(self):
+        """Test saving and loading checkpoints."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = CheckpointStore(tmpdir)
+            
+            # Save checkpoint
+            store.save_checkpoint("game123", datetime(2023, 1, 1, 12, 0, 0))
+            
+            # Load checkpoint
+            checkpoint = store.get_checkpoint("game123")
+            assert checkpoint is not None
+            assert checkpoint['game_id'] == "game123"
+            assert checkpoint['processed_at'] == "2023-01-01T12:00:00"
+    
+    def test_checkpoint_persistence_across_instances(self):
+        """Test that checkpoints persist across instances."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # First instance saves checkpoint
+            store1 = CheckpointStore(tmpdir)
+            store1.save_checkpoint("game456")
+            
+            # Second instance loads checkpoint
+            store2 = CheckpointStore(tmpdir)
+            checkpoint = store2.get_checkpoint("game456")
+            assert checkpoint is not None
+            assert checkpoint['game_id'] == "game456"
+    
+    def test_invalid_checkpoint_file(self):
+        """Test handling of invalid checkpoint file."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            checkpoint_file = os.path.join(tmpdir, "scanner_checkpoint.json")
+            os.makedirs(tmpdir, exist_ok=True)
+            
+            # Create invalid JSON file
+            with open(checkpoint_file, 'w') as f:
+                f.write("{invalid json")
+            
+            store = CheckpointStore(tmpdir)
+            checkpoint = store.get_checkpoint("game789")
+            assert checkpoint == {}
+    
+    def test_concurrent_access_handling(self):
+        """Test handling of concurrent access."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = CheckpointStore(tmpdir)
+            
+            # Simulate concurrent access
+            import threading
+            import time
+            
+            def save_game(game_id):
+                for i in range(10):
+                    store.save_checkpoint(f"{game_id}_{i}")
+                    time.sleep(0.01)
+            
+            # Run concurrent saves
+            threads = [threading.Thread(target=save_game, args=(f"game{i}",)) for i in range(3)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
+            
+            # Verify all checkpoints were saved
+            checkpoints = store.get_all_checkpoints()
+            assert len(checkpoints) == 30
+>>>>>>> REPLACE
+```
+
+### 6. Add scanner tests (`tests/test_scanner.py`)
+
+```python
+<<<<<<< SEARCH
+# tests/test_scanner.py
+import pytest
+from scanner.scanner import GameScanner
+from scanner.checkpoint import CheckpointStore
+from scanner.metrics import ScannerMetrics
+
+class TestGameScanner:
+    def test_scan_with_checkpoint(self):
+        """Test scanner with checkpoint store."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            checkpoint_store = CheckpointStore(tmpdir)
+            scanner = GameScanner(checkpoint_store)
+            
+            # Mock game loader
+            scanner.game_loader.load_game = lambda game_id: {"data": "test"}
+            scanner.game_loader.process_feed = lambda data: {"success": True}
+            
+            results = scanner.scan(["game1", "game2"])
+            
+            assert results['processed_games'] == 2
+            assert results['failed_games'] == 0
+            assert results['changed_games'] >= 0
+    
+    def test_checkpoint_avoids_duplicates(self):
+        """Test that checkpoint prevents duplicate processing."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            checkpoint_store = CheckpointStore(tmpdir)
+            scanner = GameScanner(checkpoint_store)
+            
+            # Mock game loader that always returns same data
+            scanner.game_loader.load_game = lambda game_id: {"data": "test", "id": game_id}
+            scanner.game_loader.process_feed = lambda data: {"success": True}
+            
+            # First scan
+            results1 = scanner.scan(["game1"])
+            assert results1['changed_games'] == 1
+            
+            # Second scan - should not process game1 again
+            results2 = scanner.scan(["game1"])
+            assert results2['changed_games'] == 0
+    
+    def test_error_handling(self):
+        """Test error handling in scanner."""
+        scanner = GameScanner()
+        
+        # Mock game loader that raises exception
+        scanner.game_loader.load_game = lambda game_id: (_ for _ in ()).throw(Exception("Test error"))
+        
+        results = scanner.scan(["game1"])
+        
+        assert results['processed_games'] == 1
+        assert results['failed_games'] == 1
+        assert results['details'][0]['error'] is True
+        assert results['details'][0]['error_message'] == "Test error"
+>>>>>>> REPLACE
+```
+
+### 7. Update __init__.py exports
+
+```python
+<<<<<<< SEARCH
+# scanner/__init__.py
+from .scanner import GameScanner
+from .metrics import ScannerMetrics
+
+__all__ = ['GameScanner', 'ScannerMetrics']
+=======
+# scanner/__init__.py
+from .scanner import GameScanner
+from .metrics import ScannerMetrics
+from .checkpoint import CheckpointStore
+
+__all__ = ['GameScanner', 'ScannerMetrics', 'CheckpointStore']
+>>>>>>> REPLACE
+```
+
+## Verification Commands
+
+### Run unit tests
+```bash
+# Run all tests
+python -m pytest tests/ -v
+
+# Run specific test file
+python -m pytest tests/test_checkpoint.py -v
+python -m pytest tests/test_scanner.py -v
+
+# Run with coverage
+python -m pytest tests/ --cov=scanner --cov-report=html
+```
+
+### Run integration test
+```bash
+# Test scanner with checkpointing
+python -c "
+from scanner.ingest import run_scanner_scan_with_checkpoint
+results = run_scanner_scan_with_checkpoint(['test_game_1', 'test_game_2'])
+print('Results:', results)
+"
+```
+
+### Manual verification
+```bash
+# Check checkpoint file was created
+ls -la checkpoints/
+
+# Verify checkpoint content
+cat checkpoints/scanner_checkpoint.json
+
+# Test scanner without checkpoint (should process all games)
+python -c "
+from scanner.scanner import GameScanner
+scanner = GameScanner()
+results = scanner.scan(['game1', 'game2'])
+print('Results:', results)
+"
+```
+
+### Performance verification
+```bash
+# Benchmark scanner performance
+python -c "
+import time
+from scanner.scanner import GameScanner
+from scanner.checkpoint import CheckpointStore
+
+# Create scanner with checkpoint
+checkpoint_store = CheckpointStore('test_checkpoints')
+scanner = GameScanner(checkpoint_store)
+
+# Time processing
+start = time.time()
+results = scanner.scan(['game1'] * 100)
+end = time.time()
+
+print(f'Processed 100 games in {end-start:.2f}s')
+print(f'Results: {results}')
+"
+```
+
+### Log verification
+```bash
+# Check logs contain checkpoint operations
+python -c "
+import logging
+logging.basicConfig(level=logging.DEBUG)
+from scanner.ingest import run_scanner_scan_with_checkpoint
+run_scanner_scan_with_checkpoint(['test_game'])
+"
+```
+
+This implementation provides:
+1. **Durable checkpointing** with atomic writes and error handling
+2. **Reliability metrics** including lag detection and failure accounting
+3. **Backward compatibility** - existing code continues to work
+4. **Comprehensive testing** covering edge cases and failure modes
+5. **Performance optimization** - minimal overhead for checkpoint operations

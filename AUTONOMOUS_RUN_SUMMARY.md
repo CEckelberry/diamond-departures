@@ -225,6 +225,18 @@ Branch: `main`
 - Added links to DATA/STATS docs and project GitHub; verified footer methodology link.
 - Verification: `node --test apps/web/tests/methodology-page.test.mjs` (PASS).
 
+### P-LIVE-01 (RED → GREEN completed)
+
+- Added RED tests for provider abstraction and game-change scanner mode in ingest.
+- Implemented `apps/ingest/app/provider.py`, source/scanner config wiring, and changes-driven scan in `apps/ingest/app/job.py`.
+- Verification: `.venv/bin/pytest apps/ingest/tests -q` (PASS).
+
+### P-LIVE-02 (RED → GREEN completed)
+
+- Added RED tests for durable scanner cursor/checkpoint behavior and failure accounting.
+- Implemented `apps/ingest/app/checkpoint.py` and wired checkpoint load/save + reliability metrics into `apps/ingest/app/job.py`.
+- Verification: `.venv/bin/pytest apps/ingest/tests -q` (PASS).
+
 ## Additional verification
 
 - `node --test apps/web/tests/board-structure.test.mjs apps/web/tests/board-rest-load.test.mjs apps/web/tests/board-sse-wiring.test.mjs apps/web/tests/board-reshuffle-animation.test.mjs` (PASS, 10 tests)

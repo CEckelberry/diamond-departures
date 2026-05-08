@@ -52,6 +52,7 @@ def test_build_provider_for_mlb_stats() -> None:
         provider_source="mlb_stats",
         live_scanner_mode="changes",
         game_changes_lookback_seconds=30,
+        scanner_checkpoint_path="orchestration/state/ingest-scanner-checkpoint.json",
     )
 
     provider = build_provider(settings)

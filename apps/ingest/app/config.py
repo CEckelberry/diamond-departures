@@ -16,6 +16,7 @@ class IngestSettings:
     provider_source: str
     live_scanner_mode: str
     game_changes_lookback_seconds: int
+    scanner_checkpoint_path: str
 
 
 def load_settings() -> IngestSettings:
@@ -30,4 +31,8 @@ def load_settings() -> IngestSettings:
         provider_source=os.getenv("PROVIDER_SOURCE", "mlb_stats"),
         live_scanner_mode=os.getenv("LIVE_SCANNER_MODE", "changes"),
         game_changes_lookback_seconds=int(os.getenv("GAME_CHANGES_LOOKBACK_SECONDS", "30")),
+        scanner_checkpoint_path=os.getenv(
+            "SCANNER_CHECKPOINT_PATH",
+            "orchestration/state/ingest-scanner-checkpoint.json",
+        ),
     )

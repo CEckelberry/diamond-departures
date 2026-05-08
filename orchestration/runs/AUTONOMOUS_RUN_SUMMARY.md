@@ -176,6 +176,16 @@ Repo: `/home/roger/Documents/coding/cole-portfolio-apps/diamond-departures`
   - Implemented `/methodology` page with DATA/STATS/GitHub linkage.
   - Verification artifact: `orchestration/runs/P7-05-verify.md`.
 
+- **P-LIVE-01 (Live data source hardening) — completed**
+  - Added provider abstraction and MLB game-change scanner flow (`provider.py` + scanner mode in `job.py`).
+  - Added env-driven source/scanner settings and changed-game extraction helper.
+  - Verification artifact: `orchestration/runs/P-LIVE-01-verify.md`.
+
+- **P-LIVE-02 (Live data source hardening) — completed**
+  - Added durable scanner checkpoint persistence (`apps/ingest/app/checkpoint.py`).
+  - Wired cursor reuse, failure accounting, and reliability metrics (`scanner_lag_seconds`, `changed_games_count`, `feed_failures_count`).
+  - Verification artifact: `orchestration/runs/P-LIVE-02-verify.md`.
+
 ## TDD evidence
 
 - P4-05 RED: board REST load tests failed (`+page.ts` missing, no data-driven board wiring).
@@ -192,6 +202,8 @@ Repo: `/home/roger/Documents/coding/cole-portfolio-apps/diamond-departures`
 - P7-03 RED: mobile contracts failed before card layout/tap-target/overflow guards were implemented.
 - P7-04 RED: SEO/OG contracts failed before SEO component and server routes were added.
 - P7-05 RED: methodology page contracts failed before route and doc links were added.
+- P-LIVE-01 RED: provider/scanner tests failed before provider abstraction + game-change flow were implemented.
+- P-LIVE-02 RED: checkpoint/reliability tests failed before cursor persistence + failure accounting were implemented.
 - GREEN: all new packet suites pass after implementation.
 
 ## Validation commands run
