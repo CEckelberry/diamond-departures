@@ -9,6 +9,8 @@
 	import { openBoardStream } from '$lib/api/sse';
 	import { applyDelta, applySnapshot, boardRows as boardRowsStore, seedBoard } from '$lib/stores/board';
 
+	type SeasonMode = 'live' | 'between' | 'off-game' | 'off-season';
+
 	type BoardEntryPayload = {
 		rank: number;
 		player: {
@@ -50,15 +52,32 @@
 	);
 
 	let selectedPlayerId = $state<number | null>(null);
+	let seasonMode = $state<SeasonMode>('off-season');
 	let stop = () => {};
 
 	function handleSelectPlayer(playerId: number) {
 		selectedPlayerId = playerId;
 	}
 
+	async function refreshSeasonMode() {
+		try {
+			const response = await fetch('/api/season-state');
+			if (!response.ok) return;
+			const payload = (await response.json()) as { mode?: SeasonMode };
+			seasonMode = payload.mode ?? 'off-season';
+		} catch {
+			seasonMode = 'off-season';
+		}
+	}
+
 	onMount(() => {
+		void refreshSeasonMode();
+		const interval = window.setInterval(() => {
+			void refreshSeasonMode();
+		}, 30000);
 		return () => {
 			stop();
+			window.clearInterval(interval);
 		};
 	});
 
@@ -66,6 +85,7 @@
 		seedBoard(data.boardView, data.boardSort, data.entries);
 		selectedPlayerId = data.entries[0]?.player.id ?? null;
 		stop();
+		if (seasonMode === 'off-season') return;
 		stop = openBoardStream(data.boardView, data.boardSort, {
 			onSnapshot: (payload) => applySnapshot(payload),
 			onDelta: (payload) => applyDelta(payload)

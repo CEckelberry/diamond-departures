@@ -7,6 +7,8 @@
 	type SeasonState = {
 		mode: SeasonMode;
 		gamesInProgress: number;
+		currentSeason?: number;
+		nextSeasonStartsAt?: string;
 		updatedAt?: string;
 	};
 	type Freshness = {
@@ -46,6 +48,12 @@
 			? new Date(seasonState.updatedAt ?? freshness.updatedAt ?? '').toLocaleTimeString()
 			: 'waiting for first sync'
 	);
+	const offSeasonYear = $derived(seasonState.currentSeason ?? new Date().getFullYear());
+	const nextSeasonCountdown = $derived(
+		seasonState.nextSeasonStartsAt
+			? `next season ${new Date(seasonState.nextSeasonStartsAt).toLocaleDateString()}`
+			: 'next season pending schedule'
+	);
 
 	function toggleSound() {
 		setSoundEnabled(!$soundEnabled);
@@ -61,10 +69,22 @@
 			const freshRes = await fetch('/api/freshness');
 
 			if (seasonRes.ok) {
-				const nextSeason = (await seasonRes.json()) as Partial<SeasonState>;
+				const nextSeason = (await seasonRes.json()) as {
+					mode?: SeasonMode;
+					gamesInProgress?: number;
+					updatedAt?: string;
+					current_season?: number;
+					next_game_at?: string;
+				};
 				seasonState = {
-					mode: (nextSeason.mode as SeasonMode) ?? 'off-season',
+					mode: nextSeason.mode ?? 'off-season',
 					gamesInProgress: Number(nextSeason.gamesInProgress ?? 0),
+					currentSeason:
+						typeof nextSeason.current_season === 'number'
+							? nextSeason.current_season
+							: undefined,
+					nextSeasonStartsAt:
+						typeof nextSeason.next_game_at === 'string' ? nextSeason.next_game_at : undefined,
 					updatedAt: nextSeason.updatedAt
 				};
 			}
@@ -99,7 +119,12 @@
 	<h1>Diamond Departures</h1>
 	<div class="status-row">
 		<span class={`mode-pill ${modeClass}`}>{seasonState.mode}</span>
-		<span class="status-pill">{seasonState.gamesInProgress} games live</span>
+		{#if seasonState.mode === 'off-season'}
+			<span class="status-pill off-season-banner">{offSeasonYear} regular season · final</span>
+			<span class="status-pill">{nextSeasonCountdown}</span>
+		{:else}
+			<span class="status-pill">{seasonState.gamesInProgress} games live</span>
+		{/if}
 		<button class="status-pill button" type="button" onclick={toggleFreshnessDebug}>
 			{freshnessSummary}
 		</button>

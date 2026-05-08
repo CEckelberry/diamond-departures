@@ -3,16 +3,19 @@
 Date: 2026-05-08
 
 ## RED evidence
+
 - Command: `node --test apps/web/tests/freshness-debug-panel.test.mjs`
 - Result: FAIL before implementation (`FreshnessPanel.svelte` missing and Header still had placeholder copy).
 
 ## GREEN verification
+
 1. `node --test apps/web/tests/freshness-debug-panel.test.mjs apps/web/tests/board-header.test.mjs`
    - Result: PASS
 2. `pnpm --filter web check`
    - Result: PASS (warnings only; no errors)
 
 ## Implementation notes
+
 - Added `apps/web/src/lib/components/board/FreshnessPanel.svelte`.
 - Panel fetches `/api/freshness` on open and renders:
   - last ingest runs (up to 10)

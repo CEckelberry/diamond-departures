@@ -170,6 +170,13 @@ Branch: `main`
 - Replaced Header placeholder diagnostics panel with `FreshnessPanel` (dialog semantics + close button + Escape close).
 - Verification: `node --test apps/web/tests/freshness-debug-panel.test.mjs apps/web/tests/board-header.test.mjs` and `pnpm --filter web check` (PASS, warning-only).
 
+### P6-01 (RED → GREEN completed)
+
+- Added RED tests for off-season banner copy and board stream suppression behavior.
+- Updated Header to show off-season banner (`[Year] regular season · final`) with `next season` countdown copy.
+- Updated board page to poll `/api/season-state` and skip `openBoardStream(...)` when mode is `off-season`.
+- Verification: `node --test apps/web/tests/offseason-state.test.mjs`, full web node test suite, and `pnpm --filter web check` (PASS, warning-only).
+
 ## Additional verification
 
 - `node --test apps/web/tests/board-structure.test.mjs apps/web/tests/board-rest-load.test.mjs apps/web/tests/board-sse-wiring.test.mjs apps/web/tests/board-reshuffle-animation.test.mjs` (PASS, 10 tests)

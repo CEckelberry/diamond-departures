@@ -119,7 +119,8 @@ export function toBoardRows(entries: BoardEntry[]): BoardRow[] {
 		position: entry.player.position,
 		stat: Number(entry.stat_value).toFixed(1),
 		justQualified:
-			Boolean(entry.newly_qualified) && isWithin24Hours(entry.qualified_at ?? null),
+			Boolean(entry.newly_qualified) &&
+			isWithin24Hours(entry.qualified_at ?? null),
 		qualifiedAt: entry.qualified_at ?? null,
 	}));
 }

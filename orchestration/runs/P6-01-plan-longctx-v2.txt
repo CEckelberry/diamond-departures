@@ -1,0 +1,123 @@
+## Plan
+
+1. Add off-season banner to Header component with countdown text.
+2. Modify Board page to conditionally suppress SSE stream when season is off-season.
+3. Update state handling to support off-season mode.
+4. Ensure sorting and animations remain functional.
+
+## File Edits
+
+```diff
+diff --git a/src/components/Header.tsx b/src/components/Header.tsx
+index 1234567..2345678 100644
+--- a/src/components/Header.tsx
++++ b/src/components/Header.tsx
+@@ -1,4 +1,5 @@
+ import React from 'react';
++import { useSeason } from '../hooks/useSeason';
+ import './Header.css';
+ 
+ const Header: React.FC = () => {
++  const { season } = useSeason();
++  const isOffSeason = season === 'off-season';
++  
++  const currentYear = new Date().getFullYear();
++  const offSeasonYear = currentYear + 1;
++  const countdownDate = new Date(offSeasonYear, 0, 1);
++  const today = new Date();
++  const daysUntil = Math.ceil((countdownDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
++  
+   return (
+     <header className="header">
++      {isOffSeason && (
++        <div className="off-season-banner">
++          <span className="banner-text">
++            Off-season {offSeasonYear} - {daysUntil} days until final season
++          </span>
++        </div>
++       )}
+       <h1 className="title">Tournament Board</h1>
+     </header>
+   );
+```
+
+```diff
+diff --git a/src/pages/Board.tsx b/src/pages/Board.tsx
+index 2345678..3456789 100644
+--- a/src/pages/Board.tsx
++++ b/src/pages/Board.tsx
+@@ -1,4 +1,5 @@
+ import React, { useEffect, useState } from 'react';
++import { useSeason } from '../hooks/useSeason';
+ import BoardList from '../components/BoardList';
+ import BoardAnimations from '../components/BoardAnimations';
+ import SSEStream from '../components/SSEStream';
+@@ -8,6 +9,8 @@ import './Board.css';
+ const Board: React.FC = () => {
+   const [boardData, setBoardData] = useState<TournamentData[]>([]);
+   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: '', direction: 'asc' });
++  const { season } = useSeason();
++  const isOffSeason = season === 'off-season';
+ 
+   useEffect(() => {
+     // Fetch initial data
+@@ -15,7 +18,9 @@ const Board: React.FC = () => {
+   }, []);
+ 
+   useEffect(() => {
+-    const eventSource = new EventSource('/api/stream');
++    let eventSource: EventSource | null = null;
++    
++    if (!isOffSeason) {
++      eventSource = new EventSource('/api/stream');
++    }
+     const handleUpdate = (event: MessageEvent) => {
+       const data = JSON.parse(event.data);
+       setBoardData(data);
+```
+
+```diff
+diff --git a/src/hooks/useSeason.ts b/src/hooks/useSeason.ts
+new file mode 100644
+index 0000000..1234567
+--- /dev/null
++++ b/src/hooks/useSeason.ts
+@@ -0,0 +1,15 @@
++import { useState, useEffect } from 'react';
++
++export const useSeason = () => {
++  const [season, setSeason] = useState<'final' | 'off-season'>('final');
++
++  useEffect(() => {
++    const checkSeason = () => {
++      const currentMonth = new Date().getMonth();
++      const isOffSeason = currentMonth >= 11 || currentMonth <= 2; // Nov-Feb
++      setSeason(isOffSeason ? 'off-season' : 'final');
++    };
++
++    checkSeason();
++    const interval = setInterval(checkSeason, 60000); // Check monthly
++    return () => clearInterval(interval);
++  }, []);
++
++  return { season };
++};
+```
+
+## Verification Commands
+
+```bash
+# Run all tests to ensure RED tests pass and existing tests remain passing
+npm test
+
+# Run specific test suites
+npm test -- --testPathPattern=Header
+npm test -- --testPathPattern=Board
+npm test -- --testPathPattern=useSeason
+
+# Check for TypeScript compilation errors
+npm run build
+
+# Start the development server to verify UI behavior
+npm start
+```

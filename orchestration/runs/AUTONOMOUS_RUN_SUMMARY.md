@@ -136,6 +136,11 @@ Repo: `/home/roger/Documents/coding/cole-portfolio-apps/diamond-departures`
   - Implemented `FreshnessPanel.svelte` and replaced Header placeholder with real panel wiring.
   - Verification artifact: `orchestration/runs/P5-06-verify.md`.
 
+- **P6-01 (Task 6.1) — completed**
+  - Added RED tests for off-season banner copy and stream suppression checks.
+  - Implemented Header off-season banner + next-season copy and guarded board SSE startup when mode is off-season.
+  - Verification artifact: `orchestration/runs/P6-01-verify.md`.
+
 ## TDD evidence
 
 - P4-05 RED: board REST load tests failed (`+page.ts` missing, no data-driven board wiring).
@@ -144,6 +149,7 @@ Repo: `/home/roger/Documents/coding/cole-portfolio-apps/diamond-departures`
 - P5-01 RED: panel shell tests failed (missing panel component and row-selection wiring).
 - P5-02 RED: trend chart tests failed (missing history fetch + chart component).
 - P5-03 RED: position filter tests failed (no selected-position payload and no filtered rows path).
+- P6-01 RED: off-season tests failed (missing banner copy and no season-mode SSE guard).
 - GREEN: all new packet suites pass after implementation.
 
 ## Validation commands run
@@ -154,7 +160,8 @@ Repo: `/home/roger/Documents/coding/cole-portfolio-apps/diamond-departures`
 - `node --test apps/web/tests/player-panel-shell.test.mjs`
 - `node --test apps/web/tests/player-trend-chart.test.mjs`
 - `node --test apps/web/tests/position-filtered-views.test.mjs`
-- `node --test apps/web/tests/view-controls.test.mjs apps/web/tests/board-structure.test.mjs apps/web/tests/board-rest-load.test.mjs apps/web/tests/board-sse-wiring.test.mjs apps/web/tests/board-reshuffle-animation.test.mjs apps/web/tests/player-panel-shell.test.mjs apps/web/tests/player-trend-chart.test.mjs apps/web/tests/position-filtered-views.test.mjs`
+- `node --test apps/web/tests/offseason-state.test.mjs`
+- `node --test apps/web/tests/view-controls.test.mjs apps/web/tests/board-structure.test.mjs apps/web/tests/board-rest-load.test.mjs apps/web/tests/board-sse-wiring.test.mjs apps/web/tests/board-reshuffle-animation.test.mjs apps/web/tests/player-panel-shell.test.mjs apps/web/tests/player-trend-chart.test.mjs apps/web/tests/position-filtered-views.test.mjs apps/web/tests/offseason-state.test.mjs`
 - `pnpm --filter web check`
 
 ## Risks / follow-ups
