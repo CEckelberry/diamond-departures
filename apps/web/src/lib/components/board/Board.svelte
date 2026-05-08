@@ -124,6 +124,8 @@
 
 	.row-shell {
 		will-change: transform;
+		transform: translateZ(0);
+		contain: paint;
 	}
 
 	.row-shell.just-qualified-enter {

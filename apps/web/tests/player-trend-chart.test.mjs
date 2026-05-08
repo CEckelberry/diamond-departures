@@ -27,6 +27,6 @@ test('trend chart component renders svg sparkline shell', async () => {
 
 test('panel renders trend chart with points and stat', async () => {
 	const src = await load(panelPath);
-	assert.match(src, /import\s+TrendChart\s+from\s+'\.\/TrendChart\.svelte'/);
-	assert.match(src, /<TrendChart\s+points=\{historyPoints\}\s+stat=\{trendStat\}/);
+	assert.match(src, /import\('\.\/TrendChart\.svelte'\)|import\s+TrendChart\s+from\s+'\.\/TrendChart\.svelte'/);
+	assert.match(src, /<svelte:component\s+this=\{TrendChart\}\s+points=\{historyPoints\}\s+stat=\{trendStat\}|<TrendChart\s+points=\{historyPoints\}\s+stat=\{trendStat\}/);
 });

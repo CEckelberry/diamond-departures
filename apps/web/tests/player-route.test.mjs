@@ -34,5 +34,5 @@ test("player route loader derives selected player from slug and entries", async 
 	assert.match(src, /params\.slug/);
 	assert.match(src, /slugify|toSlug/);
 	assert.match(src, /selectedPlayerId/);
-	assert.match(src, /fetch\('\/api\/board\?/);
+	assert.match(src, /fetch\((['"])\/api\/board\?/);
 });

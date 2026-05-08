@@ -54,6 +54,8 @@
 	let selectedPlayerId = $state<number | null>(null);
 	let seasonMode = $state<SeasonMode>('off-season');
 	let previewMode = $state(false);
+	let streamView = $state('');
+	let streamSort = $state('');
 	let stop = () => {};
 
 	function handleSelectPlayer(playerId: number) {
@@ -87,8 +89,14 @@
 	});
 
 	$effect(() => {
+		if (streamView === data.boardView && streamSort === data.boardSort) return;
 		seedBoard(data.boardView, data.boardSort, data.entries);
 		selectedPlayerId = data.entries[0]?.player.id ?? null;
+		streamView = data.boardView;
+		streamSort = data.boardSort;
+	});
+
+	$effect(() => {
 		stop();
 		const isOffSeason = seasonMode === 'off-season';
 		const shouldStream = previewMode || seasonMode !== 'off-season';

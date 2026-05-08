@@ -1,0 +1,607 @@
+I'll implement the performance improvements for Task 7.1. Let me analyze the requirements and create a comprehensive implementation plan.
+
+## Implementation Plan
+
+### Assumptions
+1. Current implementation has performance issues with frequent stream reconnections and unnecessary board recomputation
+2. The board component re-renders unnecessarily when stream state changes
+3. Animation performance can be optimized while maintaining visual behavior
+4. Reduced motion preferences are already implemented but may have performance bottlenecks
+
+### Risks
+1. Breaking existing animation behavior if optimization is too aggressive
+2. Missing edge cases in reduced-motion implementation
+3. Introducing memory leaks from improper cleanup of optimized components
+4. Performance gains not being measurable or consistent across browsers
+
+### Edge Cases to Handle
+- Rapid stream state changes causing excessive reconnections
+- Component unmounting during animation frames
+- Memory leaks from event listeners not being properly cleaned up
+- Reduced motion preference changes during runtime
+- Browser tab switching affecting animation performance
+
+## File Edits
+
+### 1. src/components/Board.tsx
+```diff
+--- a/src/components/Board.tsx
++++ b/src/components/Board.tsx
+@@ -1,5 +1,6 @@
+ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+ import { StreamService } from '../services/StreamService';
+ import { BoardGrid } from './BoardGrid';
+ import { AnimationController } from '../controllers/AnimationController';
+ import { useReducedMotion } from '../hooks/useReducedMotion';
+ import { PerformanceMonitor } from '../utils/PerformanceMonitor';
+ import './Board.css';
+ 
+ const Board: React.FC = () => {
+   const [boardData, setBoardData] = useState<BoardData | null>(null);
+   const [isLoading, setIsLoading] = useState(true);
+   const [error, setError] = useState<string | null>(null);
+   const streamRef = useRef<StreamService | null>(null);
+   const boardRef = useRef<HTMLDivElement>(null);
+   const animationRef = useRef<AnimationController | null>(null);
+   const performanceRef = useRef<PerformanceMonitor>(new PerformanceMonitor());
+   const isMountedRef = useRef(true);
+   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+ 
+   const reducedMotion = useReducedMotion();
+ 
+   // Memoized board data to prevent unnecessary re-renders
+   const boardDataMemo = useMemo(() => {
+     if (!boardData) return null;
+     return {
+       ...boardData,
+       // Only include essential data to prevent deep object recreation
+       cells: boardData.cells,
+       metadata: boardData.metadata
+     };
+   }, [boardData]);
+ 
+   // Optimized stream connection with debouncing
+   const connectStream = useCallback(async () => {
+     if (!isMountedRef.current || !boardRef.current) return;
+ 
+     try {
+       if (streamRef.current) {
+         await streamRef.current.disconnect();
+       }
+ 
+       const stream = new StreamService();
+       streamRef.current = stream;
+ 
+       stream.onData((data) => {
+         if (isMountedRef.current) {
+           setBoardData(data);
+           performanceRef.current.recordUpdate();
+         }
+       });
+ 
+       stream.onError((error) => {
+         if (isMountedRef.current) {
+           setError(error.message);
+           performanceRef.current.recordError();
+         }
+       });
+ 
+       await stream.connect();
+       setError(null);
+       performanceRef.current.recordConnection();
+     } catch (err) {
+       if (isMountedRef.current) {
+         setError('Failed to connect to stream');
+         performanceRef.current.recordError();
+       }
+     }
+   }, []);
+ 
+   // Optimized reconnection with exponential backoff
+   const scheduleReconnect = useCallback(() => {
+     if (!isMountedRef.current) return;
+ 
+     if (reconnectTimeoutRef.current) {
+       clearTimeout(reconnectTimeoutRef.current);
+     }
+ 
+     const delay = Math.min(
+       1000 * Math.pow(2, performanceRef.current.getReconnectAttempts()),
+       30000
+     );
+ 
+     reconnectTimeoutRef.current = setTimeout(() => {
+       connectStream();
+     }, delay);
+   }, [connectStream]);
+ 
+   // Optimized animation controller initialization
+   useEffect(() => {
+     if (!boardRef.current || !reducedMotion) return;
+ 
+     animationRef.current = new AnimationController(boardRef.current);
+     animationRef.current.setEnabled(true);
+ 
+     return () => {
+       if (animationRef.current) {
+         animationRef.current.destroy();
+         animationRef.current = null;
+       }
+     };
+   }, [reducedMotion]);
+ 
+   // Optimized data processing with throttling
+   const processBoardData = useCallback((data: BoardData) => {
+     if (!boardRef.current) return;
+ 
+     // Throttle expensive operations
+     const now = performance.now();
+     if (now - (performanceRef.current.getLastProcessTime() || 0) < 16) { // ~60fps
+       return;
+     }
+ 
+     performanceRef.current.updateLastProcessTime(now);
+ 
+     // Only update if data has actually changed
+     if (JSON.stringify(boardDataMemo?.cells) !== JSON.stringify(data.cells)) {
+       setBoardData(data);
+     }
+   }, [boardDataMemo]);
+ 
+   // Stream event handlers with proper cleanup
+   useEffect(() => {
+     const handleStreamData = (data: BoardData) => {
+       processBoardData(data);
+     };
+ 
+     const handleStreamError = (error: string) => {
+       setError(error);
+     };
+ 
+     if (streamRef.current) {
+       streamRef.current.on('data', handleStreamData);
+       streamRef.current.on('error', handleStreamError);
+     }
+ 
+     return () => {
+       if (streamRef.current) {
+         streamRef.current.off('data', handleStreamData);
+         streamRef.current.off('error', handleStreamError);
+       }
+     };
+   }, [processBoardData]);
+ 
+   // Board resize handling with throttling
+   useEffect(() => {
+     const handleResize = () => {
+       if (!boardRef.current) return;
+ 
+       const now = performance.now();
+       if (now - (performanceRef.current.getLastResizeTime() || 0) < 100) {
+         return;
+       }
+ 
+       performanceRef.current.updateLastResizeTime(now);
+       animationRef.current?.handleResize();
+     };
+ 
+     window.addEventListener('resize', handleResize);
+     return () => window.removeEventListener('resize', handleResize);
+   }, []);
+ 
+   // Optimized mount/unmount handling
+   useEffect(() => {
+     isMountedRef.current = true;
+ 
+     connectStream();
+ 
+     return () => {
+       isMountedRef.current = false;
+       if (reconnectTimeoutRef.current) {
+         clearTimeout(reconnectTimeoutRef.current);
+       }
+       if (streamRef.current) {
+         streamRef.current.disconnect();
+       }
+     };
+   }, []);
+ 
+   // Performance monitoring
+   useEffect(() => {
+     const metrics = performanceRef.current.getMetrics();
+     console.log('Board Performance Metrics:', metrics);
+   }, [boardData]);
+ 
+   return (
+     <div
+       ref={boardRef}
+       className={`board ${reducedMotion ? 'reduced-motion' : ''}`}
+       data-performance-metrics={JSON.stringify(performanceRef.current.getMetrics())}
+     >
+       {isLoading && <div className="loading-spinner">Loading...</div>}
+       {error && <div className="error-message">{error}</div>}
+       {boardData && boardDataMemo && (
+         <BoardGrid
+           data={boardDataMemo}
+           animationController={animationRef.current}
+         />
+       )}
+     </div>
+   );
+ };
+ 
+ export default Board;
+```
+
+### 2. src/controllers/AnimationController.ts
+```diff
+--- a/src/controllers/AnimationController.ts
++++ b/src/controllers/AnimationController.ts
+@@ -1,4 +1,5 @@
+ import { BoardData } from '../types';
++import { RAFManager } from '../utils/RAFManager';
+ 
+ export class AnimationController {
+   private container: HTMLElement;
+   private animationId: number | null = null;
+   private isEnabled: boolean = true;
+   private cells: HTMLElement[] = [];
+   private lastFrameTime: number = 0;
+   private rafManager: RAFManager;
+ 
+   constructor(container: HTMLElement) {
+     this.container = container;
+     this.rafManager = new RAFManager();
+   }
+ 
+   public setEnabled(enabled: boolean): void {
+     this.isEnabled = enabled;
+     if (enabled) {
+       this.startAnimation();
+     } else {
+       this.stopAnimation();
+     }
+   }
+ 
+   public destroy(): void {
+     this.stopAnimation();
+     this.rafManager.cancelAll();
+     this.cells = [];
+   }
+ 
+   public handleResize(): void {
+     this.stopAnimation();
+     this.startAnimation();
+   }
+ 
+   private startAnimation(): void {
+     if (!this.isEnabled || this.animationId !== null) return;
+ 
+     const animate = (timestamp: number) => {
+       if (timestamp - this.lastFrameTime < 16) { // ~60fps cap
+         this.animationId = this.rafManager.requestAnimationFrame(animate);
+         return;
+       }
+ 
+       this.lastFrameTime = timestamp;
+       this.updateAnimations();
+       this.animationId = this.rafManager.requestAnimationFrame(animate);
+     };
+ 
+     this.animationId = this.rafManager.requestAnimationFrame(animate);
+   }
+ 
+   private stopAnimation(): void {
+     if (this.animationId !== null) {
+       this.rafManager.cancelAnimationFrame(this.animationId);
+       this.animationId = null;
+     }
+   }
+ 
+   private updateAnimations(): void {
+     // Optimized animation updates with batching
+     const cellsToAnimate = this.cells.filter(cell => {
+       const rect = cell.getBoundingClientRect();
+       return rect.width > 0 && rect.height > 0; // Check if visible
+     });
+ 
+     cellsToAnimate.forEach(cell => {
+       // Batch DOM reads
+       const transform = cell.dataset.transform || '';
+       const opacity = cell.dataset.opacity || '';
+       
+       // Batch DOM writes
+       requestAnimationFrame(() => {
+         cell.style.transform = transform;
+         cell.style.opacity = opacity;
+       });
+     });
+   }
+ 
+   public addCell(cell: HTMLElement): void {
+     this.cells.push(cell);
+   }
+ 
+   public removeCell(cell: HTMLElement): void {
+     const index = this.cells.indexOf(cell);
+     if (index > -1) {
+       this.cells.splice(index, 1);
+     }
+   }
+ }
+```
+
+### 3. src/utils/RAFManager.ts
+```typescript
+export class RAFManager {
+  private rafIds: number[] = [];
+ 
+  public requestAnimationFrame(callback: FrameRequestCallback): number {
+     return requestAnimationFrame(callback);
+  }
+ 
+  public cancelAnimationFrame(id: number): void {
+     cancelAnimationFrame(id);
+   }
+ 
+  public cancelAll(): void {
+     this.rafIds.forEach(id => cancelAnimationFrame(id));
+     this.rafIds = [];
+   }
+ }
+```
+
+### 4. src/hooks/useReducedMotion.ts
+```typescript
+import { useState, useEffect } from 'react';
+ 
+export const useReducedMotion = () => {
+   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+ 
+   useEffect(() => {
+     const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+     setPrefersReducedMotion(mediaQuery.matches);
+ 
+     const handleChange = (e: MediaQueryListEvent) => {
+       setPrefersReducedMotion(e.matches);
+     };
+ 
+     mediaQuery.addEventListener('change', handleChange);
+     return () => mediaQuery.removeEventListener('change', handleChange);
+   }, []);
+ 
+   return prefersReducedMotion;
+ };
+```
+
+### 5. src/utils/PerformanceMonitor.ts
+```typescript
+export class PerformanceMonitor {
+  private metrics: {
+    updates: number;
+    errors: number;
+    reconnectAttempts: number;
+    lastProcessTime: number;
+    lastResizeTime: number;
+    connectionTime: number;
+  } = {
+    updates: 0,
+    errors: 0,
+    reconnectAttempts: 0,
+    lastProcessTime: 0,
+    lastResizeTime: 0,
+    connectionTime: 0
+  };
+ 
+  recordUpdate(): void {
+    this.metrics.updates++;
+  }
+ 
+  recordError(): void {
+    this.metrics.errors++;
+  }
+ 
+  recordConnection(): void {
+    this.metrics.connectionTime = performance.now();
+  }
+ 
+  updateLastProcessTime(time: number): void {
+    this.metrics.lastProcessTime = time;
+  }
+ 
+  updateLastResizeTime(time: number): void {
+    this.metrics.lastResizeTime = time;
+  }
+ 
+  getReconnectAttempts(): number {
+    return this.metrics.reconnectAttempts;
+  }
+ 
+  incrementReconnectAttempts(): void {
+    this.metrics.reconnectAttempts++;
+  }
+ 
+  getMetrics() {
+    return { ...this.metrics };
+  }
+ }
+```
+
+### 6. src/components/BoardGrid.tsx
+```diff
+--- a/src/components/BoardGrid.tsx
++++ b/src/components/BoardGrid.tsx
+@@ -1,4 +1,5 @@
+ import React, { useState, useEffect, useCallback, useRef } from 'react';
+ import { BoardData } from '../types';
+ import { AnimationController } from '../controllers/AnimationController';
+ import { FlapAnimation } from '../animations/FlapAnimation';
+ import './BoardGrid.css';
+ 
+ interface BoardGridProps {
+   data: BoardData;
+   animationController: AnimationController | null;
+ }
+ 
+ const BoardGrid: React.FC<BoardGridProps> = ({ data, animationController }) => {
+   const [flapAnimations, setFlapAnimations] = useState<Map<string, FlapAnimation>>(new Map());
+   const gridRef = useRef<HTMLDivElement>(null);
+   const animationFrameRef = useRef<number | null>(null);
+ 
+   // Memoized cell data to prevent unnecessary re-renders
+   const cellDataMemo = useMemo(() => {
+     return data.cells.map(cell => ({
+       id: cell.id,
+       type: cell.type,
+       position: cell.position,
+       // Only include essential data
+     }), [data.cells]);
+   }, [data.cells]);
+ 
+   // Optimized flap animation initialization
+   useEffect(() => {
+     if (!animationController) return;
+ 
+     const handleCellCreate = (cellId: string, element: HTMLElement) => {
+       const animation = new FlapAnimation(element);
+       flapAnimations.set(cellId, animation);
+       animationController.addCell(element);
+     };
+ 
+     const handleCellDestroy = (cellId: string) => {
+       const animation = flapAnimations.get(cellId);
+       if (animation) {
+         animation.destroy();
+         flapAnimations.delete(cellId);
+         animationController.removeCell(animation.element);
+       }
+     };
+ 
+     animationController.on('cellCreate', handleCellCreate);
+     animationController.on('cellDestroy', handleCellDestroy);
+ 
+     return () => {
+       animationController.off('cellCreate', handleCellCreate);
+       animationController.off('cellDestroy', handleCellDestroy);
+     };
+   }, [animationController, flapAnimations]);
+ 
+   // Optimized animation frame handling
+   useEffect(() => {
+     if (!animationController) return;
+ 
+     const animate = () => {
+       // Throttle animation frames
+       animationFrameRef.current = requestAnimationFrame(animate);
+     };
+ 
+     animationFrameRef.current = requestAnimationFrame(animate);
+ 
+     return () => {
+       if (animationFrameRef.current) {
+         cancelAnimationFrame(animationFrameRef.current);
+         animationFrameRef.current = null;
+       }
+     };
+   }, [animationController]);
+ 
+   return (
+     <div className="board-grid">
+       {cellDataMemo.map(cell => (
+         <div
+           key={cell.id}
+           className={`cell ${cell.type}`}
+           data-position={cell.position}
+         >
+           {/* Cell content */}
+         </div>
+       ))}
+     </div>
+   );
+ };
+ 
+ export default BoardGrid;
+```
+
+### 7. src/animations/FlapAnimation.ts
+```typescript
+export class FlapAnimation {
+  private element: HTMLElement;
+  private animationId: number | null = null;
+ 
+  constructor(element: HTMLElement) {
+    this.element = element;
+  }
+ 
+  public destroy(): void {
+    if (this.animationId !== null) {
+       cancelAnimationFrame(this.animationId);
+       this.animationId = null;
+    }
+    this.element.style.transform = '';
+    this.element.style.transition = '';
+  }
+ 
+  public animate(): void {
+     // Optimized animation with frame rate limiting
+     const startTime = performance.now();
+     const duration = 300; // ms
+ 
+     const animate = (currentTime: number) => {
+       const elapsed = currentTime - startTime;
+       const progress = Math.min(elapsed / duration, 1);
+ 
+       // Apply easing
+       const easeProgress = this.easeInOutCubic(progress);
+       this.element.style.transform = `rotateY(${easeProgress * 180}deg)`;
+ 
+       if (progress < 1) {
+         this.animationId = requestAnimationFrame(animate);
+       }
+     };
+ 
+     this.animationId = requestAnimationFrame(animate);
+   }
+ 
+  private easeInOutCubic(t: number): number {
+     return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  }
+ }
+```
+
+## Verification Commands
+
+```bash
+# Run performance tests
+npm test -- --testPathPattern="Board" --performance
+
+# Run specific performance metrics
+npm run test:performance -- --grep="P7-01"
+
+# Verify reduced motion implementation
+npm run test:reduced-motion
+
+# Check for memory leaks
+npm run test:memory -- --grep="Board"
+
+# Run all Phase 4-6 tests to ensure no regression
+npm run test:phase4-6
+
+# Performance benchmarking
+npm run benchmark:board -- --iterations=1000
+```
+
+## Additional Setup
+
+1. Create `src/utils/RAFManager.ts` file
+2. Create `src/utils/PerformanceMonitor.ts` file
+3. Add performance monitoring CSS classes in `src/components/Board.css`
+4. Update `src/index.tsx` to include performance monitoring in production
+
+This implementation provides:
+- Optimized stream reconnection with exponential backoff
+- Reduced unnecessary board recomputation through memoization
+- Efficient animation handling with RAF throttling
+- Proper cleanup to prevent memory leaks
+- Measurable performance metrics
+- Maintained reduced motion support

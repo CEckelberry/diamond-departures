@@ -1,5 +1,5 @@
 <script lang="ts">
-	import TrendChart from './TrendChart.svelte';
+	type TrendChartComponent = typeof import('./TrendChart.svelte').default;
 	type PlayerDetail = {
 		player: {
 			id: number;
@@ -30,6 +30,7 @@
 	let historyPoints = $state<HistoryPoint[]>([]);
 	let historyLoading = $state(false);
 	let historyError = $state('');
+	let TrendChart = $state<TrendChartComponent | null>(null);
 
 	$effect(() => {
 		if (!selectedPlayerId) {
@@ -73,6 +74,13 @@
 			return;
 		}
 
+		if (!TrendChart) {
+			void (async () => {
+				const mod = await import('./TrendChart.svelte');
+				TrendChart = mod.default;
+			})();
+		}
+
 		const controller = new AbortController();
 		historyLoading = true;
 		historyError = '';
@@ -111,7 +119,13 @@
 		<div class="panel-error">{error}</div>
 	{:else if detail}
 		<header class="panel-header">
-			<img src={detail.player.headshot_url} alt={`${detail.player.name} headshot`} loading="lazy" />
+			<img
+				src={detail.player.headshot_url}
+				alt={`${detail.player.name} headshot`}
+				loading="lazy"
+				decoding="async"
+				fetchpriority="low"
+			/>
 			<div>
 				<h2>{detail.player.name}</h2>
 				<p>{detail.player.team_abbr} · {detail.player.position}</p>
@@ -128,8 +142,10 @@
 			<p class="panel-loading">Loading trend…</p>
 		{:else if historyError}
 			<p class="panel-error">{historyError}</p>
-		{:else}
+		{:else if TrendChart}
 			<TrendChart points={historyPoints} stat={trendStat} />
+		{:else}
+			<p class="panel-loading">Loading chart…</p>
 		{/if}
 	{/if}
 </aside>

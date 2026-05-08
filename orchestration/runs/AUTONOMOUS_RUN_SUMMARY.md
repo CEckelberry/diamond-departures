@@ -151,6 +151,11 @@ Repo: `/home/roger/Documents/coding/cole-portfolio-apps/diamond-departures`
   - Implemented Header idle-state copy and page/SSE idle-mode streaming behavior.
   - Verification artifact: `orchestration/runs/P6-03-verify.md`.
 
+- **P7-01 (Task 7.1) — completed**
+  - Added RED performance-contract tests for stream churn, compositor transforms, deferred chart loading, and perf script presence.
+  - Implemented split seeding/stream effects, board compositor hints, and panel lazy trend chart loading/headshot optimizations.
+  - Verification artifact: `orchestration/runs/P7-01-verify.md`.
+
 ## TDD evidence
 
 - P4-05 RED: board REST load tests failed (`+page.ts` missing, no data-driven board wiring).
@@ -162,6 +167,7 @@ Repo: `/home/roger/Documents/coding/cole-portfolio-apps/diamond-departures`
 - P6-01 RED: off-season tests failed (missing banner copy and no season-mode SSE guard).
 - P6-02 RED: preview-mode tests failed (missing preview controls and preview SSE wiring).
 - P6-03 RED: between/off-game tests failed (missing idle copy and idle-mode stream policy hooks).
+- P7-01 RED: performance pass tests failed (missing stream churn guards and lazy chart/perf script contracts).
 - GREEN: all new packet suites pass after implementation.
 
 ## Validation commands run

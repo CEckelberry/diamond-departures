@@ -193,6 +193,14 @@ Branch: `main`
 - Updated SSE helper with idle reconnect backoff policy when `idleMode` is active.
 - Verification: `node --test apps/web/tests/between-games-state.test.mjs`, full web node suite, and `pnpm --filter web check` (PASS, warning-only).
 
+### P7-01 (RED → GREEN completed)
+
+- Added RED performance contract tests for stream churn avoidance, compositor-friendly row transforms, deferred trend chart loading, and Playwright perf script presence.
+- Split page seeding and streaming effects to reduce unnecessary stream churn.
+- Added compositor hints in board row-shell styling and lazy/deferred trend chart loading in player panel.
+- Added perf script contract file `apps/web/tests/perf-busy-ingest.spec.ts`.
+- Verification: `node --test apps/web/tests/performance-pass.test.mjs`, full web node suite, and `pnpm --filter web check` (PASS, warning-only).
+
 ## Additional verification
 
 - `node --test apps/web/tests/board-structure.test.mjs apps/web/tests/board-rest-load.test.mjs apps/web/tests/board-sse-wiring.test.mjs apps/web/tests/board-reshuffle-animation.test.mjs` (PASS, 10 tests)

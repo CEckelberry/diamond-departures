@@ -57,8 +57,8 @@ export const load = async ({
 	q.set("view", resolveView(url.searchParams));
 	q.set("sort", resolveSort(url.searchParams, q.get("view") ?? "hitters"));
 
-	const response = await fetch('/api/board?' + q.toString());
-	if (!response.ok) throw error(response.status, 'Failed to load board');
+	const response = await fetch("/api/board?" + q.toString());
+	if (!response.ok) throw error(response.status, "Failed to load board");
 
 	const payload = (await response.json()) as {
 		view: string;

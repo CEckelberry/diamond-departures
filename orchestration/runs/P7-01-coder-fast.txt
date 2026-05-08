@@ -1,0 +1,257 @@
+# Packet P7-01 — Performance pass GREEN
+
+## 1. Plan, Assumptions & Risks
+
+### Assumptions
+1.  **Architecture**: The application uses a React-based frontend with a WebSocket or SSE connection for real-time board updates.
+2.  **State Management**: Board state is managed via a central store (e.g., Redux/Zustand) or complex props drilling.
+3.  **Animation Library**: Animations are handled via `framer-motion` or CSS transitions triggered by class names/state changes.
+4.  **Existing Codebase**: There is an existing `Board` component and a `useGameConnection` (or similar) hook that handles reconnection logic.
+5.  **Performance Bottlenecks Identified in RED Phase**:
+    *   **Reconnect Churn**: The connection handler creates new event listeners or resets the entire board state on every minor network hiccup, causing full tree re-renders.
+    *   **Board Recomputation**: The `Board` component recalculates move validity or board evaluation on every render, even if the board state hasn't changed (missing `useMemo` or `React.memo`).
+    *   **Animation Overhead**: Flap/row animations trigger layout thrashing because they are not GPU-accelerated or are applied to high-frequency updating elements.
+
+### Risks & Mitigations
+1.  **Risk**: Aggressive memoization might hide stale state bugs.
+    *   **Mitigation**: Use `React.memo` with custom comparison functions only where necessary. Ensure `useMemo` dependencies are exhaustive.
+2.  **Risk**: Reducing reconnect churn might delay recovery from actual disconnects.
+    *   **Mitigation**: Implement exponential backoff with jitter for reconnection attempts, but debounce the *state reset* to avoid UI flicker during transient network blips.
+3.  **Risk**: Optimizing animations might break accessibility or visual fidelity.
+    *   **Mitigation**: Ensure `prefers-reduced-motion` media query is respected and fast-pathed. Test with screen readers.
+
+### Implementation Strategy
+1.  **Optimize Reconnection Logic**:
+    *   Debounce reconnection attempts.
+    *   Avoid full board reset on transient disconnects; instead, queue messages or mark state as "stale" without triggering a full re-render.
+    *   Use `useRef` for connection instances to prevent unmount/remount cycles.
+2.  **Memoize Board Components**:
+    *   Wrap `Board` and `Square` components in `React.memo`.
+    *   Memoize expensive computations (e.g., move generation, board evaluation) using `useMemo`.
+3.  **Optimize Animations**:
+    *   Use `transform` and `opacity` for animations (GPU-accelerated).
+    *   Avoid animating layout properties (width, height, top, left).
+    *   Implement a fast path for reduced-motion users to skip animation calculations entirely.
+
+## 2. Exact File Edits as Unified Diff
+
+### File: `src/hooks/useGameConnection.js`
+
+```diff
+--- a/src/hooks/useGameConnection.js
++++ b/src/hooks/useGameConnection.js
+@@ -1,10 +1,12 @@
+ import { useState, useEffect, useRef, useCallback } from 'react';
++import { debounce } from 'lodash-es';
+
+ export function useGameConnection(url, onMessage) {
+   const [isConnected, setIsConnected] = useState(false);
+   const [error, setError] = useState(null);
++  const [isReconnecting, setIsReconnecting] = useState(false);
+   const wsRef = useRef(null);
++  const reconnectTimeoutRef = useRef(null);
+
+   // Use a ref to store the latest onMessage callback to avoid recreating the connection
+   const onMessageRef = useRef(onMessage);
+@@ -15,6 +17,14 @@ export function useGameConnection(url, onMessage) {
+     onMessageRef.current = onMessage;
+   });
+
++  // Debounced reconnect function to prevent churn
++  const reconnect = useCallback(
++    debounce(() => {
++      setIsReconnecting(true);
++      connect();
++    }, 1000), // 1s debounce
++    []
++  );
+
+   const connect = useCallback(() => {
+     if (wsRef.current?.readyState === WebSocket.OPEN) return;
+
+@@ -25,12 +35,24 @@ export function useGameConnection(url, onMessage) {
+       wsRef.current.onopen = () => {
+         setIsConnected(true);
+         setError(null);
++        setIsReconnecting(false);
++        // Clear any pending reconnect timeout
++        if (reconnectTimeoutRef.current) {
++          clearTimeout(reconnectTimeoutRef.current);
++          reconnectTimeoutRef.current = null;
++        }
+       };
+
+       wsRef.current.onclose = (event) => {
+         setIsConnected(false);
++        // Only attempt reconnect if it wasn't a manual close
++        if (!event.wasClean) {
++          reconnectTimeoutRef.current = setTimeout(reconnect, 0);
++        }
+       };
+
+       wsRef.current.onerror = (event) => {
+         setError('Connection error');
++        // Don't reconnect on error immediately; let onclose handle it
+       };
+
+       wsRef.current.onmessage = (event) => {
+@@ -42,10 +64,15 @@ export function useGameConnection(url, onMessage) {
+     wsRef.current = new WebSocket(url);
+   }, [url]);
+
++  // Cleanup on unmount
+   useEffect(() => {
+     return () => {
+       if (wsRef.current) {
+         wsRef.current.close();
+       }
++      if (reconnectTimeoutRef.current) {
++        clearTimeout(reconnectTimeoutRef.current);
++      }
+     };
+   }, []);
+
+@@ -53,7 +80,10 @@ export function useGameConnection(url, onMessage) {
+     if (wsRef.current?.readyState === WebSocket.OPEN) {
+       wsRef.current.send(JSON.stringify(message));
+     }
+-  }, [wsRef]);
++  }, []); // wsRef is stable
+
++  return { isConnected, error, isReconnecting, sendMessage };
+ }
+```
+
+### File: `src/components/Board.js`
+
+```diff
+--- a/src/components/Board.js
++++ b/src/components/Board.js
+@@ -1,15 +1,20 @@
+ import React from 'react';
++import { memo, useMemo } from 'react';
+ import Square from './Square';
+ import { getValidMoves, evaluateBoard } from '../utils/gameLogic';
+
+-const Board = ({ boardState, onSquareClick, isFlipping }) => {
++const Board = memo(({ boardState, onSquareClick, isFlipping }) => {
++  // Memoize expensive computations
++  const validMoves = useMemo(
++    () => getValidMoves(boardState),
++    [boardState]
++  );
++
++  const evaluation = useMemo(
++    () => evaluateBoard(boardState),
++    [boardState]
++  );
+
+   return (
+     <div className="board">
+-      {getValidMoves(boardState).map((move) => (
+-        <Square key={move.id} move={move} onClick={onSquareClick} />
+-      ))}
++      {validMoves.map((move) => (
++        <Square key={move.id} move={move} onClick={onSquareClick} />
++      ))}
+       <div className="evaluation">{evaluation}</div>
+     </div>
+   );
+-});
++});
+```
+
+### File: `src/components/Square.js`
+
+```diff
+--- a/src/components/Square.js
++++ b/src/components/Square.js
+@@ -1,10 +1,12 @@
+ import React from 'react';
++import { memo } from 'react';
+ import { useAnimation } from '../hooks/useAnimation';
+
+-const Square = ({ move, onClick }) => {
++const Square = memo(({ move, onClick }) => {
+   const { isAnimating, animate } = useAnimation(move.isFlipping);
+
+   return (
+     <div
+       className={`square ${isAnimating ? 'flipping' : ''}`}
+       onClick={() => onClick(move)}
+     >
+       {move.content}
+     </div>
+   );
+-});
++});
+```
+
+### File: `src/hooks/useAnimation.js`
+
+```diff
+--- a/src/hooks/useAnimation.js
++++ b/src/hooks/useAnimation.js
+@@ -1,20 +1,30 @@
+ import { useState, useEffect, useMemo } from 'react';
++import { useMediaQuery } from 'react-responsive';
+
+ export function useAnimation(isFlipping) {
+   const [isAnimating, setIsAnimating] = useState(false);
++  const prefersReducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
+
+   useEffect(() => {
+     if (isFlipping) {
+-      setIsAnimating(true);
+-      const timer = setTimeout(() => {
+-        setIsAnimating(false);
+-      }, 500); // Animation duration
++      if (prefersReducedMotion) {
++        // Fast path: skip animation
++        setIsAnimating(false);
++      } else {
++        setIsAnimating(true);
++        const timer = setTimeout(() => {
++          setIsAnimating(false);
++        }, 500);
++        return () => clearTimeout(timer);
++      }
+     } else {
+       setIsAnimating(false);
+     }
+-  }, [isFlipping]);
++  }, [isFlipping, prefersReducedMotion]);
+
+   return { isAnimating };
+ }
+```
+
+## 3. Verification Commands
+
+1.  **Run Unit Tests**:
+    ```bash
+    npm test -- --testPathPattern="useGameConnection|Board|Square|useAnimation" --coverage
+    ```
+    *   **Check**: Ensure all tests pass and coverage for `useGameConnection` and `Board` remains high.
+
+2.  **Run Integration Tests (Phase 4-6)**:
+    ```bash
+    npm run test:integration
+    ```
+    *   **Check**: Ensure no regressions in existing functionality.
+
+3.  **Performance Audit (Lighthouse)**:
+    ```bash
+    npx lighthouse http://localhost:3000 --output=json --output-path=./lighthouse-report.json
+    ```
+    *   **Check**: Look for improvements in "Speed Index" and "Total Blocking Time". Specifically, check that the "Main Thread Work" is reduced during board updates.
+
+4.  **Manual Reconnection Test**:
+    *   Open the app in two browser tabs.
+    *   In one tab, refresh the page or disconnect the network (e.g., via DevTools).
+    *   **Check**: Observe the UI. It should not flicker or reset the board entirely during transient disconnects. The reconnection should be smooth and not cause excessive re-renders.
+
+5.  **Reduced Motion Test**:
+    *   Enable "Reduce Motion" in OS/browser settings.
+    *   Trigger a flip animation.
+    *   **Check**: The animation should be skipped or instantaneous, and the component should not perform unnecessary layout calculations.
