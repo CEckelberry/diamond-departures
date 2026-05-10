@@ -31,7 +31,7 @@ from .status import (
     in_memory_freshness_reader,
     in_memory_season_state_reader,
 )
-from .store import postgres_health_check
+from .store import postgres_health_check, postgres_board_reader
 
 
 def create_app(
@@ -52,7 +52,10 @@ def create_app(
     app.state.settings = resolved_settings
     logger = logging.getLogger("apps.api")
     checker = db_health_check or postgres_health_check(resolved_settings.database_url)
-    board_loader = board_reader or in_memory_board_reader
+    
+    # Use postgres_board_reader if database_url is provided, otherwise fallback to in-memory
+    board_loader = board_reader or postgres_board_reader(resolved_settings.database_url)
+    
     hub = sse_hub or BoardSSEHub(heartbeat_seconds=sse_heartbeat_seconds)
     detail_loader = player_detail_reader or in_memory_player_detail_reader
     history_loader = player_history_reader or in_memory_player_history_reader
@@ -161,6 +164,7 @@ def _validate_view_sort(view: str, sort: str) -> None:
 
 def _entries_from_rows(rows: list[dict[str, object]]) -> list[dict[str, object]]:
     entries: list[dict[str, object]] = []
+    
     for row in rows:
         refreshed_at = parse_refreshed_at(str(row["refreshed_at"]))
         entries.append(
@@ -173,11 +177,15 @@ def _entries_from_rows(rows: list[dict[str, object]]) -> list[dict[str, object]]
                     "headshot_url": row["headshot_url"],
                     "position": row["position"],
                 },
-                "stat_value": row["stat_value"],
+                "stat_value": float(row["stat_value"]),
+                "additional_stats": {k: float(v) for k, v in row.get("additional_stats", {}).items()},
                 "freshness": {
                     "timestamp": refreshed_at.isoformat(),
                     "age_category": age_category(refreshed_at),
                 },
             }
         )
+
     return entries
+
+app = create_app()

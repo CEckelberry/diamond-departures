@@ -21,6 +21,7 @@ export type BoardRow = {
 	team: string;
 	position: string;
 	stat: string;
+	stats: Record<string, number>;
 	justQualified?: boolean;
 	qualifiedAt?: string | null;
 };

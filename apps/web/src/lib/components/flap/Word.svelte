@@ -27,7 +27,7 @@
 	.word {
 		display: grid;
 		grid-template-columns: repeat(var(--cells), var(--cell-width));
-		gap: 0.35rem;
+		gap: 2px;
 		width: fit-content;
 	}
 </style>

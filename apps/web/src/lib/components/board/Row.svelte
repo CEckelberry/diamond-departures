@@ -1,14 +1,51 @@
 <script lang="ts">
-	import Word from '$lib/components/flap/Word.svelte';
-	import type { BoardRow } from './types';
+	import Word from "$lib/components/flap/Word.svelte";
+	import type { BoardRow } from "./types";
+	import { page } from "$app/stores";
 
 	let {
 		row,
-		onselect
+		onselect,
+		boardStyle = "sabermetric"
 	}: {
 		row: BoardRow & { justQualified?: boolean };
 		onselect?: (playerId: number) => void;
+		boardStyle?: string;
 	} = $props();
+
+	const isPitcher = $derived(row.position === "SP" || row.position === "RP");
+	const extraStatKeys = $derived((() => {
+		if (isPitcher) {
+			return boardStyle === "sabermetric" 
+				? ["K/9", "BB/9", "FIP", "xFIP", "WAR"]
+				: ["W", "L", "K", "ERA", "WHIP"];
+		}
+		return boardStyle === "sabermetric"
+			? ["wRC+", "OPS+", "WAR", "DRS", "xwOBA"]
+			: ["AVG", "HR", "RBI", "SB", "SLG"];
+	})());
+
+	function formatStat(key: string, val: number | undefined): string {
+		if (val === undefined) return "---";
+		
+		if (["wRC+", "OPS+", "HR", "RBI", "SB", "W", "L", "K", "DRS", "H"].includes(key)) {
+			return String(Math.round(val));
+		}
+		
+		if (["AVG", "SLG", "OBP", "xwOBA"].includes(key)) {
+			return val.toFixed(3).replace(/^0/, "");
+		}
+		
+		if (["ERA", "WHIP", "FIP", "xFIP", "K/9", "BB/9", "WAR"].includes(key)) {
+			return val.toFixed(2);
+		}
+
+		if (key === "OPS") {
+			return val.toFixed(3).replace(/^0/, "");
+		}
+		
+		return String(val);
+	}
 
 	const rowAriaLabel = $derived(
 		`rank ${row.rank.trim()}, ${row.player}, ${row.team}, ${row.position}, stat ${row.stat}`
@@ -19,7 +56,7 @@
 	}
 
 	function handleKeydown(event: KeyboardEvent) {
-		if (event.key === 'Enter' || event.key === ' ') {
+		if (event.key === "Enter" || event.key === " ") {
 			event.preventDefault();
 			handleSelect();
 		}
@@ -30,89 +67,90 @@
 	class="board-row"
 	role="button"
 	tabindex="0"
-	aria-label={rowAriaLabel}
 	onclick={handleSelect}
 	onkeydown={handleKeydown}
 >
 	<div class="cell rank" role="gridcell">
-		<Word value={row.rank} width={3} cellWidth={20} cellHeight={30} />
+		<Word value={row.rank} width={3} cellWidth={16} cellHeight={26} />
 	</div>
 	<div class="cell player" role="gridcell">
-		<Word value={row.player} width={18} cellWidth={20} cellHeight={30} />
+		<Word value={row.player} width={18} cellWidth={16} cellHeight={26} />
 		{#if row.justQualified}
-			<span class="just-qualified-badge" style:--badge-fade-duration="24h">(just qualified)</span>
+			<span class="just-qualified-badge">(new)</span>
 		{/if}
 	</div>
 	<div class="cell team" role="gridcell">
-		<Word value={row.team} width={4} cellWidth={20} cellHeight={30} />
+		<Word value={row.team} width={3} cellWidth={16} cellHeight={26} />
 	</div>
 	<div class="cell position" role="gridcell">
-		<Word value={row.position} width={4} cellWidth={20} cellHeight={30} />
+		<Word value={row.position} width={2} cellWidth={16} cellHeight={26} />
 	</div>
-	<div class="cell stat" role="gridcell">
-		<Word value={row.stat} width={6} cellWidth={20} cellHeight={30} />
+	{#each extraStatKeys as key}
+		<div class="cell extra-stat" role="gridcell">
+			<Word value={formatStat(key, row.stats[key])} width={key === 'OPS' ? 5 : 4} cellWidth={16} cellHeight={26} />
+		</div>
+	{/each}
+	<div class="cell stat highlight-stat" role="gridcell">
+		<Word value={formatStat($page.url.searchParams.get("sort") || (isPitcher ? "ERA" : "wRC+"), Number(row.stat))} width={5} cellWidth={16} cellHeight={26} />
 	</div>
 </div>
 
 <style>
 	.board-row {
 		display: grid;
-		grid-template-columns: 3.5rem 20rem 6rem 6rem 8rem;
-		height: 36px;
-		min-height: 44px;
+		grid-template-columns: 80px 1fr 100px 80px repeat(5, 100px) 130px;
+		height: 32px;
+		min-height: 38px;
 		align-items: center;
-		gap: 0.45rem;
-		padding: 0.1rem 0.15rem;
+		gap: 0.4rem;
+		padding: 0.1rem 0.2rem;
 		cursor: pointer;
-		border-radius: 0.35rem;
+		border-radius: 0.3rem;
+		transition: background 150ms ease;
 	}
 
-	.board-row:focus-visible {
-		outline: 2px solid color-mix(in oklab, var(--cell-text) 70%, white);
-		outline-offset: 2px;
+	.board-row:hover {
+		background: color-mix(in oklab, var(--chrome-bg) 60%, transparent);
 	}
 
 	.cell {
+		display: flex;
+		align-items: center;
 		overflow: hidden;
 	}
 
+	.rank {
+		padding-left: 0.4rem;
+	}
+
 	.player {
-		display: flex;
-		align-items: center;
-		gap: 0.28rem;
+		padding-left: 1.2rem;
+		gap: 0.4rem;
 	}
 
 	.just-qualified-badge {
-		font-family: 'JetBrains Mono', monospace;
-		font-size: 0.58rem;
-		text-transform: lowercase;
-		opacity: 0.95;
-		animation: badge-fade var(--badge-fade-duration, 24h) linear forwards;
+		font-family: "JetBrains Mono", monospace;
+		font-size: 0.5rem;
+		text-transform: uppercase;
+		color: var(--mlb-blue);
+		font-weight: 700;
 	}
 
-	@keyframes badge-fade {
-		0% {
-			opacity: 0.95;
-		}
-		100% {
-			opacity: 0.05;
-		}
+	.stat {
+		justify-content: flex-end;
+		padding-right: 1.2rem;
+	}
+
+	.highlight-stat :global(.cell) {
+		--cell-text: #ffd700; /* Gold accent */
 	}
 
 	@media (max-width: 920px) {
 		.board-row {
 			grid-template-columns: 1fr;
-			gap: 0.25rem;
-			padding: 0.5rem;
+			gap: 0.2rem;
+			padding: 0.4rem;
 			background: color-mix(in oklab, var(--chrome-bg) 82%, black);
-			border: 1px solid color-mix(in oklab, var(--chrome-text) 16%, transparent);
-		}
-
-		.rank,
-		.team,
-		.position,
-		.stat {
-			font-size: 0.7rem;
 		}
 	}
 </style>

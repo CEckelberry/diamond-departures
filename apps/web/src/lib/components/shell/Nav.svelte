@@ -2,7 +2,6 @@
 	<div class="inner">
 		<a class="brand" href="/">Diamond Departures</a>
 		<div class="links">
-			<a href="/case-study">Case Study</a>
 			<a href="https://github.com" rel="noreferrer" target="_blank">GitHub</a>
 			<a href="https://cole.codes" rel="noreferrer" target="_blank">Back to Portfolio</a>
 		</div>
@@ -34,7 +33,7 @@
 	.brand {
 		font-family: 'Instrument Serif', serif;
 		font-size: clamp(1.1rem, 1.8vw, 1.5rem);
-		color: var(--chrome-text);
+		color: var(--mlb-red); font-weight: 700;
 		text-decoration: none;
 	}
 

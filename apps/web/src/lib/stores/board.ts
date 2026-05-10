@@ -11,6 +11,7 @@ export type BoardEntry = {
 		position: string;
 	};
 	stat_value: number;
+	additional_stats: Record<string, number>;
 	freshness: {
 		timestamp: string;
 		age_category: "live" | "recent" | "stale" | "old";
@@ -111,13 +112,14 @@ function isWithin24Hours(timestamp: string | null | undefined): boolean {
 }
 
 export function toBoardRows(entries: BoardEntry[]): BoardRow[] {
-	return entries.map((entry) => ({
+	return entries.map((entry, index) => ({
 		playerId: entry.player.id,
-		rank: String(entry.rank).padStart(3, " "),
+		rank: String(entry.rank || (index + 1)).padStart(3, " "),
 		player: entry.player.name,
 		team: entry.player.team_abbr,
 		position: entry.player.position,
 		stat: Number(entry.stat_value).toFixed(1),
+		stats: entry.additional_stats,
 		justQualified:
 			Boolean(entry.newly_qualified) &&
 			isWithin24Hours(entry.qualified_at ?? null),

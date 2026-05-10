@@ -1,18 +1,59 @@
 import { browser } from '$app/environment';
-import { createFlapSoundManager } from './flap.mjs';
 import { getSoundVolume, isSoundEnabled } from '$lib/stores/sound';
 
-type ClipName = 'single' | 'many' | 'row-shift';
+export type FlapClip = 'single' | 'many' | 'row-shift';
 
-const clipUrls: Record<ClipName, string> = {
+interface FlapSoundManagerDeps {
+	isEnabled: () => boolean;
+	getVolume: () => number;
+	play: (clip: FlapClip, volume: number) => void;
+	debounceMs?: number;
+}
+
+export function createFlapSoundManager(deps: FlapSoundManagerDeps) {
+	let pending = 0;
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	const debounceMs = deps.debounceMs ?? 100;
+
+	function flush() {
+		timer = undefined;
+		if (pending === 0 || !deps.isEnabled()) {
+			pending = 0;
+			return;
+		}
+		const clip = pending > 1 ? 'many' : 'single';
+		pending = 0;
+		deps.play(clip, deps.getVolume());
+	}
+
+	return {
+		noteFlip() {
+			if (!deps.isEnabled()) return;
+			pending += 1;
+			if (timer) clearTimeout(timer);
+			timer = setTimeout(flush, debounceMs);
+		},
+		playRowShift() {
+			if (!deps.isEnabled()) return;
+			deps.play('row-shift', deps.getVolume());
+		},
+		dispose() {
+			if (timer) clearTimeout(timer);
+			timer = undefined;
+			pending = 0;
+		}
+	};
+}
+
+const clipUrls: Record<FlapClip, string> = {
 	single: '/audio/flap-single.mp3',
 	many: '/audio/flap-many.mp3',
 	'row-shift': '/audio/flap-row-shift.mp3'
 };
 
-const players: Partial<Record<ClipName, HTMLAudioElement>> = {};
+const players: Partial<Record<FlapClip, HTMLAudioElement>> = {};
 
-function playClip(clip: ClipName, volume: number) {
+function playClip(clip: FlapClip, volume: number) {
 	if (!browser) return;
 	if (!players[clip]) {
 		players[clip] = new Audio(clipUrls[clip]);

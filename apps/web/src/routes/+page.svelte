@@ -1,16 +1,15 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import { navigating, page } from '$app/stores';
-	import Header from '$lib/components/board/Header.svelte';
-	import ViewTabs from '$lib/components/board/ViewTabs.svelte';
-	import SEO from '$lib/components/shell/SEO.svelte';
-	import StatPicker from '$lib/components/board/StatPicker.svelte';
-	import Board from '$lib/components/board/Board.svelte';
-	import Panel from '$lib/components/player/Panel.svelte';
-	import { openBoardStream } from '$lib/api/sse';
-	import { applyDelta, applySnapshot, boardRows as boardRowsStore, seedBoard } from '$lib/stores/board';
+	import { onMount, untrack } from "svelte";
+	import { navigating, page } from "$app/stores";
+	import Header from "$lib/components/board/Header.svelte";
+	import ViewTabs from "$lib/components/board/ViewTabs.svelte";
+	import SEO from "$lib/components/shell/SEO.svelte";
 
-	type SeasonMode = 'live' | 'between' | 'off-game' | 'off-season';
+	import Board from "$lib/components/board/Board.svelte";
+	import { openBoardStream } from "$lib/api/sse";
+	import { applyDelta, applySnapshot, boardRows as boardRowsStore, seedBoard } from "$lib/stores/board";
+
+	type SeasonMode = "live" | "between" | "off-game" | "off-season";
 
 	type BoardEntryPayload = {
 		rank: number;
@@ -22,9 +21,10 @@
 			position: string;
 		};
 		stat_value: number;
+		additional_stats: Record<string, number>;
 		freshness: {
 			timestamp: string;
-			age_category: 'live' | 'recent' | 'stale' | 'old';
+			age_category: "live" | "recent" | "stale" | "old";
 		};
 	};
 
@@ -39,46 +39,35 @@
 		};
 	} = $props();
 
-	const view = $derived($page.url.searchParams.get('view') ?? 'hitters');
+	const view = $derived($page.url.searchParams.get("view") ?? "hitters");
 	const isLoading = $derived($navigating !== null);
 	const boardRows = $derived($boardRowsStore);
 	const selectedPosition = $derived(data.selectedPosition);
 	const filteredRows = $derived(
 		(() => {
-			if (view !== 'positions' || !selectedPosition || selectedPosition === 'all') {
-				return boardRows;
+			const rows = boardRows;
+			if (view !== "positions" || !selectedPosition || selectedPosition === "all") {
+				return rows;
 			}
-			return boardRows.filter((row) => row.position === selectedPosition);
+			return rows.filter((row) => row.position === selectedPosition);
 		})()
 	);
 
 	let selectedPlayerId = $state<number | null>(null);
-	let seasonMode = $state<SeasonMode>('off-season');
-	let previewMode = $state(false);
-	let streamView = $state('');
-	let streamSort = $state('');
-	let stop = () => {};
+	let seasonMode = $state<SeasonMode>("off-season");
 
 	function handleSelectPlayer(playerId: number) {
 		selectedPlayerId = playerId;
 	}
 
-	function togglePreviewMode() {
-		previewMode = !previewMode;
-	}
-
-	function closePanel() {
-		selectedPlayerId = null;
-	}
-
 	async function refreshSeasonMode() {
 		try {
-			const response = await fetch('/api/season-state');
+			const response = await fetch("/api/season-state");
 			if (!response.ok) return;
 			const payload = (await response.json()) as { mode?: SeasonMode };
-			seasonMode = payload.mode ?? 'off-season';
+			seasonMode = payload.mode ?? "off-season";
 		} catch {
-			seasonMode = 'off-season';
+			seasonMode = "off-season";
 		}
 	}
 
@@ -88,43 +77,54 @@
 			void refreshSeasonMode();
 		}, 30000);
 		const handleEscape = (event: KeyboardEvent) => {
-			if (event.key === 'Escape') {
+			if (event.key === "Escape") {
 				selectedPlayerId = null;
 			}
 		};
-		window.addEventListener('keydown', handleEscape);
+		window.addEventListener("keydown", handleEscape);
 		return () => {
-			stop();
 			window.clearInterval(interval);
-			window.removeEventListener('keydown', handleEscape);
+			window.removeEventListener("keydown", handleEscape);
 		};
 	});
 
+	let lastSeeded = "";
+
 	$effect(() => {
-		if (streamView === data.boardView && streamSort === data.boardSort) return;
-		seedBoard(data.boardView, data.boardSort, data.entries);
-		selectedPlayerId = data.entries[0]?.player.id ?? null;
-		streamView = data.boardView;
-		streamSort = data.boardSort;
+		const key = data.boardView + "-" + data.boardSort;
+		if (key === lastSeeded) return;
+		lastSeeded = key;
+		
+		untrack(() => seedBoard(data.boardView, data.boardSort, data.entries));
 	});
 
 	$effect(() => {
-		stop();
-		const isOffSeason = seasonMode === 'off-season';
-		const shouldStream = previewMode || seasonMode !== 'off-season';
-		if (isOffSeason && !previewMode) return;
-		if (!shouldStream) return;
-		const endpoint = previewMode ? '/api/board/preview-sse' : '/api/board/sse';
-		const idleMode = !previewMode && (seasonMode === 'between' || seasonMode === 'off-game');
-		stop = openBoardStream(
-			data.boardView,
-			data.boardSort,
-			{
-				onSnapshot: (payload) => applySnapshot(payload),
-				onDelta: (payload) => applyDelta(payload)
-			},
-			{ endpoint, idleMode }
-		);
+		if (seasonMode === "off-season") return;
+		
+		const v = data.boardView;
+		const s = data.boardSort;
+		
+		let streamCleanup: (() => void) | null = null;
+		
+		const timeout = window.setTimeout(() => {
+			const endpoint = "/api/board/sse";
+			const idleMode = (seasonMode === "between" || seasonMode === "off-game");
+			
+			streamCleanup = openBoardStream(
+				v,
+				s,
+				{
+					onSnapshot: (payload) => applySnapshot(payload),
+					onDelta: (payload) => applyDelta(payload)
+				},
+				{ endpoint, idleMode }
+			);
+		}, 400);
+
+		return () => {
+			window.clearTimeout(timeout);
+			if (streamCleanup) streamCleanup();
+		};
 	});
 </script>
 
@@ -135,13 +135,11 @@
 />
 
 <section class="board-screen">
-	<Header previewRunning={previewMode} onTogglePreview={togglePreviewMode} />
-	{#if previewMode}
-		<p class="preview-label" aria-live="polite">preview running · Replay mode</p>
-	{/if}
-	<div class="controls">
-		<ViewTabs />
-		<StatPicker {view} />
+	<div class="top-bar">
+		<Header />
+		<div class="controls">
+			<ViewTabs />
+		</div>
 	</div>
 
 	<div class="board-layout">
@@ -153,36 +151,39 @@
 				<div class="skeleton-row"></div>
 			</div>
 		{:else}
-			<Board rows={filteredRows} onselect={handleSelectPlayer} />
+			<Board rows={filteredRows} onselect={handleSelectPlayer} view={view} />
 		{/if}
-		<Panel selectedPlayerId={selectedPlayerId} onclose={closePanel} />
 	</div>
 </section>
 
 <style>
 	.board-screen {
 		display: grid;
-		gap: 0.8rem;
+		gap: 0.75rem;
+		padding-top: 0.5rem;
 	}
 
-	.preview-label {
-		margin: 0;
-		font-family: 'JetBrains Mono', monospace;
-		font-size: 0.68rem;
-		text-transform: uppercase;
-		letter-spacing: 0.07em;
-		color: color-mix(in oklab, #fcd34d 80%, var(--chrome-text));
+	.top-bar {
+		display: grid;
+		gap: 0.5rem;
+		background: color-mix(in oklab, var(--chrome-bg) 40%, transparent);
+		padding: 0.5rem 0.75rem;
+		border-radius: 0.6rem;
+		border: 1px solid color-mix(in oklab, var(--chrome-text) 10%, transparent);
 	}
 
 	.controls {
-		display: grid;
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
 		gap: 0.5rem;
 	}
 
 	.board-layout {
 		display: grid;
-		gap: 0.7rem;
-		grid-template-columns: minmax(0, 1fr) minmax(240px, 300px);
+		gap: 1rem;
+		grid-template-columns: 1fr;
 		align-items: start;
 	}
 

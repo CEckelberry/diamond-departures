@@ -31,28 +31,33 @@
 <style>
 	.stat-picker {
 		display: flex;
-		gap: 0.45rem;
+		gap: 0.35rem;
 		overflow-x: auto;
-		padding-bottom: 0.15rem;
-		scrollbar-width: thin;
+		scrollbar-width: none;
+		-ms-overflow-style: none;
+	}
+
+	.stat-picker::-webkit-scrollbar {
+		display: none;
 	}
 
 	button {
 		flex: none;
 		font-family: 'JetBrains Mono', monospace;
-		font-size: 0.74rem;
+		font-size: 0.68rem;
 		text-transform: uppercase;
-		letter-spacing: 0.06em;
-		padding: 0.35rem 0.6rem;
-		border-radius: 0.4rem;
-		border: 1px solid color-mix(in oklab, var(--chrome-text) 22%, transparent);
-		background: color-mix(in oklab, var(--chrome-bg) 70%, black);
+		letter-spacing: 0.04em;
+		padding: 0.25rem 0.55rem;
+		border-radius: 0.3rem;
+		border: 1px solid color-mix(in oklab, var(--chrome-text) 18%, transparent);
+		background: color-mix(in oklab, var(--chrome-bg) 60%, black);
 		cursor: pointer;
-		color: var(--chrome-text);
+		color: color-mix(in oklab, var(--chrome-text) 80%, transparent);
 	}
 
 	button.active {
-		border-color: color-mix(in oklab, var(--cell-text) 55%, transparent);
+		background: color-mix(in oklab, var(--cell-bg) 40%, var(--chrome-bg));
+		border-color: var(--mlb-blue); background: var(--mlb-blue);
 		color: var(--cell-text);
 	}
 </style>

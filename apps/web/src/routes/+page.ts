@@ -10,13 +10,17 @@ export type BoardEntryPayload = {
 		position: string;
 	};
 	stat_value: number;
+	additional_stats: Record<string, number>;
 	freshness: {
 		timestamp: string;
 		age_category: "live" | "recent" | "stale" | "old";
 	};
 };
 
-const VALID_SORTS = new Set(["wRC+", "OPS", "ERA", "FIP", "K-BB%"]);
+const VALID_SORTS = new Set([
+	"wRC+", "OPS+", "HR", "SB", "WAR", "AVG", "RBI", "SLG", "H", "DRS", "xwOBA",
+	"ERA", "FIP", "K%", "WHIP", "W", "SV", "K", "K-BB%", "K/9", "BB/9", "xFIP"
+]);
 
 type ViewResolution = {
 	apiView: string;
@@ -48,7 +52,12 @@ function resolveView(params: URLSearchParams): ViewResolution {
 function resolveSort(params: URLSearchParams, apiView: string): string {
 	const fromUrl = params.get("sort") ?? "";
 	if (VALID_SORTS.has(fromUrl)) return fromUrl;
-	return apiView.startsWith("pitchers") ? "ERA" : "wRC+";
+	
+	const style = params.get("style") ?? "sabermetric";
+	if (apiView.startsWith("pitchers")) {
+		return style === "sabermetric" ? "FIP" : "W";
+	}
+	return style === "sabermetric" ? "wRC+" : "AVG";
 }
 
 export const load = async ({

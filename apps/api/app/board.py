@@ -5,7 +5,10 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 VALID_VIEWS = {"hitters", "pitchers", "hitters_ss", "hitters_of", "pitchers_sp", "pitchers_rp"}
-VALID_SORTS = {"wRC+", "OPS", "ERA", "FIP", "K-BB%"}
+VALID_SORTS = {
+    "wRC+", "OPS", "HR", "SB", "WAR", "AVG", "RBI", 
+    "ERA", "FIP", "K%", "WHIP", "W", "SV", "K", "K-BB%"
+}
 
 BoardReader = Callable[[str, str], list[dict[str, Any]]]
 

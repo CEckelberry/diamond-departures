@@ -1,9 +1,7 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import { flip } from 'svelte/animate';
-	import { cubicOut } from 'svelte/easing';
-	import { playRowShift } from '$lib/audio/flap';
-	import Row from './Row.svelte';
+	import { onMount } from "svelte";
+	import { playRowShift } from "$lib/audio/flap";
+	import Row from "./Row.svelte";
 
 	type RowShape = {
 		playerId: number;
@@ -12,47 +10,39 @@
 		team: string;
 		position: string;
 		stat: string;
+		stats: Record<string, number>;
 		justQualified?: boolean;
 		qualifiedAt?: string | null;
 	};
 
 	let {
 		rows = [],
-		onselect
+		onselect,
+		view = "hitters"
 	}: {
 		rows?: RowShape[];
 		onselect?: (playerId: number) => void;
+		view?: string;
 	} = $props();
-	let reducedMotion = $state(false);
-	let previousOrder = $state('');
 
-	const placeholderRows = $derived(
-		rows.length > 0
-			? rows
-			: Array.from({ length: 100 }, (_, index) => ({
-					playerId: index + 1,
-					rank: String(index + 1).padStart(3, ' '),
-					player: `PLAYER ${String(index + 1).padStart(2, '0')}`,
-					team: ['ATL', 'LAD', 'NYY', 'SEA', 'SDP'][index % 5],
-					position: ['SS', 'OF', '1B', 'SP', 'C'][index % 5],
-					stat: (150 - index / 2).toFixed(1),
-					justQualified: false,
-					qualifiedAt: null
-				}))
-	);
+	let previousOrder = $state("");
 
-	onMount(() => {
-		const media = window.matchMedia('(prefers-reduced-motion: reduce)');
-		const apply = () => {
-			reducedMotion = media.matches;
-		};
-		apply();
-		media.addEventListener('change', apply);
-		return () => media.removeEventListener('change', apply);
-	});
+	const isPitcher = $derived(view.includes("pitcher"));
+	const boardStyle = $derived(new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '').get("style") ?? "sabermetric");
+
+	const extraStats = $derived((() => {
+		if (isPitcher) {
+			return boardStyle === "sabermetric" 
+				? ["K/9", "BB/9", "FIP", "xFIP", "WAR"]
+				: ["W", "L", "K", "ERA", "WHIP"];
+		}
+		return boardStyle === "sabermetric"
+			? ["wRC+", "OPS+", "WAR", "DRS", "xwOBA"]
+			: ["AVG", "HR", "RBI", "SB", "SLG"];
+	})());
 
 	$effect(() => {
-		const nextOrder = placeholderRows.map((row) => row.playerId).join(',');
+		const nextOrder = rows.map((row) => row.playerId).join(",");
 		if (!previousOrder) {
 			previousOrder = nextOrder;
 			return;
@@ -62,32 +52,27 @@
 			previousOrder = nextOrder;
 		}
 	});
-
-	function rowFlip(index: number) {
-		return {
-			delay: index * 30,
-			duration: reducedMotion ? 0 : 420,
-			easing: cubicOut
-		};
-	}
 </script>
 
 <section class="board" aria-label="leaderboard board">
+	<div class="board-rail"></div>
 	<div class="board-header-row" role="row">
-		<span>RK</span>
-		<span>PLAYER</span>
+		<span class="rk-head">RK</span>
+		<span class="player-head">PLAYER</span>
 		<span>TEAM</span>
 		<span>POS</span>
-		<span>STAT</span>
+		{#each extraStats as head}
+			<span class="stat-head">{head}</span>
+		{/each}
+		<span class="sort-head">SORT</span>
 	</div>
 	<div class="board-body" role="rowgroup" aria-live="polite">
-		{#each placeholderRows as row, index (row.playerId)}
+		{#each rows as row (row.playerId)}
 			<div
 				class="row-shell"
 				class:just-qualified-enter={Boolean(row.justQualified)}
-				animate:flip={rowFlip(index)}
 			>
-				<Row {row} onselect={onselect} />
+				<Row {row} onselect={onselect} boardStyle={boardStyle} />
 			</div>
 		{/each}
 	</div>
@@ -95,31 +80,59 @@
 
 <style>
 	.board {
-		border-radius: 0.6rem;
-		padding: 0.7rem;
+		position: relative;
+		border-radius: 0.5rem;
+		padding: 1rem 0.8rem 0.6rem;
 		background: color-mix(in oklab, var(--board-bg) 92%, black);
 		border: 1px solid color-mix(in oklab, var(--chrome-text) 18%, transparent);
+		overflow: hidden;
+	}
+
+	.board-rail {
+		position: absolute;
+		top: 0;
+		left: 0;
+		right: 0;
+		height: 3px;
+		background: linear-gradient(90deg, var(--mlb-blue) 0%, var(--mlb-blue) 50%, var(--mlb-red) 50%, var(--mlb-red) 100%);
+		opacity: 0.8;
 	}
 
 	.board-header-row {
 		display: grid;
-		grid-template-columns: 3.5rem 20rem 6rem 6rem 8rem;
-		gap: 0.45rem;
-		padding-bottom: 0.5rem;
-		margin-bottom: 0.45rem;
+		grid-template-columns: 80px 1fr 100px 80px repeat(5, 100px) 130px;
+		gap: 0.4rem;
+		padding-bottom: 0.6rem;
+		margin-bottom: 0.6rem;
 		border-bottom: 1px solid color-mix(in oklab, var(--chrome-text) 14%, transparent);
-		font-family: 'JetBrains Mono', monospace;
-		font-size: 0.67rem;
-		letter-spacing: 0.1em;
+		font-family: "JetBrains Mono", monospace;
+		font-size: 0.65rem;
+		letter-spacing: 0.12em;
 		text-transform: uppercase;
-		color: color-mix(in oklab, var(--chrome-text) 72%, transparent);
+		color: color-mix(in oklab, var(--chrome-text) 50%, transparent);
+	}
+
+	.rk-head {
+		padding-left: 0.4rem;
+	}
+
+	.player-head {
+		padding-left: 1.2rem;
+	}
+
+	.sort-head {
+		color: #ffd700;
+		text-align: right;
+		padding-right: 1.2rem;
 	}
 
 	.board-body {
 		display: grid;
-		gap: 0.2rem;
-		max-height: min(72vh, 2300px);
+		gap: 0.25rem;
+		max-height: min(82vh, 3000px);
 		overflow: auto;
+		scrollbar-width: thin;
+		scrollbar-color: var(--cell-bg) transparent;
 	}
 
 	.row-shell {
@@ -135,7 +148,7 @@
 	@keyframes row-enter {
 		0% {
 			opacity: 0;
-			transform: translateY(24px);
+			transform: translateY(18px);
 		}
 		100% {
 			opacity: 1;
@@ -146,10 +159,6 @@
 	@media (max-width: 920px) {
 		.board-header-row {
 			display: none;
-		}
-
-		.board-body {
-			gap: 0.45rem;
 		}
 	}
 </style>

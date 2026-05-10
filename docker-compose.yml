@@ -14,7 +14,7 @@ services:
       timeout: 3s
       retries: 20
     volumes:
-      - diamond-pg-data:/var/lib/postgresql
+      - diamond-pg-data:/var/lib/postgresql/data
 
   db-init:
     image: migrate/migrate:v4.18.3
@@ -50,21 +50,45 @@ services:
       - "8090:8090"
 
   api:
-    image: nginx:alpine
-    container_name: diamond-api-placeholder
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: diamond-api
+    environment:
+      - DATABASE_URL=postgresql://diamond:diamond@db:5432/diamond
     ports:
-      - "18000:80"
+      - "18000:18000"
+    depends_on:
+      db:
+        condition: service_healthy
 
   ingest:
-    image: alpine:3.20
-    container_name: diamond-ingest-placeholder
-    command: ["sh", "-c", "while true; do sleep 3600; done"]
+    build:
+      context: .
+      dockerfile: apps/ingest/Dockerfile
+    container_name: diamond-ingest
+    environment:
+      - DATABASE_URL=postgresql://diamond:diamond@db:5432/diamond
+      - MLB_API_URL=http://mlb-mock:8090
+    depends_on:
+      db:
+        condition: service_healthy
+      mlb-mock:
+        condition: service_started
 
   web:
-    image: nginx:alpine
-    container_name: diamond-web-placeholder
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: diamond-web
+    environment:
+      - API_URL=http://api:18000
+      - PORT=5173
     ports:
-      - "5173:80"
+      - "5173:5173"
+    depends_on:
+      api:
+        condition: service_started
 
 volumes:
   diamond-pg-data:

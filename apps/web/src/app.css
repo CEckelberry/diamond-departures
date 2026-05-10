@@ -4,18 +4,24 @@
 @import "@fontsource/jetbrains-mono";
 
 :root {
-	--board-bg: #0e0820;
-	--cell-bg: #26215c;
-	--cell-edge: rgba(0, 0, 0, 0.4);
-	--cell-text: #fac775;
-	--cell-text-dim: #9d7c49;
-	--rank-text: rgba(255, 255, 255, 0.4);
-	--row-up: #5dcaa5;
-	--row-down: #ed93b1;
-	--row-new: #f4c0d1;
-	--chrome-bg: #120a29;
-	--chrome-text: #f8f5ff;
-	font-family: "Inter", system-ui, sans-serif;
+        /* Penn Station Ticker / Mechanical Board Theme */
+        --board-bg: #050505;       /* Pitch Black */
+        --cell-bg: #141414;        /* Deep Charcoal */
+        --cell-edge: rgba(255, 255, 255, 0.15); /* Pronounced split */
+        --cell-text: #FFFFFF;      /* High-contrast White */
+        --cell-text-dim: #A0A0A0;  /* Muted Grey */
+        --rank-text: rgba(255, 255, 255, 0.5);
+        
+        /* MLB Inspired Accents */
+        --mlb-blue: #002D72;
+        --mlb-red: #BA0C2F;
+        --row-up: #22C55E;         /* Success Green */
+        --row-down: var(--mlb-red);
+        --row-new: var(--mlb-blue);
+        
+        --chrome-bg: #0A0A0A;
+        --chrome-text: #FFFFFF;
+        --accent-primary: var(--mlb-blue);
 }
 
 :root[data-theme="light"] {
@@ -38,8 +44,9 @@ body {
 }
 
 .shell-main {
+        background: radial-gradient(circle at 50% -20%, color-mix(in oklab, var(--mlb-blue) 15%, transparent), transparent 70%);
 	flex: 1;
-	width: min(1200px, calc(100% - 2rem));
+	width: min(1600px, calc(100% - 2rem));
 	margin: 0 auto;
 	padding-top: 4.3rem;
 	padding-bottom: 1.25rem;
