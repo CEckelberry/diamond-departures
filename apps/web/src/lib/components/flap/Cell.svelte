@@ -1,106 +1,116 @@
 <script lang="ts">
-	import { onMount } from "svelte";
-	import {
-		FLIP_TIMINGS,
-		enqueueGlyph,
-		normalizeGlyph,
-		shouldFlash,
-		wait
-	} from "./animation.mjs";
+	import { onMount, untrack } from "svelte";
+	import { normalizeGlyph, GLYPHS } from "./animation.mjs";
 	import { noteFlapFlip } from "$lib/audio/flap";
 
-	type CellProps = {
-		value: string;
-		width?: number;
-		height?: number;
-		onFlip?: () => void;
-	};
+	let { value, width = 28, height = 36, onFlip = () => {}, staggerIndex = 0 } = $props();
 
-	let { value, width = 28, height = 36, onFlip = () => {} }: CellProps = $props();
-
-	const normalizedValue = $derived(normalizeGlyph(value));
-	let glyph = $state(" ");
-	let queue = $state<string[]>([]);
-	let animating = $state(false);
-	let phase = $state<"idle" | "top" | "pause" | "bottom">("idle");
-	let flash = $state(false);
-	let reducedMotion = $state(false);
+	const targetGlyph = $derived(normalizeGlyph(value));
+	let currentGlyph = $state(" ");
+	let nextGlyph = $state(" ");
+	
+	let isFlipping = $state(false);
+	let queue: string[] = []; 
 	let disposed = false;
-
-	const half = $derived(Math.floor(height / 2));
-	const phaseClass = $derived(
-		phase === "idle" ? "" : phase === "pause" ? "pause-phase" : `${phase}-phase`
-	);
+	
+	const timingSkew = 0.85 + (Math.random() * 0.3);
+	const flipDuration = 80 * timingSkew; 
+	const halfHeight = Math.floor(height / 2);
 
 	onMount(() => {
 		if (typeof window === "undefined") return;
-
-		const media = window.matchMedia("(prefers-reduced-motion: reduce)");
-		const update = () => {
-			reducedMotion = media.matches;
-		};
-		update();
-		media.addEventListener("change", update);
-
-		return () => {
-			disposed = true;
-			media.removeEventListener("change", update);
-		};
+		return () => { disposed = true; };
 	});
 
+	// React to value changes
 	$effect(() => {
-		enqueueGlyph(queue, normalizedValue, glyph);
-		if (glyph === " " && queue.length === 1 && !animating) {
-			glyph = queue.shift() ?? glyph;
-			return;
-		}
-		void runQueue();
+		const target = targetGlyph;
+		
+		untrack(() => {
+			if (currentGlyph === target && queue.length === 0) return;
+			
+			// Always stagger updates to prevent main thread lockups when 600+ cells change at once (e.g. tab switches)
+			const delay = staggerIndex * 2; // 2ms stagger = ~1.2s to start the last cell
+			
+			setTimeout(() => {
+				if (disposed) return;
+				
+				let startIndex = GLYPHS.indexOf(currentGlyph);
+				let targetIndex = GLYPHS.indexOf(target);
+				if (startIndex === -1) startIndex = 0;
+				if (targetIndex === -1) targetIndex = 0;
+				
+				if (queue.length > 0) {
+					startIndex = GLYPHS.indexOf(queue[queue.length - 1]);
+				}
+				
+				let dist = (targetIndex - startIndex + GLYPHS.length) % GLYPHS.length;
+				
+				if (dist > 2) {
+					// Fast mechanical blur: jump straight to target with only 1 intermediate character
+					const offset = ((staggerIndex * 7) % 17) + 1;
+					const intermediateIdx = (startIndex + offset) % GLYPHS.length;
+					queue.push(GLYPHS[intermediateIdx]);
+					queue.push(target);
+				} else {
+					let i = (startIndex + 1) % GLYPHS.length;
+					while (true) {
+						queue.push(GLYPHS[i]);
+						if (i === targetIndex) break;
+						i = (i + 1) % GLYPHS.length;
+					}
+				}
+				processQueue();
+			}, delay);
+		});
 	});
 
-	async function runQueue() {
-		if (animating) return;
-		animating = true;
+	function processQueue() {
+		if (isFlipping || disposed || queue.length === 0) return;
+		
+		nextGlyph = queue.shift()!;
+		isFlipping = true;
+		onFlip();
+		noteFlapFlip();
+	}
 
-		while (!disposed && queue.length > 0) {
-			const nextGlyph = queue.shift();
-			if (!nextGlyph) continue;
+	function onAnimationEnd(event: AnimationEvent) {
+		if (event.animationName !== 'flip') return;
 
-			if (shouldFlash(reducedMotion)) {
-				glyph = nextGlyph;
-				flash = true;
-				await wait(FLIP_TIMINGS.flashMs);
-				flash = false;
-				continue;
-			}
-
-			onFlip();
-			noteFlapFlip();
-			phase = "top";
-			await wait(FLIP_TIMINGS.topMs);
-			phase = "pause";
-			glyph = nextGlyph;
-			await wait(FLIP_TIMINGS.pauseMs);
-			phase = "bottom";
-			await wait(FLIP_TIMINGS.bottomMs);
-			phase = "idle";
+		currentGlyph = nextGlyph;
+		isFlipping = false;
+		
+		if (queue.length > 0) {
+			setTimeout(processQueue, 2);
 		}
-
-		animating = false;
 	}
 </script>
 
 <div
-	class={`cell ${phaseClass} ${flash ? "flash" : ""}`}
-	style={`--cell-width:${width}px;--cell-height:${height}px;--half-height:${half}px;`}
-	aria-label={`split-flap-cell-${glyph}`}
+	class="cell"
+	class:flipping={isFlipping}
+	style="--cell-width:{width}px;--cell-height:{height}px;--half-height:{halfHeight}px;--flip-duration:{flipDuration}ms;"
+	aria-label={`split-flap-cell-${currentGlyph}`}
 >
-	<div class="face top" aria-hidden="true">
-		<span class="glyph-container">{glyph}</span>
+	<!-- Static Backgrounds -->
+	<div class="face top-bg">
+		<span class="glyph">{nextGlyph}</span>
 	</div>
-	<div class="hairline" aria-hidden="true"></div>
-	<div class="face bottom" aria-hidden="true">
-		<span class="glyph-container">{glyph}</span>
+	<div class="face bottom-bg">
+		<span class="glyph">{currentGlyph}</span>
 	</div>
+	
+	<!-- Animated Flap -->
+	<div class="flap" onanimationend={onAnimationEnd}>
+		<div class="face flap-front">
+			<span class="glyph">{currentGlyph}</span>
+		</div>
+		<div class="face flap-back">
+			<span class="glyph">{nextGlyph}</span>
+		</div>
+	</div>
+	
+	<div class="hairline"></div>
 </div>
 
 <style>
@@ -109,13 +119,14 @@
 		display: inline-block;
 		width: var(--cell-width);
 		height: var(--cell-height);
-		border-radius: 3px;
-		overflow: hidden;
+		border-radius: 4px;
 		background: var(--cell-bg);
-		box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--cell-edge) 60%, transparent);
+		box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--cell-edge) 60%, transparent), 0 2px 4px rgba(0,0,0,0.5);
 		font-family: "JetBrains Mono", monospace;
 		font-weight: 700;
 		color: var(--cell-text);
+		perspective: 400px;
+		transform: translateZ(0);
 	}
 
 	.face {
@@ -126,56 +137,76 @@
 		overflow: hidden;
 		display: flex;
 		justify-content: center;
-		will-change: transform;
+		background: var(--cell-bg);
+		backface-visibility: hidden;
+		transform: translateZ(0);
 	}
 
-	.glyph-container {
+	.glyph {
 		position: absolute;
 		left: 50%;
-		/* Center horizontally */
-		transform: translateX(-50%);
-		/* Fix the height to the full cell height to ensure no clipping */
+		/* Fixed centering: transform handles horizontal AND the 1px vertical mechanical nudge */
+		transform: translate(-50%, 1px);
 		height: var(--cell-height);
+		font-size: calc(var(--cell-height) * 0.72);
+		line-height: 1;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		font-size: calc(var(--cell-height) * 0.7);
-		line-height: 1;
 	}
 
-	.top {
+	.top-bg {
 		top: 0;
-		background: linear-gradient(
-			to bottom,
-			color-mix(in oklab, var(--cell-bg) 85%, white),
-			var(--cell-bg)
-		);
-		transform-origin: center bottom;
-		/* Align the top half of the character */
 		align-items: flex-start;
+		background: linear-gradient(to bottom, color-mix(in oklab, var(--cell-bg) 85%, white), var(--cell-bg));
 	}
+	.top-bg .glyph { top: 0; bottom: auto; }
 
-	.top .glyph-container {
-		/* Position the container so its middle line is at the bottom of this face (the seam) */
-		top: 0;
-	}
-
-	.bottom {
+	.bottom-bg {
 		bottom: 0;
-		background: linear-gradient(
-			to top,
-			color-mix(in oklab, var(--cell-bg) 88%, black),
-			var(--cell-bg)
-		);
-		transform-origin: center top;
-		/* Align the bottom half of the character */
 		align-items: flex-end;
+		background: linear-gradient(to top, color-mix(in oklab, var(--cell-bg) 88%, black), var(--cell-bg));
+	}
+	.bottom-bg .glyph { bottom: 0; top: auto; }
+
+	.flap {
+		display: none;
+		position: absolute;
+		top: 0;
+		left: 0;
+		width: 100%;
+		height: var(--half-height);
+		transform-origin: bottom center;
+		transform-style: preserve-3d;
+		z-index: 10;
 	}
 
-	.bottom .glyph-container {
-		/* Position the container so its middle line is at the top of this face (the seam) */
-		bottom: 0;
+	.flipping .flap {
+		display: block;
+		animation: flip var(--flip-duration) cubic-bezier(0.4, 0.0, 0.2, 1) forwards;
 	}
+
+	.flap-front, .flap-back {
+		position: absolute;
+		left: 0;
+		top: 0;
+		width: 100%;
+		height: 100%;
+		backface-visibility: hidden;
+	}
+
+	.flap-front {
+		align-items: flex-start;
+		background: linear-gradient(to bottom, color-mix(in oklab, var(--cell-bg) 85%, white), var(--cell-bg));
+	}
+	.flap-front .glyph { top: 0; bottom: auto; }
+
+	.flap-back {
+		align-items: flex-end;
+		background: linear-gradient(to top, color-mix(in oklab, var(--cell-bg) 88%, black), var(--cell-bg));
+		transform: rotateX(180deg);
+	}
+	.flap-back .glyph { bottom: 0; top: auto; }
 
 	.hairline {
 		position: absolute;
@@ -184,65 +215,28 @@
 		width: 100%;
 		height: 1px;
 		background: color-mix(in oklab, var(--cell-edge) 80%, black);
-		z-index: 2;
+		z-index: 20;
 	}
 
-	.cell.top-phase .top {
-		animation: flap-top var(--top-ms, 150ms) ease-in forwards;
-	}
+	.flipping .bottom-bg { animation: darken var(--flip-duration) ease-in forwards; }
+	.flipping .top-bg { animation: lighten var(--flip-duration) ease-in forwards; }
+	.flipping .flap-front { animation: darken var(--flip-duration) ease-in forwards; }
+	.flipping .flap-back { animation: lighten var(--flip-duration) ease-in forwards; }
 
-	.cell.pause-phase .hairline {
-		background: color-mix(in oklab, var(--cell-text) 20%, var(--cell-edge));
+	@keyframes flip {
+		0% { transform: rotateX(0deg); }
+		100% { transform: rotateX(-180deg); }
 	}
-
-	.cell.bottom-phase .bottom {
-		animation: flap-bottom var(--bottom-ms, 180ms) ease-out forwards;
+	@keyframes darken {
+		0% { filter: brightness(1); }
+		100% { filter: brightness(0.4); }
 	}
-
-	.cell.flash {
-		animation: reduced-flash 200ms ease-out;
-	}
-
-	@keyframes flap-top {
-		0% {
-			transform: rotateX(0deg);
-			filter: brightness(1);
-		}
-		100% {
-			transform: rotateX(-90deg);
-			filter: brightness(0.82);
-		}
-	}
-
-	@keyframes flap-bottom {
-		0% {
-			transform: rotateX(90deg);
-			filter: brightness(0.7);
-		}
-		100% {
-			transform: rotateX(0deg);
-			filter: brightness(1);
-		}
-	}
-
-	@keyframes reduced-flash {
-		0% {
-			box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--cell-edge) 60%, transparent);
-		}
-		50% {
-			box-shadow:
-				inset 0 0 0 1px color-mix(in oklab, var(--cell-text) 40%, var(--cell-edge)),
-				0 0 0 1px color-mix(in oklab, var(--cell-text) 40%, transparent);
-		}
-		100% {
-			box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--cell-edge) 60%, transparent);
-		}
+	@keyframes lighten {
+		0% { filter: brightness(0.4); }
+		100% { filter: brightness(1); }
 	}
 
 	@media (prefers-reduced-motion: reduce) {
-		.cell.top-phase .top,
-		.cell.bottom-phase .bottom {
-			animation: none;
-		}
+		.flipping .flap, .flipping .face { animation: none !important; }
 	}
 </style>
