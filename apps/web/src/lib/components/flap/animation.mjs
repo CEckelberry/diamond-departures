@@ -1,3 +1,5 @@
+export const GLYPHS = " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-+%+";
+
 export const FLIP_TIMINGS = {
 	topMs: 150,
 	pauseMs: 120,
@@ -6,36 +8,22 @@ export const FLIP_TIMINGS = {
 	flashMs: 200
 };
 
-/**
- * @param {string | null | undefined} value
- */
 export function normalizeGlyph(value) {
-	return String(value ?? ' ').slice(0, 1).toUpperCase() || ' ';
+	const char = String(value ?? " ").slice(0, 1).toUpperCase() || " ";
+	return GLYPHS.includes(char) ? char : " ";
 }
 
 /**
- * @param {string[]} queue
- * @param {string | null | undefined} nextValue
- * @param {string | null | undefined} currentValue
+ * Push current glyph to queue if not already the trailing item.
+ * Deduplicates: if the last item in queue already equals normalised currentVal, skip.
  */
-export function enqueueGlyph(queue, nextValue, currentValue) {
-	const next = normalizeGlyph(nextValue);
-	const current = normalizeGlyph(currentValue);
-	if (next === current) return;
-	if (queue.length > 0 && queue[queue.length - 1] === next) return;
-	queue.push(next);
+export function enqueueGlyph(queue, currentVal, targetVal) {
+	const glyph = normalizeGlyph(currentVal);
+	if (queue.length > 0 && queue[queue.length - 1] === glyph) return;
+	queue.push(glyph);
 }
 
-/**
- * @param {boolean} reducedMotion
- */
+/** Returns true when a reduced-motion flash is needed instead of a flip. */
 export function shouldFlash(reducedMotion) {
 	return Boolean(reducedMotion);
-}
-
-/**
- * @param {number} ms
- */
-export function wait(ms) {
-	return new Promise((resolve) => setTimeout(resolve, ms));
 }
