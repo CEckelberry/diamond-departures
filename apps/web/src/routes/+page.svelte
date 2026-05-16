@@ -6,6 +6,7 @@
 	import StatPicker from '$lib/components/board/StatPicker.svelte';
 	import Board from '$lib/components/board/Board.svelte';
 	import Panel from '$lib/components/player/Panel.svelte';
+	import SEO from '$lib/components/shell/SEO.svelte';
 	import { openBoardStream } from '$lib/api/sse';
 	import { applySnapshot, applyDelta, toBoardRows } from '$lib/stores/board.svelte';
 	import type { BoardEntry } from '$lib/stores/board.svelte';
@@ -83,6 +84,8 @@
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
+
+<SEO title="Diamond Departures · Live Board" description="Live baseball split-flap leaderboard powered by MLB Statcast data." path="/" />
 
 <section class="board-screen">
 	<div class="top-bar">
