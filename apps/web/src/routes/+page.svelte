@@ -1,70 +1,104 @@
 <script lang="ts">
-	import { onMount, untrack } from "svelte";
-	import { navigating, page } from "$app/stores";
-	import Header from "$lib/components/board/Header.svelte";
-	import ViewTabs from "$lib/components/board/ViewTabs.svelte";
-	import Board from "$lib/components/board/Board.svelte";
-	import { openBoardStream } from "$lib/api/sse";
-	import { toBoardRows } from "$lib/stores/board.svelte";
+	import { onMount } from 'svelte';
+	import { navigating, page } from '$app/stores';
+	import Header from '$lib/components/board/Header.svelte';
+	import ViewTabs from '$lib/components/board/ViewTabs.svelte';
+	import StatPicker from '$lib/components/board/StatPicker.svelte';
+	import Board from '$lib/components/board/Board.svelte';
+	import Panel from '$lib/components/player/Panel.svelte';
+	import { openBoardStream } from '$lib/api/sse';
+	import { applySnapshot, applyDelta, toBoardRows } from '$lib/stores/board.svelte';
+	import type { BoardEntry } from '$lib/stores/board.svelte';
 
-	let { data } = $props();
+	let { data }: {
+		data: {
+			boardView: string;
+			boardSort: string;
+			entries: BoardEntry[];
+			selectedPosition: string;
+		}
+	} = $props();
 
-	let liveEntries = $state<any[]>([]);
-	
-	// React to prop changes (tab navigation)
-	$effect(() => {
-		const { entries } = data;
-		untrack(() => {
-			liveEntries = [...entries];
-		});
-	});
+	let liveEntries = $state<BoardEntry[]>([...data.entries]);
+	let seasonMode = $state('off-season');
+	let selectedPlayerId = $state<number | null>(null);
+	let streamView = $state('');
+	let streamSort = $state('');
 
-	const rows = $derived(toBoardRows(liveEntries.length > 0 ? liveEntries : data.entries));
-	const view = $derived($page.url.searchParams.get("view") ?? "hitters");
+	const view = $derived($page.url.searchParams.get('view') ?? 'hitters');
 	const isLoading = $derived($navigating !== null);
 
-	let seasonMode = $state("off-season");
+	const rows = $derived(toBoardRows(liveEntries));
+
+	const filteredRows = $derived((() => {
+		const { selectedPosition } = data;
+		if (view !== 'positions' || !selectedPosition || selectedPosition === 'all') return rows;
+		return rows.filter((row) => row.position === selectedPosition);
+	})());
+
+	// Seed live entries when load data changes (tab/sort switches)
+	$effect(() => {
+		liveEntries = [...data.entries];
+	});
+
 	onMount(() => {
-		fetch("/api/season-state").then(r => r.json()).then(p => seasonMode = p.mode ?? "off-season");
+		fetch('/api/season-state').then((r) => r.json()).then((p) => { seasonMode = p.mode ?? 'off-season'; });
 		const interval = setInterval(() => {
-			fetch("/api/season-state").then(r => r.json()).then(p => seasonMode = p.mode ?? "off-season");
+			fetch('/api/season-state').then((r) => r.json()).then((p) => { seasonMode = p.mode ?? 'off-season'; });
 		}, 30000);
 		return () => clearInterval(interval);
 	});
 
+	// SSE stream — only open when not off-season, guard against churn on same view/sort
 	$effect(() => {
-		if (seasonMode === "off-season") return;
-		const cleanup = openBoardStream(data.boardView, data.boardSort, {
-			onSnapshot: (p) => { liveEntries = [...p.entries]; },
-			onDelta: (p) => {
-				const next = [...liveEntries];
-				for (const change of p.changes) {
-					const entry = next.find(item => item.player.id === change.player_id);
-					if (entry) {
-						if (change.new_rank) entry.rank = change.new_rank;
-						for (const s of change.changed_stats) {
-							if (s.name === "stat_value") entry.stat_value = Number(s.new);
-						}
-					}
-				}
-				next.sort((a, b) => a.rank - b.rank);
-				liveEntries = next;
-			}
-		}, { endpoint: "/api/board/sse", idleMode: seasonMode !== "live" });
-		return cleanup;
+		if (seasonMode === 'off-season') return;
+		if (streamView === data.boardView && streamSort === data.boardSort) return;
+		streamView = data.boardView;
+		streamSort = data.boardSort;
+
+		const idleMode = seasonMode !== 'off-season' && seasonMode !== 'live';
+
+		const stop = openBoardStream(
+			data.boardView,
+			data.boardSort,
+			{
+				onSnapshot: (p) => { liveEntries = applySnapshot(p); },
+				onDelta: (p) => { liveEntries = applyDelta(liveEntries, p); }
+			},
+			{ endpoint: '/api/board/sse', idleMode }
+		);
+
+		return () => { stop(); };
 	});
+
+	function closePanel() {
+		selectedPlayerId = null;
+	}
+
+	function handleKeydown(event: KeyboardEvent) {
+		if (event.key === 'Escape') {
+			selectedPlayerId = null;
+		}
+	}
 </script>
+
+<svelte:window onkeydown={handleKeydown} />
 
 <section class="board-screen">
 	<div class="top-bar">
 		<Header />
-		<div class="controls"><ViewTabs /></div>
+		<div class="controls">
+			<ViewTabs />
+			<StatPicker {view} />
+		</div>
 	</div>
+
 	<div class="board-layout">
 		{#if isLoading}
 			<div class="board-skeleton">Loading...</div>
 		{:else}
-			<Board {rows} {view} />
+			<Board rows={filteredRows} {view} onselect={(id) => { selectedPlayerId = id; }} />
+			<Panel selectedPlayerId={selectedPlayerId} onclose={closePanel} />
 		{/if}
 	</div>
 </section>
@@ -72,5 +106,10 @@
 <style>
 	.board-screen { display: grid; gap: 0.75rem; padding-top: 0.5rem; }
 	.top-bar { display: grid; gap: 0.5rem; background: color-mix(in oklab, var(--chrome-bg) 40%, transparent); padding: 0.5rem 0.75rem; border-radius: 0.6rem; border: 1px solid color-mix(in oklab, var(--chrome-text) 10%, transparent); }
-	.board-layout { display: grid; grid-template-columns: 1fr; align-items: start; }
+	.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; }
+	.board-layout { display: grid; gap: 1rem; grid-template-columns: minmax(0, 1fr) minmax(240px, 320px); align-items: start; }
+
+	@media (max-width: 920px) {
+		.board-layout { grid-template-columns: 1fr; }
+	}
 </style>
