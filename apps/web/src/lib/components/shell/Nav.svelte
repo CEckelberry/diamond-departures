@@ -2,6 +2,7 @@
 	<div class="inner">
 		<a class="brand" href="/">Diamond Departures</a>
 		<div class="links">
+			<a href="/case-study">Case Study</a>
 			<a href="https://github.com" rel="noreferrer" target="_blank">GitHub</a>
 			<a href="https://cole.codes" rel="noreferrer" target="_blank">Back to Portfolio</a>
 		</div>
