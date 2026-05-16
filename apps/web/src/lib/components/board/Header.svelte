@@ -53,8 +53,9 @@
 					nextGameAt: typeof next.next_game_at === 'string' ? next.next_game_at : undefined
 				};
 			}
-			await fetch('/api/freshness');
 			loadError = '';
+			// Pre-warm freshness cache for debug panel; errors here are non-critical
+			fetch('/api/freshness').catch(() => {});
 		} catch (error) {
 			loadError = error instanceof Error ? error.message : 'status unavailable';
 		}
@@ -101,7 +102,7 @@
 	</div>
 
 	{#if showFreshnessDebug}
-		<FreshnessPanel />
+		<FreshnessPanel open={true} onclose={toggleFreshnessDebug} />
 	{/if}
 
 	{#if loadError}

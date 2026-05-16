@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { flip } from 'svelte/animate';
 	import { cubicOut } from 'svelte/easing';
 	import { playRowShift } from '$lib/audio/flap';
@@ -32,11 +33,14 @@
 	);
 
 	let reducedMotion = $state(false);
-	if (typeof window !== 'undefined') {
+
+	onMount(() => {
 		const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
 		reducedMotion = mq.matches;
-		mq.addEventListener('change', (e) => { reducedMotion = e.matches; });
-	}
+		const handler = (e: MediaQueryListEvent) => { reducedMotion = e.matches; };
+		mq.addEventListener('change', handler);
+		return () => mq.removeEventListener('change', handler);
+	});
 
 	let previousOrder = '';
 	$effect(() => {
@@ -63,11 +67,11 @@
 		{#each placeholderRows as row, index (row.playerId)}
 			<div
 				class="row-shell"
-				class:row-enter={row.justQualified}
 				animate:flip={{ delay: index * 30, duration: reducedMotion ? 0 : 300, easing: cubicOut }}
-				style="transform: translateZ(0); contain: layout paint;"
 			>
-				<Row {row} rowIndex={index} onselect={onselect} />
+				<div class:row-enter={row.justQualified}>
+					<Row {row} rowIndex={index} onselect={onselect} />
+				</div>
 			</div>
 		{/each}
 	</div>
@@ -113,6 +117,11 @@
 		gap: 0.25rem;
 		max-height: 80vh;
 		overflow: auto;
+	}
+
+	.row-shell {
+		transform: translateZ(0);
+		contain: layout paint;
 	}
 
 	.row-enter {
