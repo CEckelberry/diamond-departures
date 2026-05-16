@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { flip } from 'svelte/animate';
 	import { cubicOut } from 'svelte/easing';
-	import { page } from '$app/stores';
 	import { playRowShift } from '$lib/audio/flap';
 	import Row from './Row.svelte';
 	import type { BoardRow } from './types';
