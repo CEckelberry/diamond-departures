@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createSoundPrefs } from '../src/lib/stores/sound.mjs';
-import { createFlapSoundManager } from '../src/lib/audio/flap.mjs';
+import { createSoundPrefs } from '../src/lib/stores/sound.node.mjs';
+import { createFlapSoundManager } from '../src/lib/audio/flap.node.mjs';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
