@@ -1,44 +1,111 @@
 <script lang="ts">
-	import Word from "$lib/components/flap/Word.svelte";
-	import { page } from "$app/stores";
+	import Word from '$lib/components/flap/Word.svelte';
+	import type { BoardRow } from './types';
 
-	let { row, boardStyle = "sabermetric", rowIndex = 0 } = $props();
+	let {
+		row,
+		rowIndex = 0,
+		onselect
+	}: {
+		row: BoardRow;
+		rowIndex?: number;
+		onselect?: (playerId: number) => void;
+	} = $props();
 
-	const isPitcher = $derived(row.position === "SP" || row.position === "RP");
-	const isDefense = $derived($page.url.searchParams.get("view") === "defense");
-	const activeSort = $derived($page.url.searchParams.get("sort") ?? (isPitcher ? (boardStyle === "sabermetric" ? "FIP" : "W") : (boardStyle === "sabermetric" ? "wRC+" : "AVG")));
+	const rowAriaLabel = $derived(
+		`rank ${row.rank.trim()}, ${row.player}, ${row.team}, ${row.position}, stat ${row.stat}`
+	);
 
-	const extraStatKeys = $derived((() => {
-		if (isDefense) return boardStyle === "sabermetric" ? ["OAA", "UZR", "Def", "WAR", "DRS"] : ["Fielding %", "E", "PO", "A", "DP"];
-		if (isPitcher) return boardStyle === "sabermetric" ? ["K/9", "BB/9", "FIP", "xFIP", "WAR"] : ["W", "L", "K", "ERA", "WHIP"];
-		return boardStyle === "sabermetric" ? ["wRC+", "OPS+", "WAR", "DRS", "xwOBA"] : ["AVG", "HR", "RBI", "SB", "SLG"];
-	})());
+	function handleClick() {
+		onselect?.(row.playerId);
+	}
 
-	function formatStat(key: string, val: any): string {
-		if (val === undefined || val === null) return "---";
-		const n = Number(val);
-		if (["wRC+", "OPS+", "HR", "RBI", "SB", "W", "L", "K", "DRS", "H", "OAA", "E", "PO", "A", "DP", "Def", "UZR"].includes(key)) return String(Math.round(n));
-		if (["AVG", "SLG", "OBP", "xwOBA", "Fielding %"].includes(key)) return n.toFixed(3).replace(/^0/, "");
-		if (key === "WAR") return n.toFixed(1);
-		if (["ERA", "WHIP", "FIP", "xFIP", "K/9", "BB/9"].includes(key)) return n.toFixed(2);
-		if (key === "OPS") { const f = n.toFixed(3); return f.startsWith("0") ? f.replace(/^0/, "") : f; }
-		return String(val);
+	function handleKeydown(event: KeyboardEvent) {
+		if (event.key === 'Enter' || event.key === ' ') {
+			event.preventDefault();
+			onselect?.(row.playerId);
+		}
 	}
 </script>
 
-<div class="board-row">
-	<div class="cell"><Word value={row.rank} width={3} cellWidth={16} cellHeight={26} rowIndex={rowIndex} baseColIndex={0} /></div>
-	<div class="cell player"><Word value={row.player} width={18} cellWidth={16} cellHeight={26} rowIndex={rowIndex} baseColIndex={3} /></div>
-	<div class="cell"><Word value={row.team} width={3} cellWidth={16} cellHeight={26} rowIndex={rowIndex} baseColIndex={21} /></div>
-	<div class="cell"><Word value={row.position} width={2} cellWidth={16} cellHeight={26} rowIndex={rowIndex} baseColIndex={24} /></div>
-	{#each extraStatKeys as key, i}
-		<div class="cell" class:highlight={key === activeSort}><Word value={formatStat(key, row.stats[key])} width={key === "Fielding %" ? 6 : 4} cellWidth={16} cellHeight={26} rowIndex={rowIndex} baseColIndex={26 + i*5} /></div>
-	{/each}
+<div
+	class="board-row"
+	class:just-qualified={row.justQualified}
+	role="button"
+	tabindex="0"
+	aria-label={rowAriaLabel}
+	onclick={handleClick}
+	onkeydown={handleKeydown}
+>
+	<div class="cell"><Word value={row.rank} width={3} cellWidth={16} cellHeight={26} {rowIndex} baseColIndex={0} /></div>
+	<div class="cell player">
+		<Word value={row.player} width={18} cellWidth={16} cellHeight={26} {rowIndex} baseColIndex={3} />
+		{#if row.justQualified}
+			<span class="just-qualified-badge" style="--badge-fade-duration: 86400s">(just qualified)</span>
+		{/if}
+	</div>
+	<div class="cell"><Word value={row.team} width={3} cellWidth={16} cellHeight={26} {rowIndex} baseColIndex={21} /></div>
+	<div class="cell"><Word value={row.position} width={2} cellWidth={16} cellHeight={26} {rowIndex} baseColIndex={24} /></div>
+	<div class="cell stat"><Word value={row.stat} width={6} cellWidth={16} cellHeight={26} {rowIndex} baseColIndex={26} /></div>
 </div>
 
 <style>
-	.board-row { display: grid; grid-template-columns: 80px 1fr 100px 80px repeat(5, 120px); height: 32px; align-items: center; gap: 0.4rem; padding: 0.1rem 0.2rem; }
-	.cell { display: flex; align-items: center; overflow: hidden; }
-	.player { padding-left: 1.2rem; }
-	.highlight :global(.cell) { --cell-text: #ffd700; }
+	.board-row {
+		display: grid;
+		grid-template-columns: 3.5rem 20rem 6rem 6rem 8rem;
+		height: 36px;
+		align-items: center;
+		gap: 0.4rem;
+		padding: 0.1rem 0.2rem;
+		min-height: 44px;
+		cursor: pointer;
+		border-radius: 0.25rem;
+		transition: background 120ms ease;
+	}
+
+	.board-row:hover,
+	.board-row:focus-visible {
+		background: color-mix(in oklab, var(--cell-bg) 10%, transparent);
+		outline: 1px solid color-mix(in oklab, var(--cell-text) 30%, transparent);
+	}
+
+	.cell {
+		display: flex;
+		align-items: center;
+		overflow: hidden;
+		position: relative;
+	}
+
+	.player {
+		padding-left: 0.5rem;
+		gap: 0.4rem;
+	}
+
+	.just-qualified-badge {
+		font-family: 'JetBrains Mono', monospace;
+		font-size: 0.55rem;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		color: var(--cell-text);
+		opacity: 1;
+		white-space: nowrap;
+		animation: badge-fade var(--badge-fade-duration, 86400s) linear 0s 1 forwards;
+	}
+
+	@keyframes badge-fade {
+		0% { opacity: 1; }
+		90% { opacity: 1; }
+		100% { opacity: 0; }
+	}
+
+	@media (max-width: 920px) {
+		.board-row {
+			grid-template-columns: 1fr;
+			height: auto;
+		}
+
+		.cell:not(.player):not(.stat) {
+			display: none;
+		}
+	}
 </style>
