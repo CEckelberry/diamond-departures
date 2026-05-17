@@ -75,3 +75,43 @@ body {
 	height: 1px;
 	background: var(--cell-edge);
 }
+
+/* ── E-ink Display Modes ─────────────────────────────────────────── */
+
+body.eink-aesthetic,
+body.eink-faithful {
+  --board-bg: #f5f0e8;
+  --cell-bg: #f5f0e8;
+  --cell-edge: rgba(0, 0, 0, 0.6);
+  --cell-text: #0a0a0a;
+  --cell-text-dim: #3a3a3a;
+  --rank-text: rgba(0, 0, 0, 0.5);
+  --mlb-blue: #0a0a0a;
+  --mlb-red: #0a0a0a;
+  --chrome-bg: #ede9e0;
+  --chrome-text: #0a0a0a;
+  --accent-primary: #0a0a0a;
+}
+
+/* Override yellow sort highlight to black in e-ink modes */
+body.eink-aesthetic .stat-head,
+body.eink-faithful .stat-head {
+  color: #0a0a0a;
+}
+
+body.eink-aesthetic .stat-active,
+body.eink-faithful .stat-active {
+  color: #0a0a0a !important;
+}
+
+/* Remove radial gradient from shell background */
+body.eink-aesthetic .shell-main,
+body.eink-faithful .shell-main {
+  background: none;
+}
+
+/* Faithful mode: kill all animation and transition */
+body.eink-faithful * {
+  animation-duration: 0ms !important;
+  transition-duration: 0ms !important;
+}
