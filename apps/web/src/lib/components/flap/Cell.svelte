@@ -2,88 +2,87 @@
 	import { onMount, untrack } from "svelte";
 	import { normalizeGlyph, GLYPHS } from "./animation.mjs";
 	import { noteFlapFlip } from "$lib/audio/flap";
+	import { einkStore } from "$lib/stores/eink";
 
 	let { value, width = 28, height = 36, onFlip = () => {}, staggerIndex = 0 } = $props();
 
 	const targetGlyph = $derived(normalizeGlyph(value));
 	let currentGlyph = $state(" ");
 	let nextGlyph = $state(" ");
-	
 	let isFlipping = $state(false);
-	let queue: string[] = []; 
-	let disposed = false;
-	
+
 	const timingSkew = 0.85 + (Math.random() * 0.3);
-	const flipDuration = 80 * timingSkew; 
+	const flipDuration = $derived(
+		($einkStore === 'aesthetic' ? 350 :
+		 $einkStore === 'faithful' ? 1 : 42) * timingSkew
+	);
 	const halfHeight = Math.floor(height / 2);
 
-	onMount(() => {
-		if (typeof window === "undefined") return;
-		return () => { disposed = true; };
-	});
+	// Single queue + timer; no CSS animationend dependency (avoids animation-restart batching bug).
+	let queue: string[] = [];
+	let disposed = false;
+	let flipTimer: ReturnType<typeof setTimeout> | null = null;
+	let introTimer: ReturnType<typeof setTimeout> | null = null;
 
-	// React to value changes
-	$effect(() => {
-		const target = targetGlyph;
-		
-		untrack(() => {
-			if (currentGlyph === target && queue.length === 0) return;
-			
-			// Always stagger updates to prevent main thread lockups when 600+ cells change at once (e.g. tab switches)
-			const delay = staggerIndex * 2; // 2ms stagger = ~1.2s to start the last cell
-			
-			setTimeout(() => {
-				if (disposed) return;
-				
-				let startIndex = GLYPHS.indexOf(currentGlyph);
-				let targetIndex = GLYPHS.indexOf(target);
-				if (startIndex === -1) startIndex = 0;
-				if (targetIndex === -1) targetIndex = 0;
-				
-				if (queue.length > 0) {
-					startIndex = GLYPHS.indexOf(queue[queue.length - 1]);
-				}
-				
-				let dist = (targetIndex - startIndex + GLYPHS.length) % GLYPHS.length;
-				
-				if (dist > 2) {
-					// Fast mechanical blur: jump straight to target with only 1 intermediate character
-					const offset = ((staggerIndex * 7) % 17) + 1;
-					const intermediateIdx = (startIndex + offset) % GLYPHS.length;
-					queue.push(GLYPHS[intermediateIdx]);
-					queue.push(target);
-				} else {
-					let i = (startIndex + 1) % GLYPHS.length;
-					while (true) {
-						queue.push(GLYPHS[i]);
-						if (i === targetIndex) break;
-						i = (i + 1) % GLYPHS.length;
-					}
-				}
-				processQueue();
-			}, delay);
-		});
-	});
-
-	function processQueue() {
-		if (isFlipping || disposed || queue.length === 0) return;
-		
+	function scheduleNextFlip() {
+		if (disposed || queue.length === 0) { isFlipping = false; return; }
 		nextGlyph = queue.shift()!;
 		isFlipping = true;
 		onFlip();
 		noteFlapFlip();
+		flipTimer = setTimeout(() => {
+			currentGlyph = nextGlyph;
+			// setTimeout(0) ensures Svelte flushes the isFlipping=false DOM update (microtask)
+			// before we re-enable the animation in the next macrotask.
+			setTimeout(scheduleNextFlip, 0);
+		}, flipDuration);
 	}
 
-	function onAnimationEnd(event: AnimationEvent) {
-		if (event.animationName !== 'flip') return;
+	onMount(() => {
+		if (targetGlyph === " ") return () => { disposed = true; };
 
-		currentGlyph = nextGlyph;
-		isFlipping = false;
-		
-		if (queue.length > 0) {
-			setTimeout(processQueue, 2);
-		}
-	}
+		introTimer = setTimeout(() => {
+			if (disposed) return;
+			const offset = (staggerIndex % 4) + 2; // 2–5 flips per cell (was 5–24)
+			const startIdx = (GLYPHS.indexOf(targetGlyph) - offset + GLYPHS.length) % GLYPHS.length;
+			currentGlyph = GLYPHS[startIdx];
+
+			let i = (startIdx + 1) % GLYPHS.length;
+			const targetIdx = GLYPHS.indexOf(targetGlyph);
+			while (true) {
+				queue.push(GLYPHS[i]);
+				if (i === targetIdx) break;
+				i = (i + 1) % GLYPHS.length;
+			}
+			scheduleNextFlip();
+		}, staggerIndex * 2); // 2ms stagger (was 6ms)
+
+		return () => {
+			disposed = true;
+			if (flipTimer) clearTimeout(flipTimer);
+			if (introTimer) clearTimeout(introTimer);
+		};
+	});
+
+	// Handle live value changes after initial mount.
+	let mounted = false;
+	$effect(() => {
+		const target = targetGlyph;
+		if (!mounted) { mounted = true; return; }
+		untrack(() => {
+			const tail = queue.length > 0 ? queue[queue.length - 1] : currentGlyph;
+			const startIndex = Math.max(0, GLYPHS.indexOf(tail));
+			const targetIndex = Math.max(0, GLYPHS.indexOf(target));
+			if (startIndex === targetIndex) return;
+			let i = (startIndex + 1) % GLYPHS.length;
+			while (true) {
+				queue.push(GLYPHS[i]);
+				if (i === targetIndex) break;
+				i = (i + 1) % GLYPHS.length;
+			}
+			if (!isFlipping) scheduleNextFlip();
+		});
+	});
 </script>
 
 <div
@@ -92,21 +91,26 @@
 	style="--cell-width:{width}px;--cell-height:{height}px;--half-height:{halfHeight}px;--flip-duration:{flipDuration}ms;"
 	aria-label={`split-flap-cell-${currentGlyph}`}
 >
-	<!-- Static Backgrounds -->
+	<!-- Background faces (Static) -->
 	<div class="face top-bg">
 		<span class="glyph">{nextGlyph}</span>
+		<div class="shadow-top"></div>
 	</div>
 	<div class="face bottom-bg">
 		<span class="glyph">{currentGlyph}</span>
+		<div class="shadow-bottom"></div>
 	</div>
 	
-	<!-- Animated Flap -->
-	<div class="flap" onanimationend={onAnimationEnd}>
+	<!-- Animated flap -->
+	<!-- The flap is always in the DOM but only animates when .flipping is applied -->
+	<div class="flap">
 		<div class="face flap-front">
 			<span class="glyph">{currentGlyph}</span>
+			<div class="shadow-flap-front"></div>
 		</div>
 		<div class="face flap-back">
 			<span class="glyph">{nextGlyph}</span>
+			<div class="shadow-flap-back"></div>
 		</div>
 	</div>
 	
@@ -126,6 +130,7 @@
 		font-weight: 700;
 		color: var(--cell-text);
 		perspective: 400px;
+		/* Force hardware acceleration */
 		transform: translateZ(0);
 	}
 
@@ -145,9 +150,10 @@
 	.glyph {
 		position: absolute;
 		left: 50%;
-		/* Fixed centering: transform handles horizontal AND the 1px vertical mechanical nudge */
-		transform: translate(-50%, 1px);
+		transform: translateX(-50%);
 		height: var(--cell-height);
+		/* Nudge text down slightly so its optical baseline centers on the mechanical seam */
+		top: 1px;
 		font-size: calc(var(--cell-height) * 0.72);
 		line-height: 1;
 		display: flex;
@@ -170,7 +176,6 @@
 	.bottom-bg .glyph { bottom: 0; top: auto; }
 
 	.flap {
-		display: none;
 		position: absolute;
 		top: 0;
 		left: 0;
@@ -179,11 +184,13 @@
 		transform-origin: bottom center;
 		transform-style: preserve-3d;
 		z-index: 10;
+		/* Reset state when not flipping */
+		transform: rotateX(0deg);
 	}
 
 	.flipping .flap {
-		display: block;
-		animation: flip var(--flip-duration) cubic-bezier(0.4, 0.0, 0.2, 1) forwards;
+		/* Snappy mechanical easing for continuous spins */
+		animation: flip var(--flip-duration) linear forwards;
 	}
 
 	.flap-front, .flap-back {
@@ -218,25 +225,52 @@
 		z-index: 20;
 	}
 
-	.flipping .bottom-bg { animation: darken var(--flip-duration) ease-in forwards; }
-	.flipping .top-bg { animation: lighten var(--flip-duration) ease-in forwards; }
-	.flipping .flap-front { animation: darken var(--flip-duration) ease-in forwards; }
-	.flipping .flap-back { animation: lighten var(--flip-duration) ease-in forwards; }
+	/* LIGHTING EFFECTS */
+	.shadow-top, .shadow-bottom, .shadow-flap-front, .shadow-flap-back {
+		position: absolute;
+		inset: 0;
+		pointer-events: none;
+		opacity: 0;
+	}
+
+	.flipping .bottom-bg .shadow-bottom {
+		background: linear-gradient(to bottom, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0) 100%);
+		animation: shadow-in var(--flip-duration) linear forwards;
+	}
+
+	.flipping .top-bg .shadow-top {
+		background: linear-gradient(to bottom, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0) 100%);
+		animation: shadow-out var(--flip-duration) linear forwards;
+	}
+
+	.flipping .flap-front .shadow-flap-front {
+		background: linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,0.8) 100%);
+		animation: shadow-in var(--flip-duration) linear forwards;
+	}
+
+	.flipping .flap-back .shadow-flap-back {
+		background: linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,0.8) 100%);
+		animation: shadow-out var(--flip-duration) linear forwards;
+	}
 
 	@keyframes flip {
 		0% { transform: rotateX(0deg); }
 		100% { transform: rotateX(-180deg); }
 	}
-	@keyframes darken {
-		0% { filter: brightness(1); }
-		100% { filter: brightness(0.4); }
+
+	@keyframes shadow-in {
+		0% { opacity: 0; }
+		100% { opacity: 1; }
 	}
-	@keyframes lighten {
-		0% { filter: brightness(0.4); }
-		100% { filter: brightness(1); }
+
+	@keyframes shadow-out {
+		0% { opacity: 1; }
+		100% { opacity: 0; }
 	}
 
 	@media (prefers-reduced-motion: reduce) {
-		.flipping .flap, .flipping .face { animation: none !important; }
+		.flipping .flap, .flipping .shadow-top, .flipping .shadow-bottom, .flipping .shadow-flap-front, .flipping .shadow-flap-back { 
+			animation: none !important; 
+		}
 	}
 </style>
