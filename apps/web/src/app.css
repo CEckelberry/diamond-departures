@@ -91,12 +91,13 @@ body.eink-faithful {
   --chrome-bg: #ede9e0;
   --chrome-text: #0a0a0a;
   --accent-primary: #0a0a0a;
+  --row-up: #0a0a0a;
 }
 
 /* Override yellow sort highlight to black in e-ink modes */
 body.eink-aesthetic .stat-head,
 body.eink-faithful .stat-head {
-  color: #0a0a0a;
+  color: #0a0a0a !important;
 }
 
 body.eink-aesthetic .stat-active,
