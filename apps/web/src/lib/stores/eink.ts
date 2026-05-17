@@ -41,7 +41,11 @@ function createEinkStore() {
 				current === 'off' ? 'aesthetic' :
 				current === 'aesthetic' ? 'faithful' : 'off';
 			if (browser) {
-				localStorage.setItem(STORAGE_KEY, next);
+				if (next === 'off') {
+					localStorage.removeItem(STORAGE_KEY);
+				} else {
+					localStorage.setItem(STORAGE_KEY, next);
+				}
 				applyClass(next);
 			}
 			return next;
