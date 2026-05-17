@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { soundEnabled, setSoundEnabled } from '$lib/stores/sound';
 	import FreshnessPanel from '$lib/components/board/FreshnessPanel.svelte';
+	import EinkToggle from '$lib/components/board/EinkToggle.svelte';
 
 	type SeasonMode = 'live' | 'between' | 'off-game' | 'off-season';
 	type SeasonState = {
@@ -9,6 +10,7 @@
 		gamesInProgress: number;
 		nextGameAt?: string;
 		updatedAt?: string;
+		currentSeason?: number;
 	};
 
 	const MODE_CLASS = {
@@ -18,7 +20,7 @@
 		'off-season': 'mode-off-season'
 	} as const;
 
-	let seasonState = $state<SeasonState>({ mode: 'off-season', gamesInProgress: 0 });
+	let seasonState = $state<SeasonState>({ mode: 'off-season', gamesInProgress: 0, currentSeason: 2026 });
 	let loadError = $state('');
 	let showFreshnessDebug = $state(false);
 
@@ -46,11 +48,13 @@
 					mode?: SeasonMode;
 					gamesInProgress?: number;
 					next_game_at?: string;
+					current_season?: number;
 				};
 				seasonState = {
 					mode: next.mode ?? 'off-season',
 					gamesInProgress: Number(next.gamesInProgress ?? 0),
-					nextGameAt: typeof next.next_game_at === 'string' ? next.next_game_at : undefined
+					nextGameAt: typeof next.next_game_at === 'string' ? next.next_game_at : undefined,
+					currentSeason: typeof next.current_season === 'number' ? next.current_season : 2026,
 				};
 			}
 			loadError = '';
@@ -84,7 +88,7 @@
 
 		{#if seasonState.mode === 'off-season'}
 			<span class="status-pill off-season-banner">
-				2025 regular season · final — next season starts soon
+				{seasonState.currentSeason ?? 2026} regular season · final — next season starts soon
 			</span>
 		{:else if seasonState.mode === 'between' || seasonState.mode === 'off-game'}
 			<span class="status-pill idle-banner">{idleBannerCopy}</span>
@@ -95,6 +99,8 @@
 		<button class="icon-btn" type="button" aria-label="Toggle sound" onclick={toggleSound}>
 			{$soundEnabled ? '🔊' : '🔇'}
 		</button>
+
+		<EinkToggle />
 
 		<button class="icon-btn freshness-btn" type="button" aria-label="Show freshness debug panel" onclick={toggleFreshnessDebug}>
 			⏱
