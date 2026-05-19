@@ -6,22 +6,30 @@
 	import Row from './Row.svelte';
 	import type { BoardRow } from './types';
 
-	const HITTER_STAT_COLS  = ['OPS', 'HR', 'RBI', 'AVG', 'SB', 'OBP', 'SLG'];
-	const PITCHER_STAT_COLS = ['ERA', 'FIP', 'K/9', 'WHIP', 'K', 'W', 'BB/9'];
+	const HITTER_TRAD_COLS  = ['AVG', 'HR', 'RBI', 'OBP', 'SLG', 'SB', 'OPS'];
+	const HITTER_SABER_COLS = ['OPS', 'SLG', 'OBP', 'AVG', 'HR', 'SB', 'RBI'];
+	const PITCHER_TRAD_COLS  = ['ERA', 'W', 'L', 'WHIP', 'K', 'SV', 'BB/9'];
+	const PITCHER_SABER_COLS = ['FIP', 'ERA', 'K/9', 'BB/9', 'K', 'W', 'WHIP'];
 
 	let {
 		rows = [],
 		view = 'hitters',
+		style = 'sabermetric',
 		sort = '',
 		onselect
 	}: {
 		rows?: BoardRow[];
 		view?: string;
+		style?: string;
 		sort?: string;
 		onselect?: (playerId: number) => void;
 	} = $props();
 
-	const statCols = $derived(view.startsWith('pitcher') ? PITCHER_STAT_COLS : HITTER_STAT_COLS);
+	const statCols = $derived(
+		view.startsWith('pitcher')
+			? (style === 'traditional' ? PITCHER_TRAD_COLS : PITCHER_SABER_COLS)
+			: (style === 'traditional' ? HITTER_TRAD_COLS : HITTER_SABER_COLS)
+	);
 
 	const PLACEHOLDER: BoardRow = {
 		playerId: 0,

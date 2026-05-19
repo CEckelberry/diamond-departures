@@ -27,6 +27,7 @@
 	let streamSort = $state('');
 
 	const view = $derived($page.url.searchParams.get('view') ?? 'hitters');
+	const style = $derived($page.url.searchParams.get('style') ?? 'sabermetric');
 	const isLoading = $derived($navigating !== null);
 
 	const rows = $derived(toBoardRows(liveEntries));
@@ -100,8 +101,10 @@
 		{#if isLoading}
 			<div class="board-skeleton">Loading...</div>
 		{:else}
-			<Board rows={filteredRows} {view} onselect={(id) => { selectedPlayerId = id; }} />
-			<Panel selectedPlayerId={selectedPlayerId} onclose={closePanel} />
+			<Board rows={filteredRows} {view} {style} sort={data.boardSort} onselect={(id) => { selectedPlayerId = id; }} />
+			{#if selectedPlayerId !== null}
+				<Panel selectedPlayerId={selectedPlayerId} onclose={closePanel} />
+			{/if}
 		{/if}
 	</div>
 </section>
@@ -110,9 +113,5 @@
 	.board-screen { display: grid; gap: 0.75rem; padding-top: 0.5rem; }
 	.top-bar { display: grid; gap: 0.5rem; background: color-mix(in oklab, var(--chrome-bg) 40%, transparent); padding: 0.5rem 0.75rem; border-radius: 0.6rem; border: 1px solid color-mix(in oklab, var(--chrome-text) 10%, transparent); }
 	.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; }
-	.board-layout { display: grid; gap: 1rem; grid-template-columns: minmax(0, 1fr) minmax(240px, 320px); align-items: start; }
-
-	@media (max-width: 920px) {
-		.board-layout { grid-template-columns: 1fr; }
-	}
+	.board-layout { display: grid; gap: 1rem; grid-template-columns: minmax(0, 1fr); align-items: start; }
 </style>

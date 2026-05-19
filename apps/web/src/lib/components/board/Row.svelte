@@ -61,7 +61,7 @@
 >
 	<div class="cell"><Word value={row.rank} width={3} cellWidth={16} cellHeight={26} {rowIndex} baseColIndex={0} /></div>
 	<div class="cell player">
-		<Word value={row.player} width={18} cellWidth={16} cellHeight={26} {rowIndex} baseColIndex={3} />
+		<Word value={row.player} width={Math.min(Math.max(1, row.player.trim().length), 18)} cellWidth={16} cellHeight={26} {rowIndex} baseColIndex={3} />
 		{#if row.justQualified}
 			<span class="just-qualified-badge" style="--badge-fade-duration: 86400s">(just qualified)</span>
 		{/if}

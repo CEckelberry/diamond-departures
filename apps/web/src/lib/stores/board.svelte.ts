@@ -48,8 +48,19 @@ export function toBoardRows(entries: BoardEntry[]): BoardRow[] {
 		player: (entry.player?.name ?? 'UNKNOWN').toUpperCase(),
 		team: (entry.player?.team_abbr ?? '---').toUpperCase(),
 		position: (entry.player?.position ?? '--').toUpperCase(),
-		stat: String(entry.stat_value ?? 0),
-		stats: entry.additional_stats ?? {},
+		stat: (() => {
+			const v = entry.stat_value ?? 0;
+			if (!Number.isInteger(v) && v < 10) return v.toFixed(3);
+			return String(Math.round(v));
+		})(),
+		stats: (() => {
+			const s = { ...(entry.additional_stats ?? {}) };
+			// OBP isn't seeded directly; derive it (OPS = OBP + SLG is exact by definition)
+			if (!('OBP' in s) && 'OPS' in s && 'SLG' in s) {
+				s['OBP'] = Math.round((s['OPS'] - s['SLG']) * 1000) / 1000;
+			}
+			return s;
+		})(),
 		justQualified: Boolean(entry.newly_qualified),
 		qualifiedAt: entry.qualified_at ?? null
 	}));
