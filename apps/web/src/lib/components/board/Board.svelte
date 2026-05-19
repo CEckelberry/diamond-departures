@@ -6,8 +6,8 @@
 	import Row from './Row.svelte';
 	import type { BoardRow } from './types';
 
-	const HITTER_STAT_COLS = ['OPS', 'HR', 'RBI', 'AVG', 'SB'];
-	const PITCHER_STAT_COLS = ['ERA', 'FIP', 'K/9', 'WHIP', 'K'];
+	const HITTER_STAT_COLS  = ['OPS', 'HR', 'RBI', 'AVG', 'SB', 'OBP', 'SLG'];
+	const PITCHER_STAT_COLS = ['ERA', 'FIP', 'K/9', 'WHIP', 'K', 'W', 'BB/9'];
 
 	let {
 		rows = [],
@@ -69,7 +69,7 @@
 		<span>TEAM</span>
 		<span>POS</span>
 		{#each statCols as col}
-			<span class:stat-head={col === sort}>{col}</span>
+			<span class="stat-col-head" class:stat-head={col === sort}>{col}</span>
 		{/each}
 	</div>
 	<div class="board-body">
@@ -108,7 +108,7 @@
 
 	.board-header-row {
 		display: grid;
-		grid-template-columns: 3.5rem 1fr 5rem 4rem repeat(5, 5.5rem);
+		grid-template-columns: 3.5rem 21rem 5rem 4rem repeat(7, 5.5rem);
 		gap: 0.4rem;
 		border-bottom: 1px solid color-mix(in oklab, var(--chrome-text) 14%, transparent);
 		font-family: 'JetBrains Mono', monospace;
@@ -120,6 +120,10 @@
 	}
 
 	.rk-head { padding-left: 0.4rem; }
+
+	.stat-col-head {
+		text-align: center;
+	}
 
 	.stat-head {
 		color: #fbbf24;

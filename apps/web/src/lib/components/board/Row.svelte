@@ -16,6 +16,13 @@
 		onselect?: (playerId: number) => void;
 	} = $props();
 
+	// Integer stats only need 3 chars (max HR~73, RBI~184→3, K~383→3)
+	const INTEGER_STATS = new Set(['HR', 'RBI', 'SB', 'K', 'W', 'L', 'SV', 'G', 'GS']);
+
+	function statWordWidth(name: string): number {
+		return INTEGER_STATS.has(name) ? 3 : 5;
+	}
+
 	function formatStat(name: string, val: number | undefined): string {
 		if (val === undefined || val === null) return '     ';
 		if (['HR', 'RBI', 'SB', 'K', 'W', 'L', 'SV', 'G', 'GS'].includes(name)) return String(Math.round(val));
@@ -65,7 +72,7 @@
 		<div class="cell stat" class:stat-active={statName === sort}>
 			<Word
 				value={formatStat(statName, row.stats[statName])}
-				width={5} cellWidth={16} cellHeight={26}
+				width={statWordWidth(statName)} cellWidth={16} cellHeight={26}
 				{rowIndex}
 				baseColIndex={26 + colIdx * 5}
 			/>
@@ -76,7 +83,7 @@
 <style>
 	.board-row {
 		display: grid;
-		grid-template-columns: 3.5rem 1fr 5rem 4rem repeat(5, 5.5rem);
+		grid-template-columns: 3.5rem 21rem 5rem 4rem repeat(7, 5.5rem);
 		height: 36px;
 		align-items: center;
 		gap: 0.4rem;
@@ -98,6 +105,10 @@
 		align-items: center;
 		overflow: hidden;
 		position: relative;
+	}
+
+	.cell.stat {
+		justify-content: center;
 	}
 
 	.player {
