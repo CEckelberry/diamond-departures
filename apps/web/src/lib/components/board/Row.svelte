@@ -26,10 +26,12 @@
 	function formatStat(name: string, val: number | undefined): string {
 		if (val === undefined || val === null) return '     ';
 		if (INTEGER_STATS.has(name)) return String(Math.round(val));
-		// Baseball convention: AVG/OBP/SLG/BABIP always shown as .XXX (no leading zero)
-		if (['AVG', 'OBP', 'SLG', 'BABIP'].includes(name)) return val.toFixed(3).replace(/^0/, '');
-		// OPS/wOBA can exceed 1.0 so keep leading zero for consistent width
-		if (['OPS', 'wOBA'].includes(name)) return val.toFixed(3);
+		// Rate stats: .XXX, no leading zero (always between 0 and 1)
+		if (['AVG', 'OBP', 'SLG', 'BABIP', 'ISO', 'wOBA'].includes(name)) return val.toFixed(3).replace(/^0/, '');
+		// Percentage stats: stored as 0–1 decimal, displayed as "X.X%"
+		if (['BB%', 'K%', 'K-BB%'].includes(name)) return (val * 100).toFixed(1) + '%';
+		// OPS can exceed 1.0 → keep leading zero
+		if (name === 'OPS') return val.toFixed(3);
 		if (['ERA', 'FIP', 'xFIP', 'WHIP', 'K/9', 'BB/9'].includes(name)) return val.toFixed(2);
 		return val < 10 ? val.toFixed(3) : String(Math.round(val));
 	}

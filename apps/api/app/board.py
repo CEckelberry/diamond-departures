@@ -4,10 +4,12 @@ from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-VALID_VIEWS = {"hitters", "pitchers", "hitters_ss", "hitters_of", "pitchers_sp", "pitchers_rp"}
+VALID_VIEWS = {"hitters", "pitchers", "hitters_ss", "hitters_of", "pitchers_sp", "pitchers_rp", "defense"}
 VALID_SORTS = {
-    "wRC+", "OPS", "HR", "SB", "WAR", "AVG", "RBI", 
-    "ERA", "FIP", "K%", "WHIP", "W", "SV", "K", "K-BB%"
+    "wRC+", "OPS", "HR", "SB", "WAR", "AVG", "RBI", "SLG", "OPS+", "DRS", "xwOBA", "H",
+    "ERA", "FIP", "K%", "WHIP", "W", "SV", "K", "K-BB%", "K/9", "BB/9", "xFIP",
+    "OAA", "UZR", "Fielding %", "Def", "E",
+    "wOBA", "ISO", "BABIP", "BB%",
 }
 
 BoardReader = Callable[[str, str], list[dict[str, Any]]]

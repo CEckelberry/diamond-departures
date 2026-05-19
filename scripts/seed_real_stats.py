@@ -120,7 +120,13 @@ def upsert_stat(cur: Any, player_id: int, stat_name: str, stat_value: float, sea
     if existing is not None:
         if round(float(existing["stat_value"]), 3) == rounded:
             return False
-        cur.execute("UPDATE player_stats SET valid_to = %s WHERE id = %s", (NOW, existing["id"]))
+        # Use valid_from + 1µs if the existing row was just inserted this run (valid_from >= NOW)
+        # to satisfy the check constraint valid_to > valid_from
+        cur.execute("""
+            UPDATE player_stats
+            SET valid_to = GREATEST(%s, valid_from + interval '1 microsecond')
+            WHERE id = %s
+        """, (NOW, existing["id"]))
     cur.execute("""
         INSERT INTO player_stats (player_id, stat_name, stat_value, valid_from, valid_to, source, season)
         VALUES (%s, %s, %s, %s, NULL, 'mlb_stats_api', %s)
@@ -133,11 +139,13 @@ def rebuild_leaderboard(cur: Any, season: int) -> None:
         "hitters": [
             ("HR", False), ("RBI", False), ("SB", False), ("AVG", False),
             ("SLG", False), ("OPS", False), ("wRC+", False),
+            ("wOBA", False), ("ISO", False), ("BABIP", False),
+            ("BB%", False), ("K%", True),
         ],
         "pitchers": [
             ("ERA", True), ("WHIP", True), ("K", False), ("W", False),
             ("L", True), ("SV", False), ("K/9", False), ("BB/9", True),
-            ("FIP", True),
+            ("FIP", True), ("K-BB%", False), ("K%", False), ("BB%", True),
         ],
     }
 
@@ -241,6 +249,27 @@ def seed_season(conn: Any, season: int, team_map_api: dict[int, str], team_map_d
                 if wrc_plus is not None:
                     if upsert_stat(cur, pid, "wRC+", float(wrc_plus), season):
                         saved_stats += 1
+
+                # wOBA
+                singles_v = h - d - t - hr_v
+                pa = float(stat.get("plateAppearances", 0))
+                woba_val = _compute_woba(singles_v, d, t, hr_v, bb_v, ibb, hbp, ab_v, sf_v)
+                if woba_val is not None:
+                    if upsert_stat(cur, pid, "wOBA", woba_val, season):
+                        saved_stats += 1
+
+                # ISO = (2B + 2*3B + 3*HR) / AB
+                if ab_v > 0:
+                    iso = (d + 2 * t + 3 * hr_v) / ab_v
+                    if upsert_stat(cur, pid, "ISO", iso, season):
+                        saved_stats += 1
+
+                # BB% and K% (as raw ratios)
+                if pa > 0:
+                    if upsert_stat(cur, pid, "BB%", bb_v / pa, season):
+                        saved_stats += 1
+                    if upsert_stat(cur, pid, "K%", k_v / pa, season):
+                        saved_stats += 1
             except (ValueError, TypeError):
                 pass
 
@@ -297,6 +326,23 @@ def seed_season(conn: Any, season: int, team_map_api: dict[int, str], team_map_d
                 if ip > 0:
                     fip = (13 * hr + 3 * (bb + hbp) - 2 * k) / ip + FIP_CONSTANT
                     if upsert_stat(cur, pid, "FIP", fip, season):
+                        saved_stats += 1
+            except (ValueError, TypeError):
+                pass
+
+            # Pitcher K%, BB%, K-BB% using batters faced
+            try:
+                tbf = float(stat.get("battersFaced", 0))
+                k_p = float(stat.get("strikeOuts", 0))
+                bb_p = float(stat.get("baseOnBalls", 0))
+                if tbf > 0:
+                    kpct = k_p / tbf
+                    bbpct = bb_p / tbf
+                    if upsert_stat(cur, pid, "K%", kpct, season):
+                        saved_stats += 1
+                    if upsert_stat(cur, pid, "BB%", bbpct, season):
+                        saved_stats += 1
+                    if upsert_stat(cur, pid, "K-BB%", kpct - bbpct, season):
                         saved_stats += 1
             except (ValueError, TypeError):
                 pass

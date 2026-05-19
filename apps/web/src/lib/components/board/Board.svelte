@@ -2,14 +2,16 @@
 	import { onMount } from 'svelte';
 	import { flip } from 'svelte/animate';
 	import { cubicOut } from 'svelte/easing';
+	import { goto } from '$app/navigation';
+	import { page } from '$app/stores';
 	import { playRowShift } from '$lib/audio/flap';
 	import Row from './Row.svelte';
 	import type { BoardRow } from './types';
 
 	const HITTER_TRAD_COLS  = ['AVG', 'HR', 'RBI', 'OBP', 'SLG', 'SB', 'OPS'];
-	const HITTER_SABER_COLS = ['wRC+', 'OPS', 'OBP', 'BABIP', 'SLG', 'HR', 'AVG'];
+	const HITTER_SABER_COLS = ['wOBA', 'wRC+', 'BABIP', 'ISO', 'BB%', 'K%', 'OPS'];
 	const PITCHER_TRAD_COLS  = ['ERA', 'W', 'L', 'WHIP', 'K', 'SV', 'BB/9'];
-	const PITCHER_SABER_COLS = ['FIP', 'ERA', 'K/9', 'BB/9', 'K', 'W', 'WHIP'];
+	const PITCHER_SABER_COLS = ['FIP', 'K-BB%', 'K%', 'BB%', 'ERA', 'WHIP', 'K/9'];
 
 	let {
 		rows = [],
@@ -63,6 +65,18 @@
 		if (previousOrder && order !== previousOrder) playRowShift();
 		previousOrder = order;
 	});
+
+	const SORTABLE_STATS = new Set([
+		'wRC+', 'wOBA', 'OPS', 'AVG', 'HR', 'RBI', 'SLG', 'SB', 'BABIP', 'ISO', 'BB%', 'K%',
+		'ERA', 'FIP', 'WHIP', 'W', 'L', 'SV', 'K', 'K/9', 'BB/9', 'K-BB%', 'OBP'
+	]);
+
+	function handleColClick(stat: string) {
+		if (!SORTABLE_STATS.has(stat)) return;
+		const url = new URL($page.url);
+		url.searchParams.set('sort', stat);
+		goto(url.toString());
+	}
 </script>
 
 <section
@@ -77,7 +91,15 @@
 		<span>TEAM</span>
 		<span>POS</span>
 		{#each statCols as col}
-			<span class="stat-col-head" class:stat-head={col === sort}>{col}</span>
+			<span
+				class="stat-col-head"
+				class:stat-head={col === sort}
+				class:sortable={SORTABLE_STATS.has(col)}
+				onclick={() => handleColClick(col)}
+				role={SORTABLE_STATS.has(col) ? 'button' : undefined}
+				tabindex={SORTABLE_STATS.has(col) ? 0 : undefined}
+				onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter') handleColClick(col); }}
+			>{col}</span>
 		{/each}
 	</div>
 	<div class="board-body">
@@ -131,6 +153,14 @@
 
 	.stat-col-head {
 		text-align: center;
+	}
+
+	.stat-col-head.sortable {
+		cursor: pointer;
+	}
+
+	.stat-col-head.sortable:hover {
+		color: color-mix(in oklab, var(--chrome-text) 90%, white);
 	}
 
 	.stat-head {

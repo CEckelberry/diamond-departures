@@ -18,8 +18,9 @@ export type BoardEntryPayload = {
 };
 
 const VALID_SORTS = new Set([
-	"wRC+", "OPS+", "HR", "SB", "WAR", "AVG", "RBI", "SLG", "H", "DRS", "xwOBA",
-	"ERA", "FIP", "K%", "WHIP", "W", "SV", "K", "K-BB%", "K/9", "BB/9", "xFIP"
+	"wRC+", "OPS", "OPS+", "HR", "SB", "WAR", "AVG", "RBI", "SLG", "H", "DRS", "xwOBA",
+	"ERA", "FIP", "K%", "K/9", "WHIP", "W", "SV", "K", "K-BB%", "BB/9", "xFIP", "OAA", "UZR", "Fielding %", "Def", "E",
+	"wOBA", "ISO", "BABIP", "BB%",
 ]);
 
 type ViewResolution = {
@@ -29,6 +30,8 @@ type ViewResolution = {
 
 function resolveView(params: URLSearchParams): ViewResolution {
 	const view = params.get("view") ?? "hitters";
+	if (view === "defense") return { apiView: "defense", selectedPosition: "all" };
+	if (view === "defense") return { apiView: "defense", selectedPosition: "all" };
 	if (view === "pitchers") {
 		return { apiView: "pitchers", selectedPosition: "all" };
 	}
@@ -54,10 +57,12 @@ function resolveSort(params: URLSearchParams, apiView: string): string {
 	if (VALID_SORTS.has(fromUrl)) return fromUrl;
 	
 	const style = params.get("style") ?? "sabermetric";
+	if (apiView === "defense") return style === "sabermetric" ? "OAA" : "Fielding %";
+	if (apiView === "defense") return style === "sabermetric" ? "OAA" : "Fielding %";
 	if (apiView.startsWith("pitchers")) {
 		return style === "sabermetric" ? "FIP" : "W";
 	}
-	return style === "sabermetric" ? "wRC+" : "AVG";
+	return style === "sabermetric" ? "OPS" : "AVG";
 }
 
 export const load = async ({
