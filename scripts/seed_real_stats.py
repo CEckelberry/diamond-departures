@@ -33,6 +33,34 @@ CURRENT_YEAR = NOW.year
 # FIP constant approximation (changes slightly year to year, ~3.17 is reasonable)
 FIP_CONSTANT = 3.17
 
+# 2026 wRC+ computation constants (FanGraphs-style)
+# wOBA weights from packages/stats/hitting/woba_weights_2026.json
+WOBA_WEIGHTS = {"bb": 0.69, "hbp": 0.72, "1b": 0.89, "2b": 1.27, "3b": 1.62, "hr": 2.10}
+# League-average context (MLB 2026 estimates; update annually)
+LEAGUE_WOBA = 0.310
+WOBA_SCALE = 1.21
+LEAGUE_R_PER_PA = 0.115
+
+
+def _compute_woba(singles: float, doubles: float, triples: float, hr: float,
+                  bb: float, ibb: float, hbp: float, ab: float, sf: float) -> float | None:
+    denom = ab + bb - ibb + sf + hbp
+    if denom == 0:
+        return None
+    return (WOBA_WEIGHTS["bb"] * bb + WOBA_WEIGHTS["hbp"] * hbp +
+            WOBA_WEIGHTS["1b"] * singles + WOBA_WEIGHTS["2b"] * doubles +
+            WOBA_WEIGHTS["3b"] * triples + WOBA_WEIGHTS["hr"] * hr) / denom
+
+
+def _compute_wrc_plus(singles: float, doubles: float, triples: float, hr: float,
+                      bb: float, ibb: float, hbp: float, ab: float, sf: float) -> float | None:
+    player_woba = _compute_woba(singles, doubles, triples, hr, bb, ibb, hbp, ab, sf)
+    if player_woba is None or WOBA_SCALE == 0 or LEAGUE_R_PER_PA == 0:
+        return None
+    # Park factor = 1.0 (neutral); adjust if park factors are available
+    numerator = ((player_woba - LEAGUE_WOBA) / WOBA_SCALE) + LEAGUE_R_PER_PA
+    return round(100 * (numerator / LEAGUE_R_PER_PA))
+
 
 def _get(path: str) -> dict[str, Any]:
     url = f"{MLB_API}/{path.lstrip('/')}"
@@ -104,7 +132,7 @@ def rebuild_leaderboard(cur: Any, season: int) -> None:
     VIEWS = {
         "hitters": [
             ("HR", False), ("RBI", False), ("SB", False), ("AVG", False),
-            ("SLG", False), ("OPS", False), ("WAR", False),
+            ("SLG", False), ("OPS", False), ("wRC+", False),
         ],
         "pitchers": [
             ("ERA", True), ("WHIP", True), ("K", False), ("W", False),
@@ -187,17 +215,31 @@ def seed_season(conn: Any, season: int, team_map_api: dict[int, str], team_map_d
                     except (ValueError, TypeError):
                         pass
 
-            # Compute BABIP: (H - HR) / (AB - K - HR + SF)
+            # Compute derived sabermetric stats from raw components
             try:
-                h = float(stat.get("hits", 0))
-                hr_b = float(stat.get("homeRuns", 0))
-                ab = float(stat.get("atBats", 0))
-                k_b = float(stat.get("strikeOuts", 0))
-                sf = float(stat.get("sacrificeFlies", 0))
-                denom = ab - k_b - hr_b + sf
-                if denom > 0:
-                    babip = (h - hr_b) / denom
+                h   = float(stat.get("hits", 0))
+                d   = float(stat.get("doubles", 0))
+                t   = float(stat.get("triples", 0))
+                hr_v = float(stat.get("homeRuns", 0))
+                ab_v = float(stat.get("atBats", 0))
+                bb_v = float(stat.get("baseOnBalls", 0))
+                ibb  = float(stat.get("intentionalWalks", 0))
+                hbp  = float(stat.get("hitByPitch", 0))
+                sf_v = float(stat.get("sacrificeFlies", 0))
+                k_v  = float(stat.get("strikeOuts", 0))
+                singles = h - d - t - hr_v
+
+                # BABIP: (H - HR) / (AB - K - HR + SF)
+                babip_denom = ab_v - k_v - hr_v + sf_v
+                if babip_denom > 0:
+                    babip = (h - hr_v) / babip_denom
                     if upsert_stat(cur, pid, "BABIP", babip, season):
+                        saved_stats += 1
+
+                # wRC+: FanGraphs-style, computed from raw plate-appearance components
+                wrc_plus = _compute_wrc_plus(singles, d, t, hr_v, bb_v, ibb, hbp, ab_v, sf_v)
+                if wrc_plus is not None:
+                    if upsert_stat(cur, pid, "wRC+", float(wrc_plus), season):
                         saved_stats += 1
             except (ValueError, TypeError):
                 pass
