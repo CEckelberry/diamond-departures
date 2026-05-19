@@ -68,7 +68,7 @@
 
 	const SORTABLE_STATS = new Set([
 		'wRC+', 'wOBA', 'OPS', 'AVG', 'HR', 'RBI', 'SLG', 'SB', 'BABIP', 'ISO', 'BB%', 'K%',
-		'ERA', 'FIP', 'WHIP', 'W', 'L', 'SV', 'K', 'K/9', 'BB/9', 'K-BB%', 'OBP'
+		'ERA', 'FIP', 'WHIP', 'W', 'L', 'SV', 'K', 'K/9', 'BB/9', 'K-BB%'
 	]);
 
 	function handleColClick(stat: string) {
