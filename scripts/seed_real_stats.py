@@ -187,6 +187,21 @@ def seed_season(conn: Any, season: int, team_map_api: dict[int, str], team_map_d
                     except (ValueError, TypeError):
                         pass
 
+            # Compute BABIP: (H - HR) / (AB - K - HR + SF)
+            try:
+                h = float(stat.get("hits", 0))
+                hr_b = float(stat.get("homeRuns", 0))
+                ab = float(stat.get("atBats", 0))
+                k_b = float(stat.get("strikeOuts", 0))
+                sf = float(stat.get("sacrificeFlies", 0))
+                denom = ab - k_b - hr_b + sf
+                if denom > 0:
+                    babip = (h - hr_b) / denom
+                    if upsert_stat(cur, pid, "BABIP", babip, season):
+                        saved_stats += 1
+            except (ValueError, TypeError):
+                pass
+
         for split in pitcher_splits:
             ip_raw = split["stat"].get("inningsPitched", "0")
             try:

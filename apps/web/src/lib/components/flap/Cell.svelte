@@ -14,7 +14,7 @@
 	const timingSkew = 0.88 + (Math.random() * 0.24);
 	const flipDuration = $derived(
 		($einkStore === 'aesthetic' ? 350 :
-		 $einkStore === 'faithful' ? 1 : 70) * timingSkew
+		 $einkStore === 'faithful' ? 1 : 120) * timingSkew
 	);
 	const halfHeight = Math.floor(height / 2);
 
@@ -33,7 +33,9 @@
 		flipTimer = setTimeout(() => {
 			currentGlyph = nextGlyph;
 			isFlipping = false; // must go false so Svelte removes .flipping before next flip restarts animation
-			setTimeout(scheduleNextFlip, 0);
+			// rAF fires before the next paint — the isFlipping=false DOM change lands first,
+			// then the next flip starts, so no in-between frame is ever painted.
+			requestAnimationFrame(() => { if (!disposed) scheduleNextFlip(); });
 		}, flipDuration);
 	}
 
@@ -73,11 +75,23 @@
 			const startIndex = Math.max(0, GLYPHS.indexOf(tail));
 			const targetIndex = Math.max(0, GLYPHS.indexOf(target));
 			if (startIndex === targetIndex) return;
-			let i = (startIndex + 1) % GLYPHS.length;
-			while (true) {
-				queue.push(GLYPHS[i]);
-				if (i === targetIndex) break;
-				i = (i + 1) % GLYPHS.length;
+			const n = GLYPHS.length;
+			const fwdDist = (targetIndex - startIndex + n) % n;
+			if (fwdDist <= 3) {
+				// Close: step directly (1–3 flips)
+				let i = (startIndex + 1) % n;
+				while (true) {
+					queue.push(GLYPHS[i]);
+					if (i === targetIndex) break;
+					i = (i + 1) % n;
+				}
+			} else {
+				// Far: 2 evenly-spaced intermediates + target — looks like a quick mechanical spin
+				queue.push(
+					GLYPHS[(startIndex + Math.ceil(fwdDist * 0.33)) % n],
+					GLYPHS[(startIndex + Math.ceil(fwdDist * 0.67)) % n],
+					GLYPHS[targetIndex],
+				);
 			}
 			if (!isFlipping) scheduleNextFlip();
 		});

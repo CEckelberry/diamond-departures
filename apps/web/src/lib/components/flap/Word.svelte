@@ -23,7 +23,7 @@
 				value={char} 
 				width={cellWidth} 
 				height={cellHeight} 
-				staggerIndex={rowIndex * 12 + baseColIndex + index}
+				staggerIndex={rowIndex * 4 + baseColIndex + index}
 				rowIndex={rowIndex}
 			/>
 		{/if}

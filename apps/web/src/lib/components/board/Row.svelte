@@ -16,8 +16,8 @@
 		onselect?: (playerId: number) => void;
 	} = $props();
 
-	// Integer stats only need 3 chars (max HR~73, RBI~184→3, K~383→3)
-	const INTEGER_STATS = new Set(['HR', 'RBI', 'SB', 'K', 'W', 'L', 'SV', 'G', 'GS']);
+	// Integer stats: displayed as whole numbers, fit in 3 chars
+	const INTEGER_STATS = new Set(['HR', 'RBI', 'SB', 'K', 'W', 'L', 'SV', 'G', 'GS', 'wRC+', 'OPS+']);
 
 	function statWordWidth(name: string): number {
 		return INTEGER_STATS.has(name) ? 3 : 5;
@@ -25,11 +25,11 @@
 
 	function formatStat(name: string, val: number | undefined): string {
 		if (val === undefined || val === null) return '     ';
-		if (['HR', 'RBI', 'SB', 'K', 'W', 'L', 'SV', 'G', 'GS'].includes(name)) return String(Math.round(val));
+		if (INTEGER_STATS.has(name)) return String(Math.round(val));
 		// Baseball convention: AVG/OBP/SLG/BABIP always shown as .XXX (no leading zero)
 		if (['AVG', 'OBP', 'SLG', 'BABIP'].includes(name)) return val.toFixed(3).replace(/^0/, '');
-		// OPS can exceed 1.0 so keep leading zero for consistent width
-		if (['OPS', 'wOBA', 'wRC+'].includes(name)) return val.toFixed(3);
+		// OPS/wOBA can exceed 1.0 so keep leading zero for consistent width
+		if (['OPS', 'wOBA'].includes(name)) return val.toFixed(3);
 		if (['ERA', 'FIP', 'xFIP', 'WHIP', 'K/9', 'BB/9'].includes(name)) return val.toFixed(2);
 		return val < 10 ? val.toFixed(3) : String(Math.round(val));
 	}
@@ -113,6 +113,7 @@
 
 	.player {
 		padding-left: 0.5rem;
+		padding-right: 1.5rem;
 		gap: 0.4rem;
 	}
 

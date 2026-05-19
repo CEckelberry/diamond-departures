@@ -7,7 +7,7 @@
 	import type { BoardRow } from './types';
 
 	const HITTER_TRAD_COLS  = ['AVG', 'HR', 'RBI', 'OBP', 'SLG', 'SB', 'OPS'];
-	const HITTER_SABER_COLS = ['OPS', 'SLG', 'OBP', 'AVG', 'HR', 'SB', 'RBI'];
+	const HITTER_SABER_COLS = ['wRC+', 'OPS', 'OBP', 'BABIP', 'SLG', 'HR', 'AVG'];
 	const PITCHER_TRAD_COLS  = ['ERA', 'W', 'L', 'WHIP', 'K', 'SV', 'BB/9'];
 	const PITCHER_SABER_COLS = ['FIP', 'ERA', 'K/9', 'BB/9', 'K', 'W', 'WHIP'];
 
