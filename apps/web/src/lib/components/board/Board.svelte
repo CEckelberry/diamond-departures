@@ -138,8 +138,8 @@
 
 	.board-header-row {
 		display: grid;
-		grid-template-columns: 3.5rem 21rem 5rem 4rem repeat(7, 5.5rem);
-		gap: 0.4rem;
+		grid-template-columns: 3.5rem 21rem 5rem 4rem repeat(7, minmax(5rem, 1fr));
+		gap: 0.6rem;
 		border-bottom: 1px solid color-mix(in oklab, var(--chrome-text) 14%, transparent);
 		font-family: 'JetBrains Mono', monospace;
 		font-size: 0.65rem;

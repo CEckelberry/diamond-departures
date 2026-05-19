@@ -85,10 +85,10 @@
 <style>
 	.board-row {
 		display: grid;
-		grid-template-columns: 3.5rem 21rem 5rem 4rem repeat(7, 5.5rem);
+		grid-template-columns: 3.5rem 21rem 5rem 4rem repeat(7, minmax(5rem, 1fr));
 		height: 36px;
 		align-items: center;
-		gap: 0.4rem;
+		gap: 0.6rem;
 		padding: 0.1rem 0.2rem;
 		min-height: 44px;
 		cursor: pointer;
