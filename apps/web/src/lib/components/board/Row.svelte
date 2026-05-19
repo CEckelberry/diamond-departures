@@ -5,12 +5,27 @@
 	let {
 		row,
 		rowIndex = 0,
+		sort = '',
+		statCols = [],
 		onselect
 	}: {
 		row: BoardRow;
 		rowIndex?: number;
+		sort?: string;
+		statCols?: string[];
 		onselect?: (playerId: number) => void;
 	} = $props();
+
+	function formatStat(name: string, val: number | undefined): string {
+		if (val === undefined || val === null) return '     ';
+		if (['HR', 'RBI', 'SB', 'K', 'W', 'L', 'SV', 'G', 'GS'].includes(name)) return String(Math.round(val));
+		// Baseball convention: AVG/OBP/SLG/BABIP always shown as .XXX (no leading zero)
+		if (['AVG', 'OBP', 'SLG', 'BABIP'].includes(name)) return val.toFixed(3).replace(/^0/, '');
+		// OPS can exceed 1.0 so keep leading zero for consistent width
+		if (['OPS', 'wOBA', 'wRC+'].includes(name)) return val.toFixed(3);
+		if (['ERA', 'FIP', 'xFIP', 'WHIP', 'K/9', 'BB/9'].includes(name)) return val.toFixed(2);
+		return val < 10 ? val.toFixed(3) : String(Math.round(val));
+	}
 
 	const rowAriaLabel = $derived(
 		`rank ${row.rank.trim()}, ${row.player}, ${row.team}, ${row.position}, stat ${row.stat}`
@@ -46,13 +61,22 @@
 	</div>
 	<div class="cell"><Word value={row.team} width={3} cellWidth={16} cellHeight={26} {rowIndex} baseColIndex={21} /></div>
 	<div class="cell"><Word value={row.position} width={2} cellWidth={16} cellHeight={26} {rowIndex} baseColIndex={24} /></div>
-	<div class="cell stat"><Word value={row.stat} width={6} cellWidth={16} cellHeight={26} {rowIndex} baseColIndex={26} /></div>
+	{#each statCols as statName, colIdx}
+		<div class="cell stat" class:stat-active={statName === sort}>
+			<Word
+				value={formatStat(statName, row.stats[statName])}
+				width={5} cellWidth={16} cellHeight={26}
+				{rowIndex}
+				baseColIndex={26 + colIdx * 5}
+			/>
+		</div>
+	{/each}
 </div>
 
 <style>
 	.board-row {
 		display: grid;
-		grid-template-columns: 3.5rem 20rem 6rem 6rem 8rem;
+		grid-template-columns: 3.5rem 1fr 5rem 4rem repeat(5, 5.5rem);
 		height: 36px;
 		align-items: center;
 		gap: 0.4rem;
@@ -79,6 +103,21 @@
 	.player {
 		padding-left: 0.5rem;
 		gap: 0.4rem;
+	}
+
+	.stat-active {
+		color: #fbbf24;
+	}
+
+	/* Overlay sits above Cell internals (hairline z-index:20) to tint the whole column */
+	.stat-active::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+		background: rgba(251, 191, 36, 0.09);
+		pointer-events: none;
+		z-index: 25;
+		border-radius: 0.2rem;
 	}
 
 	.just-qualified-badge {

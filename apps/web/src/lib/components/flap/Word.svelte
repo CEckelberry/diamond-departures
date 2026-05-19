@@ -17,14 +17,14 @@
 <div class="word" style="--cells:{width};--cell-width:{cellWidth}px;">
 	{#each cells as char, index}
 		{#if char === " "}
-			<!-- Highly optimized static empty cell (Zero JS logic, 1 DOM node) -->
 			<div class="empty-cell" style="width:{cellWidth}px; height:{cellHeight}px;"></div>
 		{:else}
 			<Cell 
 				value={char} 
 				width={cellWidth} 
 				height={cellHeight} 
-				staggerIndex={rowIndex * 2 + baseColIndex + index} 
+				staggerIndex={rowIndex * 12 + baseColIndex + index}
+				rowIndex={rowIndex}
 			/>
 		{/if}
 	{/each}
@@ -34,7 +34,7 @@
 	.word {
 		display: grid;
 		grid-template-columns: repeat(var(--cells), var(--cell-width));
-		gap: 2px; /* Tight mechanical gap */
+		gap: 2px;
 		width: fit-content;
 	}
 

@@ -11,10 +11,10 @@
 	let nextGlyph = $state(" ");
 	let isFlipping = $state(false);
 
-	const timingSkew = 0.85 + (Math.random() * 0.3);
+	const timingSkew = 0.88 + (Math.random() * 0.24);
 	const flipDuration = $derived(
 		($einkStore === 'aesthetic' ? 350 :
-		 $einkStore === 'faithful' ? 1 : 42) * timingSkew
+		 $einkStore === 'faithful' ? 1 : 70) * timingSkew
 	);
 	const halfHeight = Math.floor(height / 2);
 
@@ -32,8 +32,7 @@
 		noteFlapFlip();
 		flipTimer = setTimeout(() => {
 			currentGlyph = nextGlyph;
-			// setTimeout(0) ensures Svelte flushes the isFlipping=false DOM update (microtask)
-			// before we re-enable the animation in the next macrotask.
+			isFlipping = false; // must go false so Svelte removes .flipping before next flip restarts animation
 			setTimeout(scheduleNextFlip, 0);
 		}, flipDuration);
 	}
@@ -189,8 +188,8 @@
 	}
 
 	.flipping .flap {
-		/* Snappy mechanical easing for continuous spins */
-		animation: flip var(--flip-duration) linear forwards;
+		/* ease-in mimics gravity on a falling mechanical flap */
+		animation: flip var(--flip-duration) cubic-bezier(0.4, 0, 1, 1) forwards;
 	}
 
 	.flap-front, .flap-back {

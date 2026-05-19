@@ -6,15 +6,22 @@
 	import Row from './Row.svelte';
 	import type { BoardRow } from './types';
 
+	const HITTER_STAT_COLS = ['OPS', 'HR', 'RBI', 'AVG', 'SB'];
+	const PITCHER_STAT_COLS = ['ERA', 'FIP', 'K/9', 'WHIP', 'K'];
+
 	let {
 		rows = [],
 		view = 'hitters',
+		sort = '',
 		onselect
 	}: {
 		rows?: BoardRow[];
 		view?: string;
+		sort?: string;
 		onselect?: (playerId: number) => void;
 	} = $props();
+
+	const statCols = $derived(view.startsWith('pitcher') ? PITCHER_STAT_COLS : HITTER_STAT_COLS);
 
 	const PLACEHOLDER: BoardRow = {
 		playerId: 0,
@@ -61,7 +68,9 @@
 		<span>PLAYER</span>
 		<span>TEAM</span>
 		<span>POS</span>
-		<span>STAT</span>
+		{#each statCols as col}
+			<span class:stat-head={col === sort}>{col}</span>
+		{/each}
 	</div>
 	<div class="board-body">
 		{#each placeholderRows as row, index (row.playerId)}
@@ -70,7 +79,7 @@
 				animate:flip={{ delay: index * 30, duration: reducedMotion ? 0 : 300, easing: cubicOut }}
 			>
 				<div class:row-enter={row.justQualified}>
-					<Row {row} rowIndex={index} onselect={onselect} />
+					<Row {row} rowIndex={index} {sort} {statCols} onselect={onselect} />
 				</div>
 			</div>
 		{/each}
@@ -99,7 +108,7 @@
 
 	.board-header-row {
 		display: grid;
-		grid-template-columns: 3.5rem 20rem 6rem 6rem 8rem;
+		grid-template-columns: 3.5rem 1fr 5rem 4rem repeat(5, 5.5rem);
 		gap: 0.4rem;
 		border-bottom: 1px solid color-mix(in oklab, var(--chrome-text) 14%, transparent);
 		font-family: 'JetBrains Mono', monospace;
@@ -111,6 +120,14 @@
 	}
 
 	.rk-head { padding-left: 0.4rem; }
+
+	.stat-head {
+		color: #fbbf24;
+		font-weight: 700;
+		background: rgba(251, 191, 36, 0.1);
+		border-radius: 0.2rem;
+		padding: 0.1rem 0.3rem;
+	}
 
 	.board-body {
 		display: grid;
