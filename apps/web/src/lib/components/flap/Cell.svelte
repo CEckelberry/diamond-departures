@@ -167,8 +167,6 @@
 		font-weight: 700;
 		color: var(--cell-text);
 		perspective: 400px;
-		/* Force hardware acceleration */
-		transform: translateZ(0);
 	}
 
 	.face {
@@ -181,7 +179,6 @@
 		justify-content: center;
 		background: var(--cell-bg);
 		backface-visibility: hidden;
-		transform: translateZ(0);
 	}
 
 	.glyph {

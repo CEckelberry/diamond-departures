@@ -45,8 +45,15 @@
 		qualifiedAt: null
 	};
 
+	// ?rows=N in the URL caps displayed rows for performance debugging
+	const debugMaxRows = $derived(
+		typeof window !== 'undefined'
+			? (parseInt(new URLSearchParams(window.location.search).get('rows') ?? '') || 100)
+			: 100
+	);
+
 	const placeholderRows = $derived(
-		Array.from({ length: 100 }, (_, i) => rows[i] ?? { ...PLACEHOLDER, playerId: -(i + 1) })
+		Array.from({ length: debugMaxRows }, (_, i) => rows[i] ?? { ...PLACEHOLDER, playerId: -(i + 1) })
 	);
 
 	let reducedMotion = $state(false);
