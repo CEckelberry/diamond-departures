@@ -13,9 +13,6 @@
 	let isFlipping = $state(false);
 
 	const timingSkew = 0.88 + (Math.random() * 0.24);
-	// Only ~1/3 of cells animate on initial load; the rest snap instantly.
-	// Keeps simultaneous 3D transforms low enough for smooth GPU compositing.
-	const shouldAnimateIntro = Math.random() < 0.33;
 	const flipDuration = $derived(
 		($einkStore === 'aesthetic' ? 350 :
 		 $einkStore === 'faithful' ? 1 : 190) * timingSkew
@@ -26,7 +23,6 @@
 	let queue: string[] = [];
 	let disposed = false;
 	let flipTimer: ReturnType<typeof setTimeout> | null = null;
-	let introTimer: ReturnType<typeof setTimeout> | null = null;
 
 	function scheduleNextFlip() {
 		if (disposed || queue.length === 0) { isFlipping = false; return; }
@@ -44,33 +40,8 @@
 	}
 
 	onMount(() => {
-		if (targetGlyph === " ") return () => { disposed = true; };
-		// After first load, any cell that mounts is from a view/sort switch — snap directly.
-		if (anim.firstLoadDone) {
-			currentGlyph = targetGlyph;
-			return () => { disposed = true; };
-		}
-		// 2/3 of cells snap directly — no GPU cost, still looks like a real board.
-		if (!shouldAnimateIntro) {
-			currentGlyph = targetGlyph;
-			return () => { disposed = true; };
-		}
-
-		introTimer = setTimeout(() => {
-			if (disposed) return;
-			// Single flip: one char before target → target. Multi-intermediate is for live updates.
-			const targetIdx = GLYPHS.indexOf(targetGlyph);
-			const startIdx = (targetIdx - 1 + GLYPHS.length) % GLYPHS.length;
-			currentGlyph = GLYPHS[startIdx];
-			queue.push(targetGlyph);
-			scheduleNextFlip();
-		}, staggerIndex * 2); // 2ms stagger (was 6ms)
-
-		return () => {
-			disposed = true;
-			if (flipTimer) clearTimeout(flipTimer);
-			if (introTimer) clearTimeout(introTimer);
-		};
+		currentGlyph = targetGlyph;
+		return () => { disposed = true; };
 	});
 
 	// Handle live value changes after initial mount.
@@ -220,8 +191,6 @@
 		transform-origin: bottom center;
 		transform-style: preserve-3d;
 		z-index: 10;
-		/* Reset state when not flipping */
-		transform: rotateX(0deg);
 	}
 
 	.flipping .flap {
