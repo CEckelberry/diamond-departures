@@ -13,6 +13,9 @@
 	let isFlipping = $state(false);
 
 	const timingSkew = 0.88 + (Math.random() * 0.24);
+	// Only ~1/3 of cells animate on initial load; the rest snap instantly.
+	// Keeps simultaneous 3D transforms low enough for smooth GPU compositing.
+	const shouldAnimateIntro = Math.random() < 0.33;
 	const flipDuration = $derived(
 		($einkStore === 'aesthetic' ? 350 :
 		 $einkStore === 'faithful' ? 1 : 190) * timingSkew
@@ -47,20 +50,19 @@
 			currentGlyph = targetGlyph;
 			return () => { disposed = true; };
 		}
+		// 2/3 of cells snap directly — no GPU cost, still looks like a real board.
+		if (!shouldAnimateIntro) {
+			currentGlyph = targetGlyph;
+			return () => { disposed = true; };
+		}
 
 		introTimer = setTimeout(() => {
 			if (disposed) return;
-			const offset = (staggerIndex % 4) + 2; // 2–5 flips per cell (was 5–24)
-			const startIdx = (GLYPHS.indexOf(targetGlyph) - offset + GLYPHS.length) % GLYPHS.length;
-			currentGlyph = GLYPHS[startIdx];
-
-			let i = (startIdx + 1) % GLYPHS.length;
+			// Single flip: one char before target → target. Multi-intermediate is for live updates.
 			const targetIdx = GLYPHS.indexOf(targetGlyph);
-			while (true) {
-				queue.push(GLYPHS[i]);
-				if (i === targetIdx) break;
-				i = (i + 1) % GLYPHS.length;
-			}
+			const startIdx = (targetIdx - 1 + GLYPHS.length) % GLYPHS.length;
+			currentGlyph = GLYPHS[startIdx];
+			queue.push(targetGlyph);
 			scheduleNextFlip();
 		}, staggerIndex * 2); // 2ms stagger (was 6ms)
 
