@@ -5,7 +5,7 @@
 	import { einkStore } from "$lib/stores/eink";
 	import { anim } from "$lib/stores/board.svelte";
 
-	let { value, width = 28, height = 36, onFlip = () => {}, staggerIndex = 0 } = $props();
+	let { value, width = 28, height = 36, onFlip = () => {}, staggerIndex = 0, colIndex = 0 } = $props();
 
 	const targetGlyph = $derived(normalizeGlyph(value));
 	let currentGlyph = $state(" ");
@@ -15,7 +15,7 @@
 	const timingSkew = 0.88 + (Math.random() * 0.24);
 	const flipDuration = $derived(
 		($einkStore === 'aesthetic' ? 350 :
-		 $einkStore === 'faithful' ? 1 : 120) * timingSkew
+		 $einkStore === 'faithful' ? 1 : 190) * timingSkew
 	);
 	const halfHeight = Math.floor(height / 2);
 
@@ -76,8 +76,9 @@
 	$effect(() => {
 		const target = targetGlyph;
 		if (!mounted) { mounted = true; return; }
+		let staggerTimer: ReturnType<typeof setTimeout> | null = null;
 		untrack(() => {
-			// Navigation swap: skip animation, snap directly to avoid 2600-cell chaos
+			// Navigation swap: skip animation, snap directly.
 			if (anim.snap) {
 				queue.length = 0;
 				if (flipTimer) { clearTimeout(flipTimer); flipTimer = null; }
@@ -86,30 +87,38 @@
 				isFlipping = false;
 				return;
 			}
-			const tail = queue.length > 0 ? queue[queue.length - 1] : currentGlyph;
-			const startIndex = Math.max(0, GLYPHS.indexOf(tail));
-			const targetIndex = Math.max(0, GLYPHS.indexOf(target));
-			if (startIndex === targetIndex) return;
-			const n = GLYPHS.length;
-			const fwdDist = (targetIndex - startIndex + n) % n;
-			if (fwdDist <= 3) {
-				// Close: step directly (1–3 flips)
-				let i = (startIndex + 1) % n;
-				while (true) {
-					queue.push(GLYPHS[i]);
-					if (i === targetIndex) break;
-					i = (i + 1) % n;
+			// Theatrical: stagger flip start by column position (75ms per column).
+			// Double-check anim.snap inside the callback — a sort click may fire
+			// after the timeout is scheduled but before it fires.
+			staggerTimer = setTimeout(() => {
+				if (disposed || anim.snap) return;
+				const tail = queue.length > 0 ? queue[queue.length - 1] : currentGlyph;
+				const startIndex = Math.max(0, GLYPHS.indexOf(tail));
+				const targetIndex = Math.max(0, GLYPHS.indexOf(target));
+				if (startIndex === targetIndex) return;
+				const n = GLYPHS.length;
+				const fwdDist = (targetIndex - startIndex + n) % n;
+				if (fwdDist <= 3) {
+					// Close: step directly (1–3 flips)
+					let i = (startIndex + 1) % n;
+					while (true) {
+						queue.push(GLYPHS[i]);
+						if (i === targetIndex) break;
+						i = (i + 1) % n;
+					}
+				} else {
+					// Far: 3 evenly-spaced intermediates + target (theatrical)
+					queue.push(
+						GLYPHS[(startIndex + Math.ceil(fwdDist * 0.25)) % n],
+						GLYPHS[(startIndex + Math.ceil(fwdDist * 0.5)) % n],
+						GLYPHS[(startIndex + Math.ceil(fwdDist * 0.75)) % n],
+						GLYPHS[targetIndex],
+					);
 				}
-			} else {
-				// Far: 2 evenly-spaced intermediates + target — looks like a quick mechanical spin
-				queue.push(
-					GLYPHS[(startIndex + Math.ceil(fwdDist * 0.33)) % n],
-					GLYPHS[(startIndex + Math.ceil(fwdDist * 0.67)) % n],
-					GLYPHS[targetIndex],
-				);
-			}
-			if (!isFlipping) scheduleNextFlip();
+				if (!isFlipping) scheduleNextFlip();
+			}, colIndex * 75);
 		});
+		return () => { if (staggerTimer !== null) clearTimeout(staggerTimer); };
 	});
 </script>
 

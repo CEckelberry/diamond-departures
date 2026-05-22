@@ -19,12 +19,12 @@
 		{#if char === " "}
 			<div class="empty-cell" style="width:{cellWidth}px; height:{cellHeight}px;"></div>
 		{:else}
-			<Cell 
-				value={char} 
-				width={cellWidth} 
-				height={cellHeight} 
+			<Cell
+				value={char}
+				width={cellWidth}
+				height={cellHeight}
 				staggerIndex={rowIndex * 4 + baseColIndex + index}
-				rowIndex={rowIndex}
+				colIndex={baseColIndex + index}
 			/>
 		{/if}
 	{/each}
