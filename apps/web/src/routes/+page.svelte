@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import { navigating, page } from '$app/stores';
+	import { onMount, tick } from 'svelte';
+	import { page } from '$app/stores';
 	import Header from '$lib/components/board/Header.svelte';
 	import ViewTabs from '$lib/components/board/ViewTabs.svelte';
 	import StatPicker from '$lib/components/board/StatPicker.svelte';
@@ -8,7 +8,7 @@
 	import Panel from '$lib/components/player/Panel.svelte';
 	import SEO from '$lib/components/shell/SEO.svelte';
 	import { openBoardStream } from '$lib/api/sse';
-	import { applySnapshot, applyDelta, toBoardRows } from '$lib/stores/board.svelte';
+	import { applySnapshot, applyDelta, toBoardRows, anim } from '$lib/stores/board.svelte';
 	import type { BoardEntry } from '$lib/stores/board.svelte';
 
 	let { data }: {
@@ -28,7 +28,6 @@
 
 	const view = $derived($page.url.searchParams.get('view') ?? 'hitters');
 	const style = $derived($page.url.searchParams.get('style') ?? 'sabermetric');
-	const isLoading = $derived($navigating !== null);
 
 	const rows = $derived(toBoardRows(liveEntries));
 
@@ -38,9 +37,22 @@
 		return rows.filter((row) => row.position === selectedPosition);
 	})());
 
-	// Seed live entries when load data changes (tab/sort switches)
+	// Seed live entries when load data changes (tab/sort switches).
+	// First load: let intro animation play, then mark firstLoadDone so all future
+	// cell mounts snap immediately (view switches). anim.snap handles the case
+	// where cells stay mounted but all values change at once (sort switches).
+	let isFirstDataLoad = true;
 	$effect(() => {
-		liveEntries = [...data.entries];
+		const entries = data.entries;
+		if (isFirstDataLoad) {
+			isFirstDataLoad = false;
+			liveEntries = [...entries];
+			tick().then(() => { anim.firstLoadDone = true; });
+		} else {
+			anim.snap = true;
+			liveEntries = [...entries];
+			tick().then(() => { anim.snap = false; });
+		}
 	});
 
 	onMount(() => {
@@ -98,13 +110,9 @@
 	</div>
 
 	<div class="board-layout">
-		{#if isLoading}
-			<div class="board-skeleton">Loading...</div>
-		{:else}
-			<Board rows={filteredRows} {view} {style} sort={data.boardSort} onselect={(id) => { selectedPlayerId = id; }} />
-			{#if selectedPlayerId !== null}
-				<Panel selectedPlayerId={selectedPlayerId} onclose={closePanel} />
-			{/if}
+		<Board rows={filteredRows} {view} {style} sort={data.boardSort} onselect={(id) => { selectedPlayerId = id; }} />
+		{#if selectedPlayerId !== null}
+			<Panel selectedPlayerId={selectedPlayerId} onclose={closePanel} />
 		{/if}
 	</div>
 </section>

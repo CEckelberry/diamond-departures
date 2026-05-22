@@ -1,5 +1,14 @@
 import type { BoardRow } from '$lib/components/board/types';
 
+class AnimControl {
+	// Set true before a bulk data swap so cells that stay mounted skip simultaneous animation.
+	snap = $state(false);
+	// Set true after the first-ever page load completes. Cells mounting after that snap
+	// directly instead of running the cascade intro (avoids chaos on view switches).
+	firstLoadDone = false;
+}
+export const anim = new AnimControl();
+
 export type BoardEntry = {
 	rank: number;
 	player: { id: number; name: string; team_abbr: string; headshot_url: string; position: string };

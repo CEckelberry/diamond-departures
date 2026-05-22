@@ -3,6 +3,7 @@
 	import { normalizeGlyph, GLYPHS } from "./animation.mjs";
 	import { noteFlapFlip } from "$lib/audio/flap";
 	import { einkStore } from "$lib/stores/eink";
+	import { anim } from "$lib/stores/board.svelte";
 
 	let { value, width = 28, height = 36, onFlip = () => {}, staggerIndex = 0 } = $props();
 
@@ -41,6 +42,11 @@
 
 	onMount(() => {
 		if (targetGlyph === " ") return () => { disposed = true; };
+		// After first load, any cell that mounts is from a view/sort switch — snap directly.
+		if (anim.firstLoadDone) {
+			currentGlyph = targetGlyph;
+			return () => { disposed = true; };
+		}
 
 		introTimer = setTimeout(() => {
 			if (disposed) return;
@@ -71,6 +77,15 @@
 		const target = targetGlyph;
 		if (!mounted) { mounted = true; return; }
 		untrack(() => {
+			// Navigation swap: skip animation, snap directly to avoid 2600-cell chaos
+			if (anim.snap) {
+				queue.length = 0;
+				if (flipTimer) { clearTimeout(flipTimer); flipTimer = null; }
+				currentGlyph = target;
+				nextGlyph = target;
+				isFlipping = false;
+				return;
+			}
 			const tail = queue.length > 0 ? queue[queue.length - 1] : currentGlyph;
 			const startIndex = Math.max(0, GLYPHS.indexOf(tail));
 			const targetIndex = Math.max(0, GLYPHS.indexOf(target));
