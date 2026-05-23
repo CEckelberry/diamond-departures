@@ -23,6 +23,7 @@
 	let queue: string[] = [];
 	let disposed = false;
 	let flipTimer: ReturnType<typeof setTimeout> | null = null;
+	let introTimer: ReturnType<typeof setTimeout> | null = null;
 
 	function scheduleNextFlip() {
 		if (disposed || queue.length === 0) { isFlipping = false; return; }
@@ -40,8 +41,27 @@
 	}
 
 	onMount(() => {
-		currentGlyph = targetGlyph;
-		return () => { disposed = true; };
+		if (targetGlyph === " ") return () => { disposed = true; };
+
+		// Intro cascade: half the live-update stagger so the board fills in ~3.5s.
+		// Density and snap are checked inside the callback so Board.svelte has already
+		// computed the viewport density before any cell actually tries to animate.
+		introTimer = setTimeout(() => {
+			if (disposed || anim.snap) { currentGlyph = targetGlyph; nextGlyph = targetGlyph; return; }
+			if (Math.random() >= anim.density) { currentGlyph = targetGlyph; nextGlyph = targetGlyph; return; }
+			// Single flip: one glyph before target → target. Keeps intro light.
+			const targetIdx = GLYPHS.indexOf(targetGlyph);
+			const startIdx = (targetIdx - 1 + GLYPHS.length) % GLYPHS.length;
+			currentGlyph = GLYPHS[startIdx];
+			queue.push(targetGlyph);
+			scheduleNextFlip();
+		}, rowIndex * 20 + colIndex * 40);
+
+		return () => {
+			disposed = true;
+			if (flipTimer) clearTimeout(flipTimer);
+			if (introTimer) clearTimeout(introTimer);
+		};
 	});
 
 	// Handle live value changes after initial mount.
