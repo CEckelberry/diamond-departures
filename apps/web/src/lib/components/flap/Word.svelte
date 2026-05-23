@@ -25,6 +25,7 @@
 				height={cellHeight}
 				staggerIndex={rowIndex * 50 + baseColIndex + index}
 				colIndex={baseColIndex + index}
+				rowIndex={rowIndex}
 			/>
 		{/if}
 	{/each}

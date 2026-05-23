@@ -7,6 +7,7 @@
 	import { playRowShift } from '$lib/audio/flap';
 	import Row from './Row.svelte';
 	import type { BoardRow } from './types';
+	import { anim } from '$lib/stores/board.svelte';
 
 	const HITTER_TRAD_COLS  = ['AVG', 'HR', 'RBI', 'OBP', 'SLG', 'SB', 'OPS'];
 	const HITTER_SABER_COLS = ['wOBA', 'wRC+', 'BABIP', 'ISO', 'BB%', 'K%', 'OPS'];
@@ -57,13 +58,33 @@
 	);
 
 	let reducedMotion = $state(false);
+	let boardBodyEl: HTMLElement;
+
+	// Approx animated cells per row: rank(3) + name(18) + team(3) + pos(2) + 7 stat cols × 5 chars
+	// Use a round number that matches the perf-demo sweet spot rather than the theoretical max.
+	const CELLS_PER_ROW = 50;
 
 	onMount(() => {
 		const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
 		reducedMotion = mq.matches;
 		const handler = (e: MediaQueryListEvent) => { reducedMotion = e.matches; };
 		mq.addEventListener('change', handler);
-		return () => mq.removeEventListener('change', handler);
+
+		// Recompute animation density whenever the board's visible height changes so we
+		// never push more than ~364 simultaneous CSS 3D layers to the GPU.
+		const computeDensity = () => {
+			const firstRow = boardBodyEl?.querySelector('.row-shell') as HTMLElement | null;
+			const rowH = (firstRow?.getBoundingClientRect().height) || 40;
+			anim.adjustForViewport(boardBodyEl.clientHeight, rowH, CELLS_PER_ROW);
+		};
+		const ro = new ResizeObserver(computeDensity);
+		ro.observe(boardBodyEl);
+		computeDensity(); // set before first render cycle completes
+
+		return () => {
+			mq.removeEventListener('change', handler);
+			ro.disconnect();
+		};
 	});
 
 	let previousOrder = '';
@@ -109,7 +130,7 @@
 			>{col}</span>
 		{/each}
 	</div>
-	<div class="board-body">
+	<div class="board-body" bind:this={boardBodyEl}>
 		{#each placeholderRows as row, index (row.playerId)}
 			<div
 				class="row-shell"

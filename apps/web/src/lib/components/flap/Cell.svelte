@@ -5,7 +5,7 @@
 	import { einkStore } from "$lib/stores/eink";
 	import { anim } from "$lib/stores/board.svelte";
 
-	let { value, width = 28, height = 36, onFlip = () => {}, staggerIndex = 0, colIndex = 0 } = $props();
+	let { value, width = 28, height = 36, onFlip = () => {}, staggerIndex = 0, colIndex = 0, rowIndex = 0 } = $props();
 
 	const targetGlyph = $derived(normalizeGlyph(value));
 	let currentGlyph = $state(" ");
@@ -60,11 +60,18 @@
 				isFlipping = false;
 				return;
 			}
-			// Theatrical: stagger flip start by column position (75ms per column).
-			// Double-check anim.snap inside the callback — a sort click may fire
-			// after the timeout is scheduled but before it fires.
+			// Theatrical: stagger by row (40ms) then column (75ms) so updates cascade
+			// top-left → bottom-right. Double-check anim.snap inside the callback — a
+			// sort click may fire after the timeout is scheduled but before it fires.
 			staggerTimer = setTimeout(() => {
 				if (disposed || anim.snap) return;
+				// Density gate: skip animation for a fraction of cells so simultaneous
+				// compositor-layer count stays inside the ~364-cell GPU budget.
+				if (Math.random() >= anim.density) {
+					currentGlyph = target;
+					nextGlyph = target;
+					return;
+				}
 				const tail = queue.length > 0 ? queue[queue.length - 1] : currentGlyph;
 				const startIndex = Math.max(0, GLYPHS.indexOf(tail));
 				const targetIndex = Math.max(0, GLYPHS.indexOf(target));
@@ -89,7 +96,7 @@
 					);
 				}
 				if (!isFlipping) scheduleNextFlip();
-			}, colIndex * 75);
+			}, rowIndex * 40 + colIndex * 75);
 		});
 		return () => { if (staggerTimer !== null) clearTimeout(staggerTimer); };
 	});

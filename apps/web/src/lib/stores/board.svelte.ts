@@ -6,6 +6,17 @@ class AnimControl {
 	// Set true after the first-ever page load completes. Cells mounting after that snap
 	// directly instead of running the cascade intro (avoids chaos on view switches).
 	firstLoadDone = false;
+
+	// Fraction of live-update cells that get the theatrical flip (vs snap directly).
+	// Recomputed by Board whenever the board's visible height changes so the number of
+	// simultaneous animated compositor layers never blows past the ~364-cell GPU budget.
+	density = $state(1.0);
+
+	adjustForViewport(boardBodyHeight: number, rowHeight: number, cellsPerRow: number) {
+		const BUDGET = 364; // empirical: max simultaneous animated cells at ~60 fps (M3/M4 validated)
+		const visibleRows = Math.max(1, Math.floor(boardBodyHeight / rowHeight));
+		this.density = Math.min(1.0, Math.max(0.05, BUDGET / (visibleRows * cellsPerRow)));
+	}
 }
 export const anim = new AnimControl();
 
