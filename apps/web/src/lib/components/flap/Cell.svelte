@@ -48,14 +48,17 @@
 		// computed the viewport density before any cell actually tries to animate.
 		introTimer = setTimeout(() => {
 			if (disposed || anim.snap) { currentGlyph = targetGlyph; nextGlyph = targetGlyph; return; }
-			if (Math.random() >= anim.density) { currentGlyph = targetGlyph; nextGlyph = targetGlyph; return; }
+			// Intro density is capped at 25% regardless of viewport so the board stays sparse.
+			// Live-update density (anim.density) is uncapped and may be higher.
+			const introDensity = Math.min(anim.density, 0.25);
+			if (Math.random() >= introDensity) { currentGlyph = targetGlyph; nextGlyph = targetGlyph; return; }
 			// Single flip: one glyph before target → target. Keeps intro light.
 			const targetIdx = GLYPHS.indexOf(targetGlyph);
 			const startIdx = (targetIdx - 1 + GLYPHS.length) % GLYPHS.length;
 			currentGlyph = GLYPHS[startIdx];
 			queue.push(targetGlyph);
 			scheduleNextFlip();
-		}, rowIndex * 20 + colIndex * 40);
+		}, rowIndex * 25 + colIndex * 55);
 
 		return () => {
 			disposed = true;
