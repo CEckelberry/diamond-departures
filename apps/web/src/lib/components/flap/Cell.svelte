@@ -43,22 +43,34 @@
 	onMount(() => {
 		if (targetGlyph === " ") return () => { disposed = true; };
 
-		// Intro cascade: half the live-update stagger so the board fills in ~3.5s.
-		// Density and snap are checked inside the callback so Board.svelte has already
-		// computed the viewport density before any cell actually tries to animate.
+		// Snap immediately on view/sort switches so nothing animates during navigation.
+		if (anim.snap) {
+			currentGlyph = targetGlyph;
+			nextGlyph = targetGlyph;
+			return () => { disposed = true; };
+		}
+
+		// Board loads fully populated — no blank-to-full cascade.
+		// 80% of cells snap to their real value on the first frame.
+		// 20% start one glyph off and flip into place at a random time within 2s,
+		// giving the "some characters just settled" feel of a live departure board.
+		// Random timing means concurrent flips stay well under the ~364-cell GPU budget.
+		if (Math.random() >= 0.20) {
+			currentGlyph = targetGlyph;
+			nextGlyph = targetGlyph;
+			return () => { disposed = true; };
+		}
+
+		const targetIdx = GLYPHS.indexOf(targetGlyph);
+		const startIdx = (targetIdx - 1 + GLYPHS.length) % GLYPHS.length;
+		currentGlyph = GLYPHS[startIdx];
+		nextGlyph = GLYPHS[startIdx];
+
 		introTimer = setTimeout(() => {
 			if (disposed || anim.snap) { currentGlyph = targetGlyph; nextGlyph = targetGlyph; return; }
-			// Intro density is capped at 25% regardless of viewport so the board stays sparse.
-			// Live-update density (anim.density) is uncapped and may be higher.
-			const introDensity = Math.min(anim.density, 0.25);
-			if (Math.random() >= introDensity) { currentGlyph = targetGlyph; nextGlyph = targetGlyph; return; }
-			// Single flip: one glyph before target → target. Keeps intro light.
-			const targetIdx = GLYPHS.indexOf(targetGlyph);
-			const startIdx = (targetIdx - 1 + GLYPHS.length) % GLYPHS.length;
-			currentGlyph = GLYPHS[startIdx];
 			queue.push(targetGlyph);
 			scheduleNextFlip();
-		}, rowIndex * 25 + colIndex * 55);
+		}, Math.random() * 2000);
 
 		return () => {
 			disposed = true;
