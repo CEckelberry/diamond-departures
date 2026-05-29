@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Split-Flap Performance Demo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --cell-bg: #1a1a2e;
+  --cell-text: #e8e8f0;
+  --cell-edge: #4a4a6a;
+  --board-bg: #0d0d1a;
+  --cell-w: 24px;
+  --cell-h: 30px;
+  --half-h: 15px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #0a0a14;
+  color: #e8e8f0;
+  font-family: 'JetBrains Mono', monospace;
+  padding: 16px;
+}
+
+/* ─── Controls ─────────────────────────────────────────── */
+#controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  align-items: flex-end;
+  background: #12121f;
+  border: 1px solid #2a2a45;
+  border-radius: 8px;
+  padding: 14px 18px;
+  margin-bottom: 16px;
+}
+.ctrl {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.ctrl-label {
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #6666aa;
+}
+.ctrl-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+input[type=range] {
+  width: 130px;
+  accent-color: #5555ee;
+  cursor: pointer;
+}
+.ctrl-val {
+  min-width: 46px;
+  font-size: 0.82rem;
+  color: #ccccff;
+}
+button {
+  background: #3535aa;
+  color: #e8e8f0;
+  border: none;
+  border-radius: 6px;
+  padding: 9px 18px;
+  font-family: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: background 0.12s;
+  letter-spacing: 0.04em;
+  align-self: flex-end;
+}
+button:hover { background: #4545cc; }
+button:active { background: #2525aa; }
+
+/* ─── Metrics ───────────────────────────────────────────── */
+#metrics {
+  display: flex;
+  gap: 20px;
+  align-self: flex-end;
+  margin-left: auto;
+}
+.metric {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.metric-val {
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1;
+}
+.metric-label {
+  font-size: 0.58rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #6666aa;
+}
+#fps-val    { color: #44ff88; }
+#active-val { color: #fbbf24; }
+#total-val  { color: #88aaff; }
+
+/* ─── Board ─────────────────────────────────────────────── */
+#board-wrap {
+  overflow: auto;
+  max-height: calc(100vh - 120px);
+  background: color-mix(in oklab, var(--board-bg) 92%, black);
+  border-radius: 8px;
+  border: 1px solid #2a2a45;
+  padding: 10px;
+}
+#board {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: fit-content;
+}
+.board-row {
+  display: flex;
+  gap: 2px;
+}
+
+/* ─── Cell ──────────────────────────────────────────────── */
+.cell {
+  position: relative;
+  display: inline-block;
+  width: var(--cell-w);
+  height: var(--cell-h);
+  border-radius: 3px;
+  background: var(--cell-bg);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--cell-edge) 60%, transparent),
+              0 2px 4px rgba(0,0,0,0.5);
+  font-family: "JetBrains Mono", monospace;
+  font-weight: 700;
+  color: var(--cell-text);
+  perspective: 300px;
+  font-size: calc(var(--cell-h) * 0.72);
+}
+.face {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: var(--half-h);
+  overflow: hidden;
+  display: flex;
+  justify-content: center;
+  background: var(--cell-bg);
+  backface-visibility: hidden;
+}
+.glyph {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  height: var(--cell-h);
+  top: 1px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.top-bg {
+  top: 0;
+  align-items: flex-start;
+  background: linear-gradient(to bottom, color-mix(in oklab, var(--cell-bg) 85%, white), var(--cell-bg));
+}
+.top-bg .glyph { top: 0; bottom: auto; }
+.bottom-bg {
+  bottom: 0;
+  align-items: flex-end;
+  background: linear-gradient(to top, color-mix(in oklab, var(--cell-bg) 88%, black), var(--cell-bg));
+}
+.bottom-bg .glyph { bottom: 0; top: auto; }
+.flap {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%;
+  height: var(--half-h);
+  transform-origin: bottom center;
+  transform-style: preserve-3d;
+  z-index: 10;
+}
+.cell.flipping .flap {
+  animation: flip var(--flip-dur, 190ms) cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+.flap-front, .flap-back {
+  position: absolute;
+  left: 0; top: 0;
+  width: 100%; height: 100%;
+  backface-visibility: hidden;
+}
+.flap-front {
+  align-items: flex-start;
+  background: linear-gradient(to bottom, color-mix(in oklab, var(--cell-bg) 85%, white), var(--cell-bg));
+}
+.flap-front .glyph { top: 0; bottom: auto; }
+.flap-back {
+  align-items: flex-end;
+  background: linear-gradient(to top, color-mix(in oklab, var(--cell-bg) 88%, black), var(--cell-bg));
+  transform: rotateX(180deg);
+}
+.flap-back .glyph { bottom: 0; top: auto; }
+.hairline {
+  position: absolute;
+  top: calc(50% - 0.5px);
+  left: 0; width: 100%; height: 1px;
+  background: color-mix(in oklab, var(--cell-edge) 80%, black);
+  z-index: 20;
+}
+.shadow-top, .shadow-bottom, .shadow-flap-front, .shadow-flap-back {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+}
+.cell.flipping .bottom-bg .shadow-bottom {
+  background: linear-gradient(to bottom, rgba(0,0,0,0.8), rgba(0,0,0,0));
+  animation: shadow-in var(--flip-dur, 190ms) linear forwards;
+}
+.cell.flipping .top-bg .shadow-top {
+  background: linear-gradient(to bottom, rgba(0,0,0,0.8), rgba(0,0,0,0));
+  animation: shadow-out var(--flip-dur, 190ms) linear forwards;
+}
+.cell.flipping .flap-front .shadow-flap-front {
+  background: linear-gradient(to bottom, rgba(0,0,0,0), rgba(0,0,0,0.8));
+  animation: shadow-in var(--flip-dur, 190ms) linear forwards;
+}
+.cell.flipping .flap-back .shadow-flap-back {
+  background: linear-gradient(to bottom, rgba(0,0,0,0), rgba(0,0,0,0.8));
+  animation: shadow-out var(--flip-dur, 190ms) linear forwards;
+}
+@keyframes flip {
+  0%   { transform: rotateX(0deg); }
+  100% { transform: rotateX(-180deg); }
+}
+@keyframes shadow-in  { 0% { opacity: 0; } 100% { opacity: 1; } }
+@keyframes shadow-out { 0% { opacity: 1; } 100% { opacity: 0; } }
+</style>
+</head>
+<body>
+
+<div id="controls">
+  <div class="ctrl">
+    <div class="ctrl-label">Rows</div>
+    <div class="ctrl-row">
+      <input type="range" id="sl-rows" min="5" max="100" value="50">
+      <span class="ctrl-val" id="vl-rows">50</span>
+    </div>
+  </div>
+  <div class="ctrl">
+    <div class="ctrl-label">Cells / row</div>
+    <div class="ctrl-row">
+      <input type="range" id="sl-cols" min="5" max="70" value="40">
+      <span class="ctrl-val" id="vl-cols">40</span>
+    </div>
+  </div>
+  <div class="ctrl">
+    <div class="ctrl-label">Flip density</div>
+    <div class="ctrl-row">
+      <input type="range" id="sl-density" min="0" max="100" value="100">
+      <span class="ctrl-val" id="vl-density">100%</span>
+    </div>
+  </div>
+  <div class="ctrl">
+    <div class="ctrl-label">Col stagger (ms)</div>
+    <div class="ctrl-row">
+      <input type="range" id="sl-stagger" min="0" max="200" value="75">
+      <span class="ctrl-val" id="vl-stagger">75ms</span>
+    </div>
+  </div>
+  <div class="ctrl">
+    <div class="ctrl-label">Flip duration (ms)</div>
+    <div class="ctrl-row">
+      <input type="range" id="sl-dur" min="50" max="500" value="190">
+      <span class="ctrl-val" id="vl-dur">190ms</span>
+    </div>
+  </div>
+  <button id="btn-rebuild">↺ Rebuild</button>
+  <button id="btn-update">▶ Simulate Update</button>
+  <div id="metrics">
+    <div class="metric">
+      <div class="metric-val" id="fps-val">—</div>
+      <div class="metric-label">FPS</div>
+    </div>
+    <div class="metric">
+      <div class="metric-val" id="active-val">0</div>
+      <div class="metric-label">Flipping</div>
+    </div>
+    <div class="metric">
+      <div class="metric-val" id="total-val">0</div>
+      <div class="metric-label">Total cells</div>
+    </div>
+  </div>
+</div>
+
+<div id="board-wrap">
+  <div id="board"></div>
+</div>
+
+<script>
+const GLYPHS = ' ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-+%';
+
+// ─── Controls ────────────────────────────────────────────────
+const slRows    = document.getElementById('sl-rows');
+const slCols    = document.getElementById('sl-cols');
+const slDensity = document.getElementById('sl-density');
+const slStagger = document.getElementById('sl-stagger');
+const slDur     = document.getElementById('sl-dur');
+const vlRows    = document.getElementById('vl-rows');
+const vlCols    = document.getElementById('vl-cols');
+const vlDensity = document.getElementById('vl-density');
+const vlStagger = document.getElementById('vl-stagger');
+const vlDur     = document.getElementById('vl-dur');
+const fpsEl     = document.getElementById('fps-val');
+const activeEl  = document.getElementById('active-val');
+const totalEl   = document.getElementById('total-val');
+const boardEl   = document.getElementById('board');
+
+function getRows()    { return parseInt(slRows.value); }
+function getCols()    { return parseInt(slCols.value); }
+function getDensity() { return parseInt(slDensity.value) / 100; }
+function getStagger() { return parseInt(slStagger.value); }
+function getDur()     { return parseInt(slDur.value); }
+
+slRows.oninput    = () => { vlRows.textContent    = slRows.value; };
+slCols.oninput    = () => { vlCols.textContent    = slCols.value; };
+slDensity.oninput = () => { vlDensity.textContent = slDensity.value + '%'; };
+slStagger.oninput = () => { vlStagger.textContent = slStagger.value + 'ms'; };
+slDur.oninput     = () => {
+  vlDur.textContent = slDur.value + 'ms';
+  document.documentElement.style.setProperty('--flip-dur', slDur.value + 'ms');
+};
+
+// ─── Cell class ──────────────────────────────────────────────
+let activeCount = 0;
+
+class Cell {
+  constructor(el, initChar) {
+    this.el = el;
+    this.current = initChar;
+    this.next = initChar;
+    this.queue = [];
+    this.flipTimer = null;
+    this.flipping = false;
+
+    // Cache glyph spans
+    const spans = el.querySelectorAll('.glyph');
+    // order: top-bg glyph, bottom-bg glyph, flap-front glyph, flap-back glyph
+    this.topG      = el.querySelector('.top-bg .glyph');
+    this.botG      = el.querySelector('.bottom-bg .glyph');
+    this.frontG    = el.querySelector('.flap-front .glyph');
+    this.backG     = el.querySelector('.flap-back .glyph');
+
+    this._setAll(initChar);
+  }
+
+  _setAll(g) {
+    this.topG.textContent = g;
+    this.botG.textContent = g;
+    this.frontG.textContent = g;
+    this.backG.textContent = g;
+  }
+
+  snap(target) {
+    if (this.flipTimer) { clearTimeout(this.flipTimer); this.flipTimer = null; }
+    this.queue.length = 0;
+    if (this.flipping) { activeCount--; this.flipping = false; }
+    this.el.classList.remove('flipping');
+    this.current = target;
+    this.next = target;
+    this._setAll(target);
+  }
+
+  scheduleNextFlip() {
+    if (this.queue.length === 0) {
+      if (this.flipping) { activeCount--; this.flipping = false; }
+      this.el.classList.remove('flipping');
+      return;
+    }
+    this.next = this.queue.shift();
+
+    this.topG.textContent   = this.next;
+    this.frontG.textContent = this.current;
+    this.backG.textContent  = this.next;
+    // botG stays as current until after the flip completes
+
+    if (!this.flipping) { activeCount++; this.flipping = true; }
+    // Remove+add flipping so the CSS animation restarts cleanly
+    this.el.classList.remove('flipping');
+    void this.el.offsetWidth; // force reflow to restart animation
+    this.el.classList.add('flipping');
+
+    const dur = getDur();
+    this.flipTimer = setTimeout(() => {
+      this.current = this.next;
+      this.botG.textContent = this.current;
+      if (this.flipping) { activeCount--; this.flipping = false; }
+      this.el.classList.remove('flipping');
+      requestAnimationFrame(() => this.scheduleNextFlip());
+    }, dur);
+  }
+
+  updateTo(targetChar, animate, colIndex) {
+    if (!animate) {
+      this.snap(targetChar);
+      return;
+    }
+    const delay = colIndex * getStagger();
+    setTimeout(() => {
+      const tail = this.queue.length > 0 ? this.queue[this.queue.length - 1] : this.current;
+      const si = Math.max(0, GLYPHS.indexOf(tail));
+      const ti = Math.max(0, GLYPHS.indexOf(targetChar));
+      if (si === ti) return;
+      const n = GLYPHS.length;
+      const dist = (ti - si + n) % n;
+      if (dist <= 3) {
+        let i = (si + 1) % n;
+        while (true) { this.queue.push(GLYPHS[i]); if (i === ti) break; i = (i + 1) % n; }
+      } else {
+        this.queue.push(
+          GLYPHS[(si + Math.ceil(dist * 0.25)) % n],
+          GLYPHS[(si + Math.ceil(dist * 0.5))  % n],
+          GLYPHS[(si + Math.ceil(dist * 0.75)) % n],
+          GLYPHS[ti],
+        );
+      }
+      if (!this.flipping) this.scheduleNextFlip();
+    }, delay);
+  }
+
+  dispose() {
+    if (this.flipTimer) { clearTimeout(this.flipTimer); }
+    if (this.flipping) activeCount--;
+  }
+}
+
+// ─── Board management ────────────────────────────────────────
+let cells = []; // flat array
+
+function randomGlyph() {
+  return GLYPHS[1 + Math.floor(Math.random() * (GLYPHS.length - 1))];
+}
+
+function makeCell(initChar) {
+  const el = document.createElement('div');
+  el.className = 'cell';
+  el.innerHTML = `
+    <div class="face top-bg"><span class="glyph"></span><div class="shadow-top"></div></div>
+    <div class="face bottom-bg"><span class="glyph"></span><div class="shadow-bottom"></div></div>
+    <div class="flap">
+      <div class="face flap-front"><span class="glyph"></span><div class="shadow-flap-front"></div></div>
+      <div class="face flap-back"><span class="glyph"></span><div class="shadow-flap-back"></div></div>
+    </div>
+    <div class="hairline"></div>`;
+  return new Cell(el, initChar);
+}
+
+function buildBoard() {
+  // dispose old
+  for (const c of cells) c.dispose();
+  cells = [];
+  activeCount = 0;
+  boardEl.innerHTML = '';
+
+  const rows = getRows();
+  const cols = getCols();
+
+  for (let r = 0; r < rows; r++) {
+    const rowEl = document.createElement('div');
+    rowEl.className = 'board-row';
+    for (let c = 0; c < cols; c++) {
+      const ch = randomGlyph();
+      const cell = makeCell(ch);
+      cells.push(cell);
+      rowEl.appendChild(cell.el);
+    }
+    boardEl.appendChild(rowEl);
+  }
+
+  totalEl.textContent = cells.length;
+  document.documentElement.style.setProperty('--flip-dur', getDur() + 'ms');
+}
+
+function simulateUpdate() {
+  const density = getDensity();
+  const cols = getCols();
+  cells.forEach((cell, idx) => {
+    const colIndex = idx % cols;
+    const animate = Math.random() < density;
+    // pick a different target char
+    let target;
+    do { target = randomGlyph(); } while (target === cell.current);
+    cell.updateTo(target, animate, colIndex);
+  });
+}
+
+// ─── FPS counter ─────────────────────────────────────────────
+let frameCount = 0;
+let fpsLastTime = performance.now();
+
+function fpsLoop() {
+  frameCount++;
+  const now = performance.now();
+  if (now - fpsLastTime >= 500) {
+    const fps = Math.round(frameCount * 1000 / (now - fpsLastTime));
+    fpsEl.textContent = fps;
+    fpsEl.style.color = fps >= 55 ? '#44ff88' : fps >= 40 ? '#fbbf24' : '#ff5555';
+    frameCount = 0;
+    fpsLastTime = now;
+  }
+  requestAnimationFrame(fpsLoop);
+}
+
+// ─── Active cell display ─────────────────────────────────────
+setInterval(() => { activeEl.textContent = activeCount; }, 100);
+
+// ─── Wire up buttons ─────────────────────────────────────────
+document.getElementById('btn-rebuild').onclick = buildBoard;
+document.getElementById('btn-update').onclick  = simulateUpdate;
+
+// ─── Boot ────────────────────────────────────────────────────
+buildBoard();
+requestAnimationFrame(fpsLoop);
+</script>
+</body>
+</html>

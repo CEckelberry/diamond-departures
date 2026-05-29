@@ -4,8 +4,8 @@
 
 	let { view = 'hitters' }: { view?: string } = $props();
 
-	const HITTER_STATS = ['wRC+', 'OPS', 'HR', 'SB', 'WAR'];
-	const PITCHER_STATS = ['ERA', 'FIP', 'K%', 'WHIP', 'WAR'];
+	const HITTER_STATS = ['OPS', 'HR', 'RBI', 'AVG', 'SB'];
+	const PITCHER_STATS = ['ERA', 'FIP', 'K/9', 'WHIP', 'K'];
 
 	const derivedStats = $derived(view === 'pitchers' ? PITCHER_STATS : HITTER_STATS);
 	const activeSort = $derived($page.url.searchParams.get('sort') ?? derivedStats[0]);

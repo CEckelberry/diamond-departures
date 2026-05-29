@@ -1,4 +1,5 @@
 import { error } from "@sveltejs/kit";
+import { browser } from "$app/environment";
 
 export type BoardEntryPayload = {
 	rank: number;
@@ -16,6 +17,9 @@ export type BoardEntryPayload = {
 		age_category: "live" | "recent" | "stale" | "old";
 	};
 };
+
+type CachedBoard = { entries: BoardEntryPayload[]; view: string; sort: string };
+const boardCache = new Map<string, CachedBoard>();
 
 const VALID_SORTS = new Set([
 	"wRC+", "OPS", "OPS+", "HR", "SB", "WAR", "AVG", "RBI", "SLG", "H", "DRS", "xwOBA",
@@ -77,7 +81,28 @@ export const load = async ({
 	params.set("view", resolvedView.apiView);
 	params.set("sort", resolveSort(url.searchParams, resolvedView.apiView));
 
-	const response = await fetch("/api/board?" + params.toString());
+	const cacheKey = params.toString();
+	const boardStyle = url.searchParams.get('style') ?? 'sabermetric';
+
+	if (browser) {
+		const cached = boardCache.get(cacheKey);
+		if (cached) {
+			// Return cached data immediately, revalidate silently in background.
+			fetch("/api/board?" + cacheKey)
+				.then((r) => r.json())
+				.then((p) => { boardCache.set(cacheKey, { entries: p.entries, view: p.view, sort: p.sort }); })
+				.catch(() => {});
+			return {
+				boardView: cached.view,
+				boardSort: cached.sort,
+				boardStyle,
+				entries: cached.entries,
+				selectedPosition: resolvedView.selectedPosition,
+			};
+		}
+	}
+
+	const response = await fetch("/api/board?" + cacheKey);
 	if (!response.ok) {
 		throw error(response.status, "Failed to load board");
 	}
@@ -88,9 +113,14 @@ export const load = async ({
 		entries: BoardEntryPayload[];
 	};
 
+	if (browser) {
+		boardCache.set(cacheKey, { entries: payload.entries, view: payload.view, sort: payload.sort });
+	}
+
 	return {
 		boardView: payload.view,
 		boardSort: payload.sort,
+		boardStyle,
 		entries: payload.entries,
 		selectedPosition: resolvedView.selectedPosition,
 	};

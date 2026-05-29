@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Split-Flap Animation Approaches</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --cell-bg: #14162a;
+  --cell-text: #dde4f8;
+  --cell-edge: rgba(80,100,180,0.35);
+  --board-bg: #0b0d1c;
+  --chrome-bg: #181a32;
+  --chrome-text: #8a94b8;
+  --accent: #4a7fd4;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--board-bg);
+  color: var(--cell-text);
+  font-family: 'JetBrains Mono', monospace;
+  padding: 2rem 2.5rem;
+  min-height: 100vh;
+}
+
+h2 { font-size: 0.9rem; color: #ccd4f8; text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 0.35rem; }
+.subtitle { font-size: 0.7rem; color: var(--chrome-text); margin-bottom: 1.8rem; line-height: 1.5; }
+
+/* ── Controls ── */
+.controls { display: flex; gap: 0.5rem; margin-bottom: 1.8rem; align-items: center; flex-wrap: wrap; }
+.style-btn {
+  padding: 0.35rem 0.85rem;
+  border-radius: 0.3rem; border: 1px solid var(--cell-edge);
+  background: var(--chrome-bg); color: var(--chrome-text);
+  cursor: pointer; font-family: inherit; font-size: 0.65rem;
+  text-transform: uppercase; letter-spacing: 0.08em;
+  transition: all 100ms ease;
+}
+.style-btn.active { background: var(--accent); border-color: var(--accent); color: white; }
+.style-btn:hover:not(.active) { border-color: var(--accent); color: var(--cell-text); }
+
+.play-btn {
+  padding: 0.35rem 1rem; border-radius: 0.3rem;
+  border: 1px solid #3a5fb8; background: #2a4898; color: white;
+  cursor: pointer; font-family: inherit; font-size: 0.65rem;
+  text-transform: uppercase; letter-spacing: 0.08em; margin-left: auto;
+  transition: all 100ms ease;
+}
+.play-btn:hover { background: #3a5fb8; }
+.play-btn:disabled { opacity: 0.4; cursor: default; }
+
+/* ── Board ── */
+.board {
+  background: color-mix(in srgb, #0b0d1c 92%, black);
+  border: 1px solid rgba(70,90,160,0.2);
+  border-radius: 0.5rem;
+  padding: 1rem 1rem 1.2rem;
+  position: relative; overflow: hidden;
+  margin-bottom: 1.5rem;
+}
+.board::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0; height: 3px;
+  background: linear-gradient(90deg, #002d72 0%, #002d72 50%, #c8102e 50%, #c8102e 100%);
+  opacity: 0.75;
+}
+.board-header {
+  display: flex; gap: 5px; align-items: center;
+  padding: 0.45rem 0.1rem 0.45rem;
+  border-bottom: 1px solid rgba(70,90,160,0.12);
+  margin-bottom: 0.6rem;
+  font-size: 0.5rem; color: rgba(138,148,184,0.5);
+  text-transform: uppercase; letter-spacing: 0.06em;
+}
+.board-header span { text-align: left; }
+
+/* ── Split-flap cell ── */
+.sf-row { display: flex; gap: 3px; align-items: center; }
+.sf-group { display: flex; gap: 3px; }
+.sf-group + .sf-group { margin-left: 6px; }
+
+.sf-cell {
+  position: relative;
+  width: 20px; height: 32px;
+  border-radius: 3px;
+  background: var(--cell-bg);
+  box-shadow: inset 0 0 0 1px var(--cell-edge), 0 2px 5px rgba(0,0,0,0.6);
+  flex-shrink: 0;
+  /* per-cell perspective keeps 3D effect contained */
+}
+
+.sf-top-bg, .sf-bot-bg {
+  position: absolute; left: 0; right: 0; height: 16px;
+  overflow: hidden; display: flex; justify-content: center;
+}
+.sf-top-bg {
+  top: 0; align-items: flex-start;
+  background: linear-gradient(to bottom, rgba(255,255,255,0.06) 0%, var(--cell-bg) 100%);
+}
+.sf-bot-bg {
+  bottom: 0; align-items: flex-end;
+  background: linear-gradient(to top, rgba(0,0,0,0.18) 0%, var(--cell-bg) 100%);
+}
+.sf-g {
+  position: absolute; left: 0; top: 0;
+  width: 20px; height: 32px;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700; font-size: 19px; color: var(--cell-text);
+  line-height: 1; will-change: transform;
+}
+/* Bottom halves must offset -16px (half cell height) so the character is
+   centered across the full 32px cell, showing only its bottom portion */
+.sf-bot-bg .sf-g,
+.sf-flap-b .sf-g {
+  top: -16px;
+}
+
+.sf-flap {
+  position: absolute; top: 0; left: 0;
+  width: 100%; height: 16px;
+  transform-origin: bottom center;
+  transform-style: preserve-3d;
+  perspective: 400px;
+  z-index: 5;
+  will-change: transform;
+}
+.sf-flap-f, .sf-flap-b {
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+  overflow: hidden;
+  backface-visibility: hidden; -webkit-backface-visibility: hidden;
+  display: flex; justify-content: center;
+}
+.sf-flap-f {
+  align-items: flex-start;
+  background: linear-gradient(to bottom, rgba(255,255,255,0.06) 0%, var(--cell-bg) 100%);
+}
+.sf-flap-b {
+  align-items: flex-end;
+  transform: rotateX(180deg);
+  background: linear-gradient(to top, rgba(0,0,0,0.18) 0%, var(--cell-bg) 100%);
+}
+
+/* Shadow overlays for light simulation */
+.sf-shadow-f, .sf-shadow-b { position: absolute; inset: 0; pointer-events: none; opacity: 0; }
+.sf-shadow-f { background: linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.55) 100%); }
+.sf-shadow-b { background: linear-gradient(to bottom, rgba(0,0,0,0.55) 0%, transparent 100%); }
+
+.sf-hairline {
+  position: absolute; top: 15.5px; left: 0; right: 0; height: 1px;
+  background: rgba(70,90,160,0.6); z-index: 10;
+}
+
+/* ── Style info card ── */
+.style-info {
+  margin-top: 0.5rem;
+  padding: 0.75rem 0.9rem;
+  background: rgba(35,42,80,0.35);
+  border-radius: 0.4rem;
+  border: 1px solid rgba(70,90,160,0.15);
+  font-size: 0.68rem; color: var(--chrome-text); line-height: 1.6;
+  min-height: 3.5rem;
+}
+.style-info strong {
+  color: var(--cell-text); font-size: 0.75rem;
+  display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.3rem;
+}
+.badge {
+  padding: 0.1rem 0.45rem; border-radius: 1rem; font-size: 0.55rem;
+  font-weight: 400; text-transform: uppercase; letter-spacing: 0.08em;
+  background: rgba(74,127,212,0.18); border: 1px solid rgba(74,127,212,0.4);
+  color: #7ab0ff;
+}
+
+/* ── Option cards ── */
+.options-wrap { display: flex; gap: 1rem; margin-top: 1.8rem; flex-wrap: wrap; }
+.option-card {
+  flex: 1; min-width: 150px; padding: 0.9rem;
+  border-radius: 0.4rem; border: 2px solid rgba(70,90,160,0.2);
+  cursor: pointer; background: rgba(25,28,56,0.5);
+  transition: all 120ms ease;
+}
+.option-card:hover { border-color: var(--accent); background: rgba(35,55,110,0.35); }
+.option-card.selected { border-color: var(--accent); background: rgba(35,55,110,0.5); }
+.opt-letter { font-size: 1rem; font-weight: 700; color: var(--accent); margin-bottom: 0.4rem; }
+.opt-name { font-size: 0.78rem; margin-bottom: 0.25rem; }
+.opt-desc { font-size: 0.63rem; color: var(--chrome-text); line-height: 1.45; margin-bottom: 0.5rem; }
+.pill {
+  display: inline-block; padding: 0.1rem 0.4rem; border-radius: 1rem;
+  background: rgba(70,90,160,0.18); font-size: 0.58rem; color: var(--chrome-text);
+  margin-right: 0.3rem; margin-top: 0.2rem;
+}
+</style>
+</head>
+<body>
+
+<h2>Split-Flap Animation — 3 Approaches</h2>
+<p class="subtitle">
+  Click a style, hit Play, and see how it feels.<br>
+  Animating: <strong>JUDGE, A. / NYY / RF / .323 / 47 / 113</strong> → <strong>SOTO, J. / NYM / LF / .307 / 35 / 97</strong>
+</p>
+
+<div class="controls">
+  <button class="style-btn" id="btnA" onclick="selectStyle('A')">A — Cascade</button>
+  <button class="style-btn" id="btnB" onclick="selectStyle('B')">B — Organic</button>
+  <button class="style-btn" id="btnC" onclick="selectStyle('C')">C — Theatrical</button>
+  <button class="play-btn" id="playBtn" onclick="play()">▶ Play</button>
+</div>
+
+<div class="board">
+  <div class="board-header">
+    <span style="width:38px">RK</span>
+    <span style="width:172px;margin-left:5px">PLAYER</span>
+    <span style="width:58px">TEAM</span>
+    <span style="width:42px">POS</span>
+    <span style="width:64px;text-align:center">AVG</span>
+    <span style="width:44px;text-align:center">HR</span>
+    <span style="width:52px;text-align:center">RBI</span>
+  </div>
+  <div class="sf-row" id="mainRow"></div>
+</div>
+
+<div class="style-info" id="styleInfo">
+  <strong>Select a style above to see details.</strong>
+</div>
+
+<div class="options-wrap">
+  <div class="option-card" id="optA" onclick="selectAndVote('A')">
+    <div class="opt-letter">A</div>
+    <div class="opt-name">Left-to-Right Cascade</div>
+    <div class="opt-desc">Cells flip sequentially, left to right. Clean waterfall effect — each column of information arrives in order.</div>
+    <span class="pill">45ms stagger</span><span class="pill">120ms flip</span>
+  </div>
+  <div class="option-card" id="optB" onclick="selectAndVote('B')">
+    <div class="opt-letter">B</div>
+    <div class="opt-name">Organic Mechanical <span class="badge">My rec</span></div>
+    <div class="opt-desc">Random per-cell delay (0–80ms) simulates mechanical imprecision. Cells hunt to their target — feels like a real Solari board.</div>
+    <span class="pill">random 0–80ms</span><span class="pill">95ms flip</span>
+  </div>
+  <div class="option-card" id="optC" onclick="selectAndVote('C')">
+    <div class="opt-letter">C</div>
+    <div class="opt-name">Theatrical</div>
+    <div class="opt-desc">Slow, deliberate cascade. Every flip is fully visible. Dramatic reveal — best for big navigation transitions.</div>
+    <span class="pill">75ms stagger</span><span class="pill">190ms flip</span>
+  </div>
+</div>
+
+<script>
+const GLYPHS = ' ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-+%';
+
+const STYLES = {
+  A: {
+    stagger: (i) => i * 45,
+    flipDuration: 120,
+    intermediates: 2,
+    name: 'Left-to-Right Cascade',
+    desc: '45ms stagger between each cell (L→R), 120ms per flip, 2 intermediate characters. The eye naturally tracks left to right as each column of information arrives.'
+  },
+  B: {
+    stagger: () => Math.random() * 80,
+    flipDuration: 95,
+    intermediates: 2,
+    name: 'Organic Mechanical',
+    desc: 'Random 0–80ms delay per cell (simulates mechanical imprecision), 95ms per flip. Cells settle at slightly different times — closest to a real Solari/Pragotron board.',
+    badge: true
+  },
+  C: {
+    stagger: (i) => i * 75,
+    flipDuration: 190,
+    intermediates: 3,
+    name: 'Theatrical',
+    desc: '75ms stagger, 190ms per flip — slow enough to see every flip clearly. Cinematic feel. Can feel slow for frequent navigation but makes a strong impression.'
+  }
+};
+
+// Row data: [chars in each group]
+const GROUPS_FROM = [
+  [' ','1'],
+  ['J','U','D','G','E',',',' ','A','.',' ',' ',' ',' ',' ',' ',' ',' ',' '],
+  ['N','Y','Y'],
+  ['R','F'],
+  [' ','.','3','2','3'],
+  [' ',' ','4','7'],
+  [' ','1','1','3']
+];
+const GROUPS_TO = [
+  [' ','2'],
+  ['S','O','T','O',',',' ','J','.',' ',' ',' ',' ',' ',' ',' ',' ',' ',' '],
+  ['N','Y','M'],
+  ['L','F'],
+  [' ','.','3','0','7'],
+  [' ',' ','3','5'],
+  [' ',' ','9','7']
+];
+
+let cells = []; // [{el, from, to}]
+let currentDir = 1; // 1 = playing from→to, -1 = to→from
+let activeStyle = 'B';
+
+// ── Build row ──
+function buildRow() {
+  const row = document.getElementById('mainRow');
+  row.innerHTML = '';
+  cells = [];
+
+  GROUPS_FROM.forEach((group, gi) => {
+    const grpEl = document.createElement('div');
+    grpEl.className = 'sf-group';
+    group.forEach((char, ci) => {
+      const toChar = GROUPS_TO[gi][ci] ?? ' ';
+      const cell = makeCell(char);
+      cells.push({ el: cell, from: char, to: toChar, current: char });
+      grpEl.appendChild(cell);
+    });
+    row.appendChild(grpEl);
+  });
+}
+
+function makeCell(char) {
+  const el = document.createElement('div');
+  el.className = 'sf-cell';
+  el.innerHTML = `
+    <div class="sf-top-bg"><div class="sf-g">${esc(char)}</div></div>
+    <div class="sf-bot-bg"><div class="sf-g">${esc(char)}</div></div>
+    <div class="sf-flap">
+      <div class="sf-flap-f">
+        <div class="sf-g">${esc(char)}</div>
+        <div class="sf-shadow-f"></div>
+      </div>
+      <div class="sf-flap-b">
+        <div class="sf-g">${esc(char)}</div>
+        <div class="sf-shadow-b"></div>
+      </div>
+    </div>
+    <div class="sf-hairline"></div>
+  `;
+  return el;
+}
+
+function esc(c) { return c === ' ' ? '&nbsp;' : c === '<' ? '&lt;' : c === '&' ? '&amp;' : c; }
+
+// ── Intermediates ──
+function getIntermediates(from, to, count) {
+  const n = GLYPHS.length;
+  const fi = Math.max(0, GLYPHS.indexOf(from));
+  const ti = Math.max(0, GLYPHS.indexOf(to));
+  if (fi === ti) return [];
+  const fwd = (ti - fi + n) % n;
+  const bwd = n - fwd;
+  const dir = fwd <= bwd ? 1 : -1;
+  const dist = Math.min(fwd, bwd);
+  const steps = Math.min(count, dist - 1);
+  if (steps <= 0) return [];
+  const result = [];
+  for (let i = 1; i <= steps; i++) {
+    const offset = Math.round(dist * i / (steps + 1));
+    result.push(GLYPHS[((fi + dir * offset) % n + n) % n]);
+  }
+  return result;
+}
+
+// ── Flip a single cell through a chain of characters ──
+function flipCellChain(cell, chain, flipDuration) {
+  let step = 0;
+  const topBg = cell.querySelector('.sf-top-bg .sf-g');
+  const botBg = cell.querySelector('.sf-bot-bg .sf-g');
+  const flapFront = cell.querySelector('.sf-flap-f .sf-g');
+  const flapBack = cell.querySelector('.sf-flap-b .sf-g');
+  const flapEl = cell.querySelector('.sf-flap');
+  const shadowF = cell.querySelector('.sf-shadow-f');
+  const shadowB = cell.querySelector('.sf-shadow-b');
+
+  function doStep() {
+    if (step >= chain.length - 1) return;
+    const cur = chain[step];
+    const nxt = chain[step + 1];
+    step++;
+
+    // Set the four slots
+    topBg.innerHTML = esc(nxt);     // new char top (revealed as flap falls)
+    botBg.innerHTML = esc(cur);     // old char bottom (stays until flap covers it)
+    flapFront.innerHTML = esc(cur); // old char top (the falling flap face)
+    flapBack.innerHTML = esc(nxt);  // new char bottom (the underside of the flap)
+
+    // Reset
+    flapEl.style.transition = 'none';
+    flapEl.style.transform = 'rotateX(0deg)';
+    shadowF.style.transition = 'none'; shadowF.style.opacity = '0';
+    shadowB.style.transition = 'none'; shadowB.style.opacity = '0';
+    void flapEl.offsetWidth;
+
+    // Animate flap fall
+    flapEl.style.transition = `transform ${flipDuration}ms cubic-bezier(0.4, 0, 0.95, 1)`;
+    flapEl.style.transform = 'rotateX(-180deg)';
+    // Lighting: shadow grows on flap front (getting darker as it faces away), appears on bottom as flap comes in
+    shadowF.style.transition = `opacity ${flipDuration * 0.55}ms linear`;
+    shadowF.style.opacity = '0.7';
+    shadowB.style.transition = `opacity ${flipDuration * 0.45}ms ${flipDuration * 0.55}ms linear`;
+    shadowB.style.opacity = '0.7';
+
+    setTimeout(() => {
+      // Settle: update bot bg, fade shadows
+      botBg.innerHTML = esc(nxt);
+      shadowF.style.transition = `opacity ${flipDuration * 0.2}ms ease`;
+      shadowF.style.opacity = '0';
+      shadowB.style.transition = `opacity ${flipDuration * 0.2}ms ease`;
+      shadowB.style.opacity = '0';
+      doStep(); // chain next flip
+    }, flipDuration + 12);
+  }
+
+  doStep();
+}
+
+// ── Play animation ──
+let playing = false;
+function play() {
+  if (playing) return;
+  playing = true;
+  document.getElementById('playBtn').disabled = true;
+  document.getElementById('playBtn').textContent = '◼ Playing...';
+
+  const style = STYLES[activeStyle];
+  let maxDelay = 0;
+
+  cells.forEach((c, i) => {
+    const fromChar = currentDir === 1 ? c.from : c.to;
+    const toChar   = currentDir === 1 ? c.to   : c.from;
+    if (fromChar === toChar) return;
+
+    const inter = getIntermediates(fromChar, toChar, style.intermediates);
+    const chain = [fromChar, ...inter, toChar];
+    const delay = Math.round(style.stagger(i));
+    const totalTime = delay + chain.length * (style.flipDuration + 15);
+    if (totalTime > maxDelay) maxDelay = totalTime;
+
+    setTimeout(() => flipCellChain(c.el, chain, style.flipDuration), delay);
+  });
+
+  // Re-enable after animation + buffer
+  setTimeout(() => {
+    currentDir *= -1;
+    playing = false;
+    document.getElementById('playBtn').disabled = false;
+    document.getElementById('playBtn').textContent = currentDir === 1 ? '▶ Play' : '↩ Reverse';
+  }, maxDelay + 250);
+}
+
+// ── Style selection ──
+function selectStyle(key) {
+  activeStyle = key;
+  ['A','B','C'].forEach(k => {
+    document.getElementById('btn'+k).classList.toggle('active', k === key);
+    document.getElementById('opt'+k).classList.toggle('selected', k === key);
+  });
+  const s = STYLES[key];
+  const badge = s.badge ? ` <span class="badge">My recommendation</span>` : '';
+  document.getElementById('styleInfo').innerHTML =
+    `<strong>${s.name}${badge}</strong>${s.desc}`;
+}
+
+function selectAndVote(key) {
+  selectStyle(key);
+  if (window.recordChoice) window.recordChoice(key.toLowerCase(), key + ' — ' + STYLES[key].name);
+  // Auto-play to show the effect
+  setTimeout(play, 150);
+}
+
+// Init
+buildRow();
+selectStyle('B');
+</script>
+</body>
+</html>

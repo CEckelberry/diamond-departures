@@ -10,7 +10,7 @@ test.describe('freeze test', () => {
 		for (const label of views) {
 			console.log('Clicking ' + label + '...');
 			const btn = page.locator('button').filter({ hasText: new RegExp('^' + label + '$', 'i') }).first();
-			await btn.click();
+			await btn.click({ timeout: 10000 });
 			
 			// Wait for data change
 			await page.waitForTimeout(1000);

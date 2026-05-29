@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
+	import { goto, preloadData } from '$app/navigation';
 	import { page } from "$app/stores";
 	import { onMount, untrack } from "svelte";
 
@@ -24,6 +24,21 @@
 			keepFocus: true,
 			noScroll: true
 		});
+	}
+
+	function preloadView(next: ViewKey) {
+		const params = new URLSearchParams($page.url.searchParams);
+		params.set('view', next);
+		if (next !== 'positions') params.delete('position');
+		params.delete('sort');
+		void preloadData(`${$page.url.pathname}?${params.toString()}`);
+	}
+
+	function preloadStyle(next: StyleKey) {
+		const params = new URLSearchParams($page.url.searchParams);
+		params.set('style', next);
+		params.delete('sort');
+		void preloadData(`${$page.url.pathname}?${params.toString()}`);
 	}
 
 	function chooseView(next: ViewKey) {
@@ -74,9 +89,9 @@
 
 <div class="controls-wrapper">
 	<div class="view-tabs" role="tablist" aria-label="Leaderboard views">
-		<button class:active={currentView === "hitters"} role="tab" onclick={() => chooseView("hitters")}>Hitters</button>
-		<button class:active={currentView === "pitchers"} role="tab" onclick={() => chooseView("pitchers")}>Pitchers</button>
-		<button class:active={currentView === "defense"} role="tab" onclick={() => chooseView("defense")}>Defense</button>
+		<button class:active={currentView === "hitters"} role="tab" onmouseenter={() => preloadView("hitters")} onclick={() => chooseView("hitters")}>Hitters</button>
+		<button class:active={currentView === "pitchers"} role="tab" onmouseenter={() => preloadView("pitchers")} onclick={() => chooseView("pitchers")}>Pitchers</button>
+		<button class:active={currentView === "defense"} role="tab" onmouseenter={() => preloadView("defense")} onclick={() => chooseView("defense")}>Defense</button>
 
 		<div class="positions" bind:this={dropdownRoot}>
 			<button class:active={currentView === "positions" || currentPosition !== "all"} role="tab" onclick={toggleDropdown}>
@@ -97,8 +112,8 @@
 	<div class="sep"></div>
 
 	<div class="style-tabs" role="tablist" aria-label="Stat styles">
-		<button class:active={currentStyle === "sabermetric"} role="tab" onclick={() => chooseStyle("sabermetric")}>Saber</button>
-		<button class:active={currentStyle === "traditional"} role="tab" onclick={() => chooseStyle("traditional")}>Traditional</button>
+		<button class:active={currentStyle === "sabermetric"} role="tab" onmouseenter={() => preloadStyle("sabermetric")} onclick={() => chooseStyle("sabermetric")}>Saber</button>
+		<button class:active={currentStyle === "traditional"} role="tab" onmouseenter={() => preloadStyle("traditional")} onclick={() => chooseStyle("traditional")}>Traditional</button>
 	</div>
 </div>
 

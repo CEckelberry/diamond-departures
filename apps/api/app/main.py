@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, BackgroundTasks
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from .board import (
@@ -31,7 +31,7 @@ from .status import (
     in_memory_freshness_reader,
     in_memory_season_state_reader,
 )
-from .store import postgres_health_check, postgres_board_reader
+from .store import postgres_health_check, postgres_board_reader, postgres_player_detail_reader, postgres_player_history_reader
 
 
 def create_app(
@@ -57,8 +57,8 @@ def create_app(
     board_loader = board_reader or postgres_board_reader(resolved_settings.database_url)
     
     hub = sse_hub or BoardSSEHub(heartbeat_seconds=sse_heartbeat_seconds)
-    detail_loader = player_detail_reader or in_memory_player_detail_reader
-    history_loader = player_history_reader or in_memory_player_history_reader
+    detail_loader = player_detail_reader or postgres_player_detail_reader(resolved_settings.database_url)
+    history_loader = player_history_reader or postgres_player_history_reader(resolved_settings.database_url)
     season_state_loader = season_state_reader or in_memory_season_state_reader
     freshness_loader = freshness_reader or in_memory_freshness_reader
     app.state.sse_hub = hub
@@ -188,4 +188,61 @@ def _entries_from_rows(rows: list[dict[str, object]]) -> list[dict[str, object]]
 
     return entries
 
+
 app = create_app()
+
+import asyncio
+import random
+from datetime import datetime, timezone
+
+async def simulation_loop():
+    """Background task to nudge stats and trigger flips."""
+    hub = app.state.sse_hub
+    settings = app.state.settings
+    
+    while True:
+        await asyncio.sleep(8) # Flip every 8 seconds
+        
+        # Identify active connections to simulate relevant views
+        active_keys = []
+        with hub._lock:
+            active_keys = list(hub._connections.keys())
+            
+        if not active_keys:
+            continue
+            
+        
+        for view, sort in active_keys:
+            # 1. Get current rows for this view
+            from .store import postgres_board_reader
+            reader = postgres_board_reader(settings.database_url)
+            rows = reader(view, sort)
+            if not rows:
+                continue
+                
+            # 2. Pick a random player to nudge
+            idx = random.randint(0, min(10, len(rows)-1))
+            player = rows[idx]
+            
+            # 3. Nudge the value (very slight change)
+            old_val = float(player['stat_value'])
+            is_reverse = sort in ['ERA', 'FIP', 'WHIP', 'E']
+            change = random.uniform(0.01, 0.05) if sort not in ['wRC+', 'HR', 'RBI', 'K', 'W', 'SB', 'OAA', 'E', 'PO', 'A', 'DP', 'Def', 'UZR'] else float(random.randint(1, 2))
+            
+            if random.random() > 0.5:
+                new_val = old_val + change
+            else:
+                new_val = old_val - change
+                
+            player['stat_value'] = new_val
+            player['refreshed_at'] = datetime.now(timezone.utc).isoformat()
+            
+            # 4. Publish the update
+            entries = _entries_from_rows(rows)
+            hub.publish_snapshot(view, sort, entries)
+
+
+@app.on_event("startup")
+async def start_simulation():
+    asyncio.create_task(simulation_loop())
+

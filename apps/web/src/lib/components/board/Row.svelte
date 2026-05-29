@@ -70,16 +70,18 @@
 	</div>
 	<div class="cell"><Word value={row.team} width={3} cellWidth={16} cellHeight={26} {rowIndex} baseColIndex={21} /></div>
 	<div class="cell"><Word value={row.position} width={2} cellWidth={16} cellHeight={26} {rowIndex} baseColIndex={24} /></div>
-	{#each statCols as statName, colIdx}
-		<div class="cell stat" class:stat-active={statName === sort}>
-			<Word
-				value={formatStat(statName, row.stats[statName])}
-				width={statWordWidth(statName)} cellWidth={16} cellHeight={26}
-				{rowIndex}
-				baseColIndex={26 + colIdx * 5}
-			/>
-		</div>
-	{/each}
+	{#key sort}
+		{#each statCols as statName, colIdx}
+			<div class="cell stat" class:stat-active={statName === sort}>
+				<Word
+					value={formatStat(statName, row.stats[statName])}
+					width={statWordWidth(statName)} cellWidth={16} cellHeight={26}
+					{rowIndex}
+					baseColIndex={26 + colIdx * 5}
+				/>
+			</div>
+		{/each}
+	{/key}
 </div>
 
 <style>

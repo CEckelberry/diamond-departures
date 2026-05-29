@@ -7,6 +7,8 @@ from typing import Any
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
+from .players import PlayerDetailReader, PlayerHistoryReader
+
 
 def postgres_health_check(database_url: str) -> Callable[[], bool]:
     def _health() -> bool:
@@ -52,5 +54,71 @@ def postgres_board_reader(database_url: str) -> Callable[[str, str], list[dict[s
         except Exception as e:
             logging.getLogger("apps.api.store").error("failed to read board: %s", e)
             return []
+
+    return _read
+
+
+def postgres_player_detail_reader(database_url: str) -> PlayerDetailReader:
+    def _read(player_id: int) -> dict[str, Any] | None:
+        try:
+            with psycopg2.connect(database_url) as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute("""
+                        SELECT p.id, p.full_name, p.short_name, p.primary_pos, p.headshot_url,
+                               t.abbr as team_abbr
+                        FROM players p
+                        JOIN teams t ON p.team_id = t.id
+                        WHERE p.id = %s
+                    """, (player_id,))
+                    row = cur.fetchone()
+                    if row is None:
+                        return None
+
+                    cur.execute("""
+                        SELECT stat_name, stat_value
+                        FROM player_stats
+                        WHERE player_id = %s AND valid_to IS NULL
+                    """, (player_id,))
+                    stats = {r["stat_name"]: float(r["stat_value"]) for r in cur.fetchall()}
+
+            return {
+                "player": {
+                    "id": row["id"],
+                    "name": row["full_name"],
+                    "team_abbr": row["team_abbr"],
+                    "headshot_url": row["headshot_url"] or "",
+                    "position": row["primary_pos"] or "",
+                },
+                "season_totals": stats,
+                "stat_line": stats,
+                "recent_games": [],
+            }
+        except Exception as e:
+            logging.getLogger("apps.api.store").error("failed to read player detail %s: %s", player_id, e)
+            return None
+
+    return _read
+
+
+def postgres_player_history_reader(database_url: str) -> PlayerHistoryReader:
+    def _read(player_id: int, stat: str) -> list[dict[str, Any]] | None:
+        try:
+            with psycopg2.connect(database_url) as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute("SELECT 1 FROM players WHERE id = %s", (player_id,))
+                    if cur.fetchone() is None:
+                        return None
+
+                    cur.execute("""
+                        SELECT valid_from as timestamp, stat_value as value
+                        FROM player_stats
+                        WHERE player_id = %s AND stat_name = %s
+                        ORDER BY valid_from ASC
+                    """, (player_id, stat))
+                    return [{"timestamp": str(r["timestamp"]), "value": float(r["value"])}
+                            for r in cur.fetchall()]
+        except Exception as e:
+            logging.getLogger("apps.api.store").error("failed to read player history %s/%s: %s", player_id, stat, e)
+            return None
 
     return _read

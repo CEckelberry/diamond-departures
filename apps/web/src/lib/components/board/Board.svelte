@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { flip } from 'svelte/animate';
 	import { cubicOut } from 'svelte/easing';
-	import { goto } from '$app/navigation';
+	import { goto, preloadData } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { playRowShift } from '$lib/audio/flap';
 	import Row from './Row.svelte';
@@ -99,11 +99,20 @@
 		'ERA', 'FIP', 'WHIP', 'W', 'L', 'SV', 'K', 'K/9', 'BB/9', 'K-BB%'
 	]);
 
-	function handleColClick(stat: string) {
-		if (!SORTABLE_STATS.has(stat)) return;
+	function sortUrl(stat: string): string {
 		const url = new URL($page.url);
 		url.searchParams.set('sort', stat);
-		goto(url.toString());
+		return url.toString();
+	}
+
+	function handleColClick(stat: string) {
+		if (!SORTABLE_STATS.has(stat)) return;
+		goto(sortUrl(stat));
+	}
+
+	function handleColHover(stat: string) {
+		if (!SORTABLE_STATS.has(stat) || stat === sort) return;
+		preloadData(sortUrl(stat));
 	}
 </script>
 
@@ -124,6 +133,7 @@
 				class:stat-head={col === sort}
 				class:sortable={SORTABLE_STATS.has(col)}
 				onclick={() => handleColClick(col)}
+				onmouseenter={() => handleColHover(col)}
 				role={SORTABLE_STATS.has(col) ? 'button' : undefined}
 				tabindex={SORTABLE_STATS.has(col) ? 0 : undefined}
 				onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter') handleColClick(col); }}

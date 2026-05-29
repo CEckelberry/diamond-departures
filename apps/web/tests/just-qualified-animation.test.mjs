@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const storePath = new URL("../src/lib/stores/board.ts", import.meta.url);
+const storePath = new URL("../src/lib/stores/board.svelte.ts", import.meta.url);
 const typesPath = new URL(
 	"../src/lib/components/board/types.ts",
 	import.meta.url,

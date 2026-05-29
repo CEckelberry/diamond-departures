@@ -15,6 +15,7 @@
 		data: {
 			boardView: string;
 			boardSort: string;
+			boardStyle: string;
 			entries: BoardEntry[];
 			selectedPosition: string;
 		}
@@ -37,22 +38,53 @@
 		return rows.filter((row) => row.position === selectedPosition);
 	})());
 
+	// statCols in Board.svelte reacts to view/style URL params immediately, but
+	// liveEntries waits for the server fetch. Without this guard, cells animate
+	// through the wrong-data window between URL change and data arrival.
+	// Compare against previous values so sort-column clicks (which also trigger
+	// $page to update) don't incorrectly set snap.
+	let prevPageView = $page.url.searchParams.get('view') ?? 'hitters';
+	let prevPageStyle = $page.url.searchParams.get('style') ?? 'sabermetric';
+	$effect(() => {
+		const v = $page.url.searchParams.get('view') ?? 'hitters';
+		const s = $page.url.searchParams.get('style') ?? 'sabermetric';
+		if (anim.firstLoadDone && (v !== prevPageView || s !== prevPageStyle)) {
+			anim.snap = true;
+		}
+		prevPageView = v;
+		prevPageStyle = s;
+	});
+
 	// Seed live entries when load data changes (tab/sort switches).
 	// First load: let intro animation play, then mark firstLoadDone so all future
 	// cell mounts snap immediately (view switches). anim.snap handles the case
 	// where cells stay mounted but all values change at once (sort switches).
 	let isFirstDataLoad = true;
+	let prevBoardView = data.boardView;
+	let prevBoardStyle = data.boardStyle;
 	$effect(() => {
 		const entries = data.entries;
+		const currentView = data.boardView;
+		const currentStyle = data.boardStyle;
 		if (isFirstDataLoad) {
 			isFirstDataLoad = false;
 			liveEntries = [...entries];
 			tick().then(() => { anim.firstLoadDone = true; });
 		} else {
-			anim.snap = true;
-			liveEntries = [...entries];
-			tick().then(() => { anim.snap = false; });
+			const isSortOnly = currentView === prevBoardView && currentStyle === prevBoardStyle;
+			if (isSortOnly) {
+				// Sort column changed: clear any stale snap and let theatrical stagger play
+				anim.snap = false;
+				liveEntries = [...entries];
+			} else {
+				// View/style switch: snap all cells to avoid animating wrong-column data
+				anim.snap = true;
+				liveEntries = [...entries];
+				tick().then(() => { anim.snap = false; });
+			}
 		}
+		prevBoardView = currentView;
+		prevBoardStyle = currentStyle;
 	});
 
 	onMount(() => {
@@ -110,7 +142,7 @@
 	</div>
 
 	<div class="board-layout">
-		<Board rows={filteredRows} {view} {style} sort={data.boardSort} onselect={(id) => { selectedPlayerId = id; }} />
+		<Board rows={filteredRows} view={data.boardView} style={data.boardStyle} sort={data.boardSort} onselect={(id) => { selectedPlayerId = id; }} />
 		{#if selectedPlayerId !== null}
 			<Panel selectedPlayerId={selectedPlayerId} onclose={closePanel} />
 		{/if}

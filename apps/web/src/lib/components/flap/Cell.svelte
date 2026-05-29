@@ -8,14 +8,15 @@
 	let { value, width = 28, height = 36, onFlip = () => {}, staggerIndex = 0, colIndex = 0, rowIndex = 0 } = $props();
 
 	const targetGlyph = $derived(normalizeGlyph(value));
-	let currentGlyph = $state(" ");
-	let nextGlyph = $state(" ");
+	// Initialize to the real value so the board is never blank on first paint.
+	let currentGlyph = $state(normalizeGlyph(value));
+	let nextGlyph = $state(normalizeGlyph(value));
 	let isFlipping = $state(false);
 
 	const timingSkew = 0.88 + (Math.random() * 0.24);
 	const flipDuration = $derived(
 		($einkStore === 'aesthetic' ? 350 :
-		 $einkStore === 'faithful' ? 1 : 190) * timingSkew
+		 $einkStore === 'faithful' ? 1 : 290) * timingSkew
 	);
 	const halfHeight = Math.floor(height / 2);
 
@@ -42,35 +43,24 @@
 
 	onMount(() => {
 		if (targetGlyph === " ") return () => { disposed = true; };
+		if (anim.snap) return () => { disposed = true; };
 
-		// Snap immediately on view/sort switches so nothing animates during navigation.
-		if (anim.snap) {
-			currentGlyph = targetGlyph;
-			nextGlyph = targetGlyph;
-			return () => { disposed = true; };
-		}
+		// Board loads fully populated — 80% of cells are already showing the right value.
+		// 20% do a single settle flip at a random time within 2s for a "live board" feel.
+		if (Math.random() >= 0.20) return () => { disposed = true; };
 
-		// Board loads fully populated — no blank-to-full cascade.
-		// 80% of cells snap to their real value on the first frame.
-		// 20% start one glyph off and flip into place at a random time within 2s,
-		// giving the "some characters just settled" feel of a live departure board.
-		// Random timing means concurrent flips stay well under the ~364-cell GPU budget.
-		if (Math.random() >= 0.20) {
-			currentGlyph = targetGlyph;
-			nextGlyph = targetGlyph;
-			return () => { disposed = true; };
-		}
-
-		const targetIdx = GLYPHS.indexOf(targetGlyph);
-		const startIdx = (targetIdx - 1 + GLYPHS.length) % GLYPHS.length;
-		currentGlyph = GLYPHS[startIdx];
-		nextGlyph = GLYPHS[startIdx];
-
+		// Initial page load: scatter over 2s. Sort-triggered remount: fast row stagger.
+		const delay = anim.firstLoadDone
+			? rowIndex * 40 + Math.random() * 150
+			: Math.random() * 2000;
 		introTimer = setTimeout(() => {
-			if (disposed || anim.snap) { currentGlyph = targetGlyph; nextGlyph = targetGlyph; return; }
+			if (disposed || anim.snap) return;
+			const targetIdx = GLYPHS.indexOf(targetGlyph);
+			const startIdx = (targetIdx - 1 + GLYPHS.length) % GLYPHS.length;
+			currentGlyph = GLYPHS[startIdx];
 			queue.push(targetGlyph);
 			scheduleNextFlip();
-		}, Math.random() * 2000);
+		}, delay);
 
 		return () => {
 			disposed = true;
