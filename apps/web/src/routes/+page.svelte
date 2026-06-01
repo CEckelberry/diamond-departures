@@ -5,6 +5,7 @@
 	import PageTitle from '$lib/components/board/PageTitle.svelte';
 	import ViewTabs from '$lib/components/board/ViewTabs.svelte';
 	import StatPicker from '$lib/components/board/StatPicker.svelte';
+	import SeasonPicker from '$lib/components/board/SeasonPicker.svelte';
 	import Board from '$lib/components/board/Board.svelte';
 	import Panel from '$lib/components/player/Panel.svelte';
 	import SEO from '$lib/components/shell/SEO.svelte';
@@ -103,6 +104,10 @@
 		streamView = data.boardView;
 		streamSort = data.boardSort;
 
+		const selectedSeason = $page.url.searchParams.get('season');
+		const isCurrentSeason = !selectedSeason || parseInt(selectedSeason) === new Date().getFullYear();
+		if (!isCurrentSeason) return;
+
 		const idleMode = seasonMode !== 'off-season' && seasonMode !== 'live';
 
 		const stop = openBoardStream(
@@ -164,6 +169,7 @@
 		<div class="controls">
 			<ViewTabs />
 			<StatPicker {view} style={data.boardStyle} />
+			<SeasonPicker />
 		</div>
 	</div>
 

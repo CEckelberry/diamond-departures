@@ -18,7 +18,7 @@ export type BoardEntryPayload = {
 	};
 };
 
-type CachedBoard = { entries: BoardEntryPayload[]; view: string; sort: string };
+type CachedBoard = { entries: BoardEntryPayload[]; view: string; sort: string; season: number };
 const boardCache = new Map<string, CachedBoard>();
 
 const VALID_SORTS = new Set([
@@ -85,6 +85,9 @@ export const load = async ({
 	params.set("view", resolvedView.apiView);
 	params.set("sort", resolveSort(url.searchParams, resolvedView.apiView));
 
+	const season = url.searchParams.get('season');
+	if (season) params.set('season', season);
+
 	const cacheKey = params.toString();
 	const boardStyle = url.searchParams.get('style') ?? 'sabermetric';
 
@@ -94,12 +97,13 @@ export const load = async ({
 			// Return cached data immediately, revalidate silently in background.
 			fetch("/api/board?" + cacheKey)
 				.then((r) => r.json())
-				.then((p) => { boardCache.set(cacheKey, { entries: p.entries, view: p.view, sort: p.sort }); })
+				.then((p) => { boardCache.set(cacheKey, { entries: p.entries, view: p.view, sort: p.sort, season: (p as any).season ?? new Date().getFullYear() }); })
 				.catch(() => {});
 			return {
 				boardView: cached.view,
 				boardSort: cached.sort,
 				boardStyle,
+				boardSeason: cached.season ?? new Date().getFullYear(),
 				entries: cached.entries,
 				selectedPosition: resolvedView.selectedPosition,
 			};
@@ -118,13 +122,14 @@ export const load = async ({
 	};
 
 	if (browser) {
-		boardCache.set(cacheKey, { entries: payload.entries, view: payload.view, sort: payload.sort });
+		boardCache.set(cacheKey, { entries: payload.entries, view: payload.view, sort: payload.sort, season: (payload as any).season ?? new Date().getFullYear() });
 	}
 
 	return {
 		boardView: payload.view,
 		boardSort: payload.sort,
 		boardStyle,
+		boardSeason: (payload as any).season ?? new Date().getFullYear(),
 		entries: payload.entries,
 		selectedPosition: resolvedView.selectedPosition,
 	};
