@@ -10,9 +10,13 @@ VALID_SORTS = {
     "ERA", "FIP", "K%", "WHIP", "W", "SV", "K", "K-BB%", "K/9", "BB/9", "xFIP",
     "OAA", "UZR", "Fielding %", "Def", "E",
     "wOBA", "ISO", "BABIP", "BB%",
+    # Statcast
+    "xBA", "barrel_pct", "hard_hit_pct", "exit_velocity",
+    # Traditional extras
+    "OBP",
 }
 
-BoardReader = Callable[[str, str], list[dict[str, Any]]]
+BoardReader = Callable[[str, str, int], list[dict[str, Any]]]
 
 
 def age_category(refreshed_at: datetime, now: datetime | None = None) -> str:
@@ -34,6 +38,6 @@ def parse_refreshed_at(raw: str) -> datetime:
     return parsed
 
 
-def in_memory_board_reader(view: str, sort: str) -> list[dict[str, Any]]:
-    del view, sort
+def in_memory_board_reader(view: str, sort: str, season: int = 2026) -> list[dict[str, Any]]:
+    del view, sort, season
     return []

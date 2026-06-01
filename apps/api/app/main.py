@@ -83,7 +83,7 @@ def create_app(
         sort: str = Query(...),
     ) -> JSONResponse:
         _validate_view_sort(view, sort)
-        rows = board_loader(view, sort)[:100]
+        rows = board_loader(view, sort, resolved_settings.current_season)[:100]
         return JSONResponse(
             content={
                 "view": view,
@@ -98,7 +98,7 @@ def create_app(
         sort: str = Query(...),
     ) -> StreamingResponse:
         _validate_view_sort(view, sort)
-        rows = board_loader(view, sort)[:100]
+        rows = board_loader(view, sort, resolved_settings.current_season)[:100]
 
         return StreamingResponse(
             hub.stream(view, sort, _entries_from_rows(rows)),
@@ -216,7 +216,7 @@ async def simulation_loop():
             # 1. Get current rows for this view
             from .store import postgres_board_reader
             reader = postgres_board_reader(settings.database_url)
-            rows = reader(view, sort)
+            rows = reader(view, sort, settings.current_season)
             if not rows:
                 continue
                 
