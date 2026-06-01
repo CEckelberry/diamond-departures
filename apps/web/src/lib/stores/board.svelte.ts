@@ -13,7 +13,7 @@ class AnimControl {
 	density = $state(1.0);
 
 	adjustForViewport(boardBodyHeight: number, rowHeight: number, cellsPerRow: number) {
-		const BUDGET = 364; // empirical: max simultaneous animated cells at ~60 fps (M3/M4 validated)
+		const BUDGET = 560; // tuned up from 364 (M3/M4) — beast PC handles more simultaneous layers
 		const visibleRows = Math.max(1, Math.floor(boardBodyHeight / rowHeight));
 		this.density = Math.min(1.0, Math.max(0.05, BUDGET / (visibleRows * cellsPerRow)));
 	}

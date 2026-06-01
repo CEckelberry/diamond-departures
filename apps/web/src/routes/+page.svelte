@@ -2,6 +2,7 @@
 	import { onMount, tick } from 'svelte';
 	import { page } from '$app/stores';
 	import Header from '$lib/components/board/Header.svelte';
+	import PageTitle from '$lib/components/board/PageTitle.svelte';
 	import ViewTabs from '$lib/components/board/ViewTabs.svelte';
 	import StatPicker from '$lib/components/board/StatPicker.svelte';
 	import Board from '$lib/components/board/Board.svelte';
@@ -117,6 +118,27 @@
 		return () => { stop(); };
 	});
 
+	let fps = $state(0);
+	const fpsColor = $derived(fps >= 55 ? '#22c55e' : fps >= 30 ? '#f59e0b' : '#ef4444');
+
+	onMount(() => {
+		let frames = 0;
+		let last = performance.now();
+		let raf: number;
+		function loop() {
+			frames++;
+			const now = performance.now();
+			if (now - last >= 500) {
+				fps = Math.round(frames * 1000 / (now - last));
+				frames = 0;
+				last = now;
+			}
+			raf = requestAnimationFrame(loop);
+		}
+		raf = requestAnimationFrame(loop);
+		return () => cancelAnimationFrame(raf);
+	});
+
 	function closePanel() {
 		selectedPlayerId = null;
 	}
@@ -130,14 +152,18 @@
 
 <svelte:window onkeydown={handleKeydown} />
 
+<div class="fps-badge" style="color:{fpsColor}">{fps} <span>fps</span></div>
+
 <SEO title="Diamond Departures · Live Board" description="Live baseball split-flap leaderboard powered by MLB Statcast data." path="/" />
+
+<PageTitle />
 
 <section class="board-screen">
 	<div class="top-bar">
 		<Header />
 		<div class="controls">
 			<ViewTabs />
-			<StatPicker {view} />
+			<StatPicker {view} style={data.boardStyle} />
 		</div>
 	</div>
 
@@ -154,4 +180,19 @@
 	.top-bar { display: grid; gap: 0.5rem; background: color-mix(in oklab, var(--chrome-bg) 40%, transparent); padding: 0.5rem 0.75rem; border-radius: 0.6rem; border: 1px solid color-mix(in oklab, var(--chrome-text) 10%, transparent); }
 	.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; }
 	.board-layout { display: grid; gap: 1rem; grid-template-columns: minmax(0, 1fr); align-items: start; }
+
+	.fps-badge {
+		position: fixed;
+		bottom: 1rem;
+		right: 1rem;
+		font-family: 'JetBrains Mono', monospace;
+		font-size: 0.7rem;
+		font-weight: 700;
+		letter-spacing: .04em;
+		opacity: 0.6;
+		pointer-events: none;
+		z-index: 9999;
+		transition: color 0.4s;
+	}
+	.fps-badge span { font-size: 0.55rem; font-weight: 400; opacity: 0.7; }
 </style>

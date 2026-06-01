@@ -8,57 +8,87 @@
 	let { value, width = 28, height = 36, onFlip = () => {}, staggerIndex = 0, colIndex = 0, rowIndex = 0 } = $props();
 
 	const targetGlyph = $derived(normalizeGlyph(value));
-	// Initialize to the real value so the board is never blank on first paint.
-	let currentGlyph = $state(normalizeGlyph(value));
-	let nextGlyph = $state(normalizeGlyph(value));
-	let isFlipping = $state(false);
-
-	const timingSkew = 0.88 + (Math.random() * 0.24);
-	const flipDuration = $derived(
-		($einkStore === 'aesthetic' ? 350 :
-		 $einkStore === 'faithful' ? 1 : 290) * timingSkew
-	);
 	const halfHeight = Math.floor(height / 2);
+	const timingSkew = 0.88 + (Math.random() * 0.24);
+	// Reactive so eink-mode changes take effect on next flip without remounting
+	const baseDuration = $derived(
+		($einkStore === 'aesthetic' ? 480 :
+		 $einkStore === 'faithful' ? 1 : 400) * timingSkew
+	);
 
-	// Single queue + timer; no CSS animationend dependency (avoids animation-restart batching bug).
+	// Plain JS — no $state, so animation updates never touch Svelte's scheduler
+	let currentChar = normalizeGlyph(value);
 	let queue: string[] = [];
 	let disposed = false;
+	let isFlipping = false;
 	let flipTimer: ReturnType<typeof setTimeout> | null = null;
 	let introTimer: ReturnType<typeof setTimeout> | null = null;
 
+	// DOM refs — animation writes textContent and class directly
+	let cellEl: HTMLDivElement | undefined;
+	let topBgRef: HTMLSpanElement | undefined;
+	let botBgRef: HTMLSpanElement | undefined;
+	let flapFRef: HTMLSpanElement | undefined;
+	let flapBRef: HTMLSpanElement | undefined;
+
+	function snapTo(ch: string) {
+		currentChar = ch;
+		if (!cellEl) return;
+		topBgRef!.textContent = ch;
+		botBgRef!.textContent = ch;
+		flapFRef!.textContent = ch;
+		cellEl.classList.remove('flipping');
+		isFlipping = false;
+	}
+
 	function scheduleNextFlip() {
-		if (disposed || queue.length === 0) { isFlipping = false; return; }
-		nextGlyph = queue.shift()!;
+		if (disposed || !cellEl || queue.length === 0) { isFlipping = false; return; }
+		const next = queue.shift()!;
+		const dur = baseDuration; // reads current $derived value
 		isFlipping = true;
 		onFlip();
 		noteFlapFlip();
+
+		cellEl.style.setProperty('--flip-duration', `${dur}ms`);
+		topBgRef!.textContent = next;
+		flapFRef!.textContent = currentChar;
+		flapBRef!.textContent = next;
+		cellEl.classList.add('flipping');
+
 		flipTimer = setTimeout(() => {
-			currentGlyph = nextGlyph;
-			isFlipping = false; // must go false so Svelte removes .flipping before next flip restarts animation
-			// rAF fires before the next paint — the isFlipping=false DOM change lands first,
-			// then the next flip starts, so no in-between frame is ever painted.
+			if (disposed || !cellEl) return;
+			// Update all faces before removing class so flap snaps to correct char
+			botBgRef!.textContent = next;
+			flapFRef!.textContent = next;
+			cellEl.classList.remove('flipping');
+			currentChar = next;
+			isFlipping = false;
 			requestAnimationFrame(() => { if (!disposed) scheduleNextFlip(); });
-		}, flipDuration);
+		}, dur);
 	}
 
 	onMount(() => {
-		if (targetGlyph === " ") return () => { disposed = true; };
-		if (anim.snap) return () => { disposed = true; };
+		// Seed DOM text with initial value
+		const init = normalizeGlyph(value);
+		topBgRef!.textContent = init;
+		botBgRef!.textContent = init;
+		flapFRef!.textContent = init;
+		flapBRef!.textContent = init;
 
-		// Board loads fully populated — 80% of cells are already showing the right value.
-		// 20% do a single settle flip at a random time within 2s for a "live board" feel.
+		if (init === " " || anim.snap) return () => { disposed = true; };
+
+		// 20% of cells do a settle flip on load for the "live board waking up" feel
 		if (Math.random() >= 0.20) return () => { disposed = true; };
 
-		// Initial page load: scatter over 2s. Sort-triggered remount: fast row stagger.
 		const delay = anim.firstLoadDone
 			? rowIndex * 40 + Math.random() * 150
 			: Math.random() * 2000;
 		introTimer = setTimeout(() => {
 			if (disposed || anim.snap) return;
-			const targetIdx = GLYPHS.indexOf(targetGlyph);
+			const targetIdx = GLYPHS.indexOf(init);
 			const startIdx = (targetIdx - 1 + GLYPHS.length) % GLYPHS.length;
-			currentGlyph = GLYPHS[startIdx];
-			queue.push(targetGlyph);
+			snapTo(GLYPHS[startIdx]);
+			queue.push(init);
 			scheduleNextFlip();
 		}, delay);
 
@@ -69,91 +99,63 @@
 		};
 	});
 
-	// Handle live value changes after initial mount.
 	let mounted = false;
+	let staggerTimer: ReturnType<typeof setTimeout> | null = null;
 	$effect(() => {
-		const target = targetGlyph;
+		const target = targetGlyph; // sole reactive dependency
 		if (!mounted) { mounted = true; return; }
-		let staggerTimer: ReturnType<typeof setTimeout> | null = null;
+
 		untrack(() => {
-			// Navigation swap: skip animation, snap directly.
 			if (anim.snap) {
 				queue.length = 0;
 				if (flipTimer) { clearTimeout(flipTimer); flipTimer = null; }
-				currentGlyph = target;
-				nextGlyph = target;
-				isFlipping = false;
+				snapTo(target);
 				return;
 			}
-			// Theatrical: stagger by row (40ms) then column (75ms) so updates cascade
-			// top-left → bottom-right. Double-check anim.snap inside the callback — a
-			// sort click may fire after the timeout is scheduled but before it fires.
+
+			// Early bail: already at target
+			const tail = queue.length > 0 ? queue[queue.length - 1] : currentChar;
+			if (tail === target) return;
+
+			if (staggerTimer) clearTimeout(staggerTimer);
 			staggerTimer = setTimeout(() => {
 				if (disposed || anim.snap) return;
-				// Density gate: skip animation for a fraction of cells so simultaneous
-				// compositor-layer count stays inside the ~364-cell GPU budget.
-				if (Math.random() >= anim.density) {
-					currentGlyph = target;
-					nextGlyph = target;
-					return;
-				}
-				const tail = queue.length > 0 ? queue[queue.length - 1] : currentGlyph;
-				const startIndex = Math.max(0, GLYPHS.indexOf(tail));
-				const targetIndex = Math.max(0, GLYPHS.indexOf(target));
-				if (startIndex === targetIndex) return;
+				if (Math.random() >= anim.density) { snapTo(target); return; }
+
+				const t2 = queue.length > 0 ? queue[queue.length - 1] : currentChar;
+				const si = Math.max(0, GLYPHS.indexOf(t2));
+				const ti = Math.max(0, GLYPHS.indexOf(target));
+				if (si === ti) return;
 				const n = GLYPHS.length;
-				const fwdDist = (targetIndex - startIndex + n) % n;
-				if (fwdDist <= 3) {
-					// Close: step directly (1–3 flips)
-					let i = (startIndex + 1) % n;
-					while (true) {
-						queue.push(GLYPHS[i]);
-						if (i === targetIndex) break;
-						i = (i + 1) % n;
-					}
+				const dist = (ti - si + n) % n;
+				if (dist <= 3) {
+					let i = (si + 1) % n;
+					while (true) { queue.push(GLYPHS[i]); if (i === ti) break; i = (i + 1) % n; }
 				} else {
-					// Far: 3 evenly-spaced intermediates + target (theatrical)
 					queue.push(
-						GLYPHS[(startIndex + Math.ceil(fwdDist * 0.25)) % n],
-						GLYPHS[(startIndex + Math.ceil(fwdDist * 0.5)) % n],
-						GLYPHS[(startIndex + Math.ceil(fwdDist * 0.75)) % n],
-						GLYPHS[targetIndex],
+						GLYPHS[(si + Math.ceil(dist * 0.33)) % n],
+						GLYPHS[(si + Math.ceil(dist * 0.67)) % n],
+						GLYPHS[ti],
 					);
 				}
 				if (!isFlipping) scheduleNextFlip();
-			}, rowIndex * 40 + colIndex * 75);
+			}, rowIndex * 22 + colIndex * 11);
 		});
-		return () => { if (staggerTimer !== null) clearTimeout(staggerTimer); };
+		return () => { if (staggerTimer !== null) { clearTimeout(staggerTimer); staggerTimer = null; } };
 	});
 </script>
 
 <div
+	bind:this={cellEl}
 	class="cell"
-	class:flipping={isFlipping}
-	style="--cell-width:{width}px;--cell-height:{height}px;--half-height:{halfHeight}px;--flip-duration:{flipDuration}ms;"
-	aria-label={`split-flap-cell-${currentGlyph}`}
+	style="--cell-width:{width}px;--cell-height:{height}px;--half-height:{halfHeight}px;--flip-duration:{baseDuration}ms;"
+	aria-label="split-flap-cell"
 >
-	<!-- Background faces (Static) -->
-	<div class="face top-bg">
-		<span class="glyph">{nextGlyph}</span>
-		<div class="shadow-top"></div>
-	</div>
-	<div class="face bottom-bg">
-		<span class="glyph">{currentGlyph}</span>
-		<div class="shadow-bottom"></div>
-	</div>
-	
-	<!-- Animated flap -->
-	<!-- The flap is always in the DOM but only animates when .flipping is applied -->
+	<div class="face top-bg"><span class="glyph" bind:this={topBgRef}></span></div>
+	<div class="face bottom-bg"><span class="glyph" bind:this={botBgRef}></span></div>
 	<div class="flap">
-		<div class="face flap-front">
-			<span class="glyph">{currentGlyph}</span>
-			<div class="shadow-flap-front"></div>
-		</div>
-		<div class="face flap-back">
-			<span class="glyph">{nextGlyph}</span>
-			<div class="shadow-flap-back"></div>
-		</div>
+		<div class="face flap-front"><span class="glyph" bind:this={flapFRef}></span></div>
+		<div class="face flap-back"><span class="glyph" bind:this={flapBRef}></span></div>
 	</div>
 	
 	<div class="hairline"></div>
@@ -165,13 +167,22 @@
 		display: inline-block;
 		width: var(--cell-width);
 		height: var(--cell-height);
-		border-radius: 4px;
+		border-radius: 3px;
 		background: var(--cell-bg);
-		box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--cell-edge) 60%, transparent), 0 2px 4px rgba(0,0,0,0.5);
+		/* outline instead of box-shadow: avoids CPU repaint on class toggle */
+		outline: 1px solid var(--cell-edge, rgba(255,255,255,0.15));
 		font-family: "JetBrains Mono", monospace;
 		font-weight: 700;
 		color: var(--cell-text);
-		perspective: 400px;
+		/* No perspective at rest — only added via :global(.flipping) to avoid
+		   maintaining 680 composited 3D contexts when nothing is animating */
+		/* contain: layout style isolates reflow from display toggles inside the cell */
+		contain: layout style;
+	}
+
+	/* 3D context only exists while a cell is actually flipping */
+	:global(.flipping) {
+		perspective: calc(var(--cell-height) * 1.8);
 	}
 
 	.face {
@@ -183,7 +194,23 @@
 		display: flex;
 		justify-content: center;
 		background: var(--cell-bg);
-		backface-visibility: hidden;
+		/* No backface-visibility here — these divs are never 3D-transformed */
+	}
+
+	/* Additive gradient overlays — no color-mix(), avoids per-repaint CPU cost */
+	.top-bg::before, .flap-front::before {
+		content: '';
+		position: absolute;
+		inset: 0;
+		background: linear-gradient(to bottom, rgba(255,255,255,0.10) 0%, transparent 100%);
+		pointer-events: none;
+	}
+	.bottom-bg::before, .flap-back::before {
+		content: '';
+		position: absolute;
+		inset: 0;
+		background: linear-gradient(to top, rgba(0,0,0,0.30) 0%, transparent 100%);
+		pointer-events: none;
 	}
 
 	.glyph {
@@ -191,7 +218,6 @@
 		left: 50%;
 		transform: translateX(-50%);
 		height: var(--cell-height);
-		/* Nudge text down slightly so its optical baseline centers on the mechanical seam */
 		top: 1px;
 		font-size: calc(var(--cell-height) * 0.72);
 		line-height: 1;
@@ -200,114 +226,85 @@
 		justify-content: center;
 	}
 
-	.top-bg {
-		top: 0;
-		align-items: flex-start;
-		background: linear-gradient(to bottom, color-mix(in oklab, var(--cell-bg) 85%, white), var(--cell-bg));
-	}
+	.top-bg { top: 0; align-items: flex-start; }
 	.top-bg .glyph { top: 0; bottom: auto; }
 
-	.bottom-bg {
-		bottom: 0;
-		align-items: flex-end;
-		background: linear-gradient(to top, color-mix(in oklab, var(--cell-bg) 88%, black), var(--cell-bg));
-	}
+	.bottom-bg { bottom: 0; align-items: flex-end; }
 	.bottom-bg .glyph { bottom: 0; top: auto; }
 
 	.flap {
 		position: absolute;
-		top: 0;
-		left: 0;
+		top: 0; left: 0;
 		width: 100%;
 		height: var(--half-height);
 		transform-origin: bottom center;
-		transform-style: preserve-3d;
+		/* No transform-style or will-change at rest */
 		z-index: 10;
 	}
 
-	.flipping .flap {
-		/* ease-in mimics gravity on a falling mechanical flap */
-		animation: flip var(--flip-duration) cubic-bezier(0.4, 0, 1, 1) forwards;
-	}
-
-	.flap-front, .flap-back {
-		position: absolute;
-		left: 0;
-		top: 0;
-		width: 100%;
-		height: 100%;
-		backface-visibility: hidden;
+	:global(.flipping) .flap {
+		transform-style: preserve-3d;
+		will-change: transform;
+		animation: flip-card var(--flip-duration) linear forwards;
 	}
 
 	.flap-front {
+		position: absolute;
+		left: 0; top: 0;
+		width: 100%; height: 100%;
 		align-items: flex-start;
-		background: linear-gradient(to bottom, color-mix(in oklab, var(--cell-bg) 85%, white), var(--cell-bg));
+		/* No backface-visibility at rest — avoids composited layer promotion */
 	}
 	.flap-front .glyph { top: 0; bottom: auto; }
 
+	/* backface-visibility added only when flipping — not needed at rest */
+	:global(.flipping) .flap-front { backface-visibility: hidden; }
+
+	/* Hidden at rest — display:none means no composited layer for a 3D-transformed element */
 	.flap-back {
+		display: none;
+		position: absolute;
+		left: 0; top: 0;
+		width: 100%; height: 100%;
 		align-items: flex-end;
-		background: linear-gradient(to top, color-mix(in oklab, var(--cell-bg) 88%, black), var(--cell-bg));
+		backface-visibility: hidden;
 		transform: rotateX(180deg);
 	}
 	.flap-back .glyph { bottom: 0; top: auto; }
 
+	:global(.flipping) .flap-back { display: flex; }
+
+	/* 2px: top pixel = faint card-edge highlight, bottom pixel = shadow gap */
 	.hairline {
 		position: absolute;
-		top: calc(50% - 0.5px);
-		left: 0;
-		width: 100%;
-		height: 1px;
-		background: color-mix(in oklab, var(--cell-edge) 80%, black);
+		top: calc(50% - 1px);
+		left: 0; width: 100%; height: 2px;
+		background: linear-gradient(to bottom, rgba(255,255,255,0.22) 0%, rgba(0,0,0,0.75) 100%);
 		z-index: 20;
-	}
-
-	/* LIGHTING EFFECTS */
-	.shadow-top, .shadow-bottom, .shadow-flap-front, .shadow-flap-back {
-		position: absolute;
-		inset: 0;
 		pointer-events: none;
-		opacity: 0;
 	}
 
-	.flipping .bottom-bg .shadow-bottom {
-		background: linear-gradient(to bottom, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0) 100%);
-		animation: shadow-in var(--flip-duration) linear forwards;
-	}
+	/* Shadow handled by face gradients — no ::after animation avoids per-cell GPU layer during flip */
 
-	.flipping .top-bg .shadow-top {
-		background: linear-gradient(to bottom, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0) 100%);
-		animation: shadow-out var(--flip-duration) linear forwards;
-	}
-
-	.flipping .flap-front .shadow-flap-front {
-		background: linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,0.8) 100%);
-		animation: shadow-in var(--flip-duration) linear forwards;
-	}
-
-	.flipping .flap-back .shadow-flap-back {
-		background: linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,0.8) 100%);
-		animation: shadow-out var(--flip-duration) linear forwards;
-	}
-
-	@keyframes flip {
-		0% { transform: rotateX(0deg); }
+	/*
+	 * Gravity fall + mechanical stop
+	 * 0→55%:  free fall — starts immediately, builds naturally
+	 * 55→80%: decelerating into the stop
+	 * 80→89%: overshoot (mechanical slap, exaggerated for screen)
+	 * 89→96%: damped bounce back
+	 * 96→100%: final settle
+	 */
+	@keyframes flip-card {
+		0%   { transform: rotateX(0deg);    animation-timing-function: cubic-bezier(0.35, 0, 0.95, 0.1); }
+		55%  { transform: rotateX(-90deg);  animation-timing-function: cubic-bezier(0, 0.15, 0.4, 1); }
+		80%  { transform: rotateX(-170deg); animation-timing-function: cubic-bezier(0.05, 0.8, 0.25, 1); }
+		89%  { transform: rotateX(-205deg); animation-timing-function: cubic-bezier(0.6, 0, 0.85, 0.85); }
+		96%  { transform: rotateX(-177deg); animation-timing-function: cubic-bezier(0.35, 0, 0.65, 1); }
 		100% { transform: rotateX(-180deg); }
 	}
 
-	@keyframes shadow-in {
-		0% { opacity: 0; }
-		100% { opacity: 1; }
-	}
-
-	@keyframes shadow-out {
-		0% { opacity: 1; }
-		100% { opacity: 0; }
-	}
 
 	@media (prefers-reduced-motion: reduce) {
-		.flipping .flap, .flipping .shadow-top, .flipping .shadow-bottom, .flipping .shadow-flap-front, .flipping .shadow-flap-back { 
-			animation: none !important; 
-		}
+		.flipping .flap { animation: none !important; }
 	}
 </style>
