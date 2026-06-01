@@ -97,3 +97,28 @@ def test_board_reader_filters_by_season(monkeypatch):
         reader("hitters", "wRC+", season=2025)
         call_args = mock_cur.execute.call_args
         assert "2025" in str(call_args) or 2025 in call_args[0][1]
+
+
+def test_board_endpoint_accepts_season_param():
+    from fastapi.testclient import TestClient
+    from unittest.mock import patch
+
+    fake_rows = [{
+        "rank": 1, "player_id": 1, "player_name": "Ohtani",
+        "team_abbr": "LAD", "headshot_url": None, "position": "DH",
+        "stat_value": 1.059, "refreshed_at": "2026-06-01T00:00:00+00:00",
+        "additional_stats": {},
+    }]
+    with patch("apps.api.app.store.postgres_board_reader", return_value=lambda v, s, season=2026: fake_rows), \
+         patch("apps.api.app.store.postgres_health_check", return_value=lambda: True), \
+         patch("apps.api.app.store.postgres_player_detail_reader", return_value=lambda pid: None), \
+         patch("apps.api.app.store.postgres_player_history_reader", return_value=lambda pid, stat: None):
+        from importlib import reload
+        import apps.api.app.main as main_mod
+        reload(main_mod)
+        app = main_mod.create_app()
+        client = TestClient(app)
+        resp = client.get("/api/board", params={"view": "hitters", "sort": "wRC+", "season": 2025})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["season"] == 2025
