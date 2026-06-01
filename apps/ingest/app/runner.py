@@ -8,6 +8,7 @@ from typing import Any, Callable
 
 from .config import IngestSettings, load_settings
 from .job import run_once
+from .season_stats import SeasonStatsRefresher
 
 
 def _iso_now() -> str:
@@ -30,7 +31,12 @@ def run_loop(
     sleep_fn: Callable[[float], None] = time.sleep,
 ) -> None:
     resolved = settings or load_settings()
+    refresher = SeasonStatsRefresher(
+        database_url=resolved.database_url,
+        mlb_api_url=resolved.mlb_api_url,
+    )
     previous_snapshot: set[str] | None = None
+    last_season_refresh: datetime | None = None
     iteration = 0
 
     while True:
@@ -39,6 +45,28 @@ def run_loop(
         snapshot = result.get('snapshot')
         if isinstance(snapshot, set):
             previous_snapshot = snapshot
+
+        has_live_games = bool(result.get('live_games'))
+        refresh_interval = (
+            resolved.season_refresh_live_seconds
+            if has_live_games
+            else resolved.season_refresh_idle_seconds
+        )
+
+        now = datetime.now(UTC)
+        since_last = (now - last_season_refresh).total_seconds() if last_season_refresh else None
+        if since_last is None or since_last >= refresh_interval:
+            try:
+                refresh_result = refresher.refresh(season=resolved.current_season)
+                if refresh_result.errors:
+                    import logging
+                    logging.getLogger("apps.ingest.runner").warning(
+                        "season refresh errors: %s", refresh_result.errors
+                    )
+            except Exception as exc:
+                import logging
+                logging.getLogger("apps.ingest.runner").error("season refresh failed: %s", exc)
+            last_season_refresh = now
 
         report = {
             'iteration': iteration,
@@ -59,7 +87,6 @@ def run_loop(
         if max_iterations is not None and iteration >= max_iterations:
             return
 
-        has_live_games = bool(result.get('live_games'))
         sleep_seconds = (
             resolved.scan_interval_live_seconds
             if has_live_games
