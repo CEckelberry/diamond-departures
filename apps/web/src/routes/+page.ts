@@ -22,9 +22,12 @@ type CachedBoard = { entries: BoardEntryPayload[]; view: string; sort: string };
 const boardCache = new Map<string, CachedBoard>();
 
 const VALID_SORTS = new Set([
-	"wRC+", "OPS", "OPS+", "HR", "SB", "WAR", "AVG", "RBI", "SLG", "H", "DRS", "xwOBA",
-	"ERA", "FIP", "K%", "K/9", "WHIP", "W", "SV", "K", "K-BB%", "BB/9", "xFIP", "OAA", "UZR", "Fielding %", "Def", "E",
-	"wOBA", "ISO", "BABIP", "BB%",
+	"wRC+", "OPS", "OPS+", "HR", "SB", "WAR", "AVG", "RBI", "SLG", "H",
+	"DRS", "xwOBA", "ERA", "FIP", "K%", "K/9", "WHIP", "W", "SV", "K",
+	"K-BB%", "BB/9", "xFIP", "OAA", "UZR", "Fielding %", "Def", "E",
+	"wOBA", "ISO", "BABIP", "BB%", "OBP",
+	// Statcast
+	"xBA", "barrel_pct", "hard_hit_pct", "exit_velocity",
 ]);
 
 type ViewResolution = {
@@ -59,14 +62,15 @@ function resolveView(params: URLSearchParams): ViewResolution {
 function resolveSort(params: URLSearchParams, apiView: string): string {
 	const fromUrl = params.get("sort") ?? "";
 	if (VALID_SORTS.has(fromUrl)) return fromUrl;
-	
+
 	const style = params.get("style") ?? "sabermetric";
-	if (apiView === "defense") return style === "sabermetric" ? "OAA" : "Fielding %";
 	if (apiView === "defense") return style === "sabermetric" ? "OAA" : "Fielding %";
 	if (apiView.startsWith("pitchers")) {
 		return style === "sabermetric" ? "FIP" : "W";
 	}
-	return style === "sabermetric" ? "OPS" : "AVG";
+	if (style === "statcast") return "xwOBA";
+	if (style === "traditional") return "AVG";
+	return "OPS";
 }
 
 export const load = async ({

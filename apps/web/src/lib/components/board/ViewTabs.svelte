@@ -4,7 +4,7 @@
 	import { onMount, untrack } from "svelte";
 
 	type ViewKey = "hitters" | "pitchers" | "defense" | "positions";
-	type StyleKey = "sabermetric" | "traditional";
+	type StyleKey = "sabermetric" | "traditional" | "statcast";
 
 	const POSITIONS = ["C", "1B", "2B", "3B", "SS", "OF", "DH", "SP", "RP"];
 
@@ -114,6 +114,7 @@
 	<div class="style-tabs" role="tablist" aria-label="Stat styles">
 		<button class:active={currentStyle === "sabermetric"} role="tab" onmouseenter={() => preloadStyle("sabermetric")} onclick={() => chooseStyle("sabermetric")}>Saber</button>
 		<button class:active={currentStyle === "traditional"} role="tab" onmouseenter={() => preloadStyle("traditional")} onclick={() => chooseStyle("traditional")}>Traditional</button>
+		<button class:active={currentStyle === "statcast"} role="tab" onmouseenter={() => preloadStyle("statcast")} onclick={() => chooseStyle("statcast")}>Statcast</button>
 	</div>
 </div>
 

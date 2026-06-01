@@ -2,12 +2,23 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 
-	let { view = 'hitters' }: { view?: string } = $props();
+	let { view = 'hitters', style = 'sabermetric' }: { view?: string; style?: string } = $props();
 
-	const HITTER_STATS = ['OPS', 'HR', 'RBI', 'AVG', 'SB'];
-	const PITCHER_STATS = ['ERA', 'FIP', 'K/9', 'WHIP', 'K'];
+	const HITTER_SABER_STATS = ['wOBA', 'wRC+', 'BABIP', 'ISO', 'BB%', 'K%', 'OPS'];
+	const HITTER_TRAD_STATS  = ['AVG', 'HR', 'RBI', 'OBP', 'SLG', 'SB', 'OPS'];
+	const HITTER_STATCAST_STATS = ['xwOBA', 'xBA', 'barrel_pct', 'hard_hit_pct', 'exit_velocity'];
+	const PITCHER_SABER_STATS = ['FIP', 'K-BB%', 'K%', 'BB%', 'ERA', 'WHIP', 'K/9'];
+	const PITCHER_TRAD_STATS  = ['ERA', 'W', 'WHIP', 'K', 'SV', 'BB/9'];
 
-	const derivedStats = $derived(view === 'pitchers' ? PITCHER_STATS : HITTER_STATS);
+	const derivedStats = $derived(
+		view.startsWith('pitcher')
+			? (style === 'traditional' ? PITCHER_TRAD_STATS : PITCHER_SABER_STATS)
+			: style === 'statcast'
+				? HITTER_STATCAST_STATS
+				: style === 'traditional'
+					? HITTER_TRAD_STATS
+					: HITTER_SABER_STATS
+	);
 	const activeSort = $derived($page.url.searchParams.get('sort') ?? derivedStats[0]);
 
 	function setSort(stat: string) {
