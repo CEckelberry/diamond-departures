@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 
 @dataclass(frozen=True)
@@ -21,6 +22,9 @@ class IngestSettings:
     scan_interval_live_seconds: int
     scan_interval_idle_seconds: int
     scanner_report_path: str
+    season_refresh_live_seconds: int
+    season_refresh_idle_seconds: int
+    current_season: int
 
 
 def load_settings() -> IngestSettings:
@@ -46,4 +50,7 @@ def load_settings() -> IngestSettings:
             "SCANNER_REPORT_PATH",
             "orchestration/state/ingest-scanner-report.json",
         ),
+        season_refresh_live_seconds=max(10, int(os.getenv("SEASON_REFRESH_LIVE_SECONDS", "60"))),
+        season_refresh_idle_seconds=max(60, int(os.getenv("SEASON_REFRESH_IDLE_SECONDS", "3600"))),
+        current_season=int(os.getenv("CURRENT_SEASON", str(datetime.now(UTC).year))),
     )

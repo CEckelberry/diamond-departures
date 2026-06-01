@@ -56,3 +56,10 @@ def test_load_settings_env_overrides(monkeypatch):
     assert settings.scan_interval_live_seconds == 12
     assert settings.scan_interval_idle_seconds == 45
     assert settings.scanner_report_path == "tmp/report.json"
+
+
+def test_season_refresh_defaults():
+    settings = load_settings()
+    assert settings.season_refresh_live_seconds == 60
+    assert settings.season_refresh_idle_seconds == 3600
+    assert settings.current_season >= 2026
