@@ -54,36 +54,25 @@ class StoreContext:
     def save_leaderboard_rows(self, rows: list[Any]) -> None:
         if not rows:
             return
-        
         try:
             with psycopg2.connect(self.database_url) as conn:
                 with conn.cursor() as cur:
-                    # Group by view_key and sort_stat to delete old ones first
-                    # For simplicity, we'll just delete all for the affected views
-                    targets = set((row.view_key, row.sort_stat) for row in rows)
-                    for vk, ss in targets:
+                    targets = set((row.view_key, row.sort_stat, getattr(row, 'season', 2026)) for row in rows)
+                    for vk, ss, season in targets:
                         cur.execute(
-                            "DELETE FROM leaderboard_views WHERE view_key = %s AND sort_stat = %s",
-                            (vk, ss),
+                            "DELETE FROM leaderboard_views WHERE view_key=%s AND sort_stat=%s AND season=%s",
+                            (vk, ss, season),
                         )
-                    
-                    # Insert new rows
                     execute_values(
                         cur,
                         """
-                        INSERT INTO leaderboard_views (
-                            view_key, sort_stat, rank, player_id, stat_value, refreshed_at
-                        ) VALUES %s
+                        INSERT INTO leaderboard_views
+                            (view_key, sort_stat, season, rank, player_id, stat_value, refreshed_at)
+                        VALUES %s
                         """,
                         [
-                            (
-                                r.view_key,
-                                r.sort_stat,
-                                r.rank,
-                                r.player_id,
-                                r.stat_value,
-                                r.refreshed_at,
-                            )
+                            (r.view_key, r.sort_stat, getattr(r, 'season', 2026),
+                             r.rank, r.player_id, r.stat_value, r.refreshed_at)
                             for r in rows
                         ],
                     )
