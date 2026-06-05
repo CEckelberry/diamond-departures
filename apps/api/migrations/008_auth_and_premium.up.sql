@@ -41,3 +41,9 @@ CREATE TABLE email_alerts (
     last_fired_at timestamptz,
     created_at    timestamptz NOT NULL DEFAULT now()
 );
+
+CREATE INDEX idx_watch_boards_user_id ON watch_boards(user_id);
+CREATE INDEX idx_watch_board_players_board_id ON watch_board_players(board_id);
+CREATE INDEX idx_watchlist_players_user_id ON watchlist_players(user_id);
+CREATE INDEX idx_email_alerts_user_id ON email_alerts(user_id);
+CREATE INDEX idx_email_alerts_player_stat ON email_alerts(player_id, stat_name);
