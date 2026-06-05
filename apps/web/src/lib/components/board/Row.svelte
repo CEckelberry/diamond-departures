@@ -1,6 +1,7 @@
 <script lang="ts">
 	import Word from '$lib/components/flap/Word.svelte';
 	import type { BoardRow } from './types';
+	import { userStore } from '$lib/stores/user';
 
 	let {
 		row,
@@ -15,6 +16,32 @@
 		statCols?: string[];
 		onselect?: (playerId: number) => void;
 	} = $props();
+
+	let pinned = $state(false);
+	let pinLoading = $state(false);
+
+	async function togglePin(e: MouseEvent) {
+		e.stopPropagation();
+		if (!$userStore?.is_premium || pinLoading) return;
+		pinLoading = true;
+		try {
+			if (pinned) {
+				await fetch(`/api/watchlist/${row.playerId}`, { method: 'DELETE' });
+				pinned = false;
+			} else {
+				await fetch('/api/watchlist', {
+					method: 'POST',
+					headers: { 'content-type': 'application/json' },
+					body: JSON.stringify({ player_id: row.playerId }),
+				});
+				pinned = true;
+			}
+		} catch {
+			// ignore network errors — pin state stays optimistic
+		} finally {
+			pinLoading = false;
+		}
+	}
 
 	// Integer stats: displayed as whole numbers, fit in 3 chars
 	const INTEGER_STATS = new Set(['HR', 'RBI', 'SB', 'K', 'W', 'L', 'SV', 'G', 'GS', 'wRC+', 'OPS+']);
@@ -61,6 +88,16 @@
 	onclick={handleClick}
 	onkeydown={handleKeydown}
 >
+	{#if $userStore?.is_premium}
+		<button
+			class="pin-btn"
+			class:pinned
+			onclick={togglePin}
+			disabled={pinLoading}
+			aria-label={pinned ? 'Remove from watchlist' : 'Add to watchlist'}
+			title={pinned ? 'Unpin' : 'Pin to watchlist'}
+		>⊕</button>
+	{/if}
 	<div class="cell rank-cell">
 		<Word value={row.rank} width={3} cellWidth={16} cellHeight={26} {rowIndex} baseColIndex={0} />
 		{#if row.rankDelta && row.rankDeltaAt}
@@ -199,6 +236,21 @@
 		90% { opacity: 1; }
 		100% { opacity: 0; }
 	}
+
+	.pin-btn {
+		background: none;
+		border: none;
+		cursor: pointer;
+		font-size: 0.75rem;
+		color: color-mix(in oklab, var(--chrome-text) 30%, transparent);
+		padding: 0 0.25rem;
+		transition: color 0.15s;
+		line-height: 1;
+		flex-shrink: 0;
+	}
+	.pin-btn:hover { color: var(--chrome-text); }
+	.pin-btn.pinned { color: var(--mlb-red); }
+	.pin-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
 	@media (max-width: 920px) {
 		.board-row {
