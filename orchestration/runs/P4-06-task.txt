@@ -1,7 +1,0 @@
-Packet P4-06 GREEN implementation.
-Implement SSE wiring + delta application for board.
-Add src/lib/api/sse.ts openBoardStream(view,sort,handlers) using EventSource /api/board/sse with reconnect exponential backoff.
-Add src/lib/stores/board.ts store state and functions applySnapshot/applyDelta and toBoardRows.
-Update routes/+page.svelte to seed store from load data, open stream onMount using boardView/boardSort, apply snapshot/delta handlers, teardown stop(). Board renders from board store rows.
-Keep existing controls/skeleton.
-Return unified diff only.

@@ -1,9 +1,0 @@
-Packet P4-07 RED tests only for row reshuffle animation integration.
-Create apps/web/tests/board-reshuffle-animation.test.mjs source-assertion tests.
-Expect:
-- Board.svelte imports animate flip and applies animate:flip directive to keyed row container.
-- stagger delay logic (~index*30) and reduced motion guard exist.
-- row-shift audio integration calls playRowShift once when rank order changes.
-- each block keyed by playerId to allow stable FLIP transitions.
-Keep tests failing current code.
-Return unified diff only.

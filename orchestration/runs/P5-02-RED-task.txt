@@ -1,9 +1,0 @@
-Packet P5-02 RED tests only for player trend chart integration.
-Create apps/web/tests/player-trend-chart.test.mjs source-assertion tests.
-Expect:
-- Panel.svelte fetches /api/players/${selectedPlayerId}/history with stat query param.
-- Panel.svelte tracks history points loading/error state.
-- New TrendChart.svelte component exists and contains svg/polyline path rendering.
-- Panel.svelte renders <TrendChart ...> with points and stat props.
-Keep tests failing on current code.
-Return unified diff only.

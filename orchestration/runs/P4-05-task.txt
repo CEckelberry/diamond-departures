@@ -1,9 +1,0 @@
-Packet P4-05 GREEN implementation. Make apps/web board initial load from /api/board using SvelteKit load.
-Use existing API contract response {view, sort, entries:[{rank,player:{id,name,team_abbr,position},stat_value}] }.
-Requirements:
-- add routes/+page.ts load that reads URL params, maps to valid api view/sort defaults, fetches /api/board with query params.
-- update routes/+page.svelte to consume data prop, convert entries into Board rows, pass rows to <Board rows={boardRows}>.
-- include loading skeleton state markup class board-skeleton (for slow client fetch transition) while reloading for param changes.
-- keep view tabs/stat picker behavior.
-- minimal robust types.
-Return unified diff only.

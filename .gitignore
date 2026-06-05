@@ -39,6 +39,9 @@ pnpm-debug.log*
 __pycache__/
 .superpowers/
 .playwright-mcp/
+orchestration/
+docs/superpowers/
+AUTONOMOUS_RUN_SUMMARY.md
 
 # dev/session screenshots
 *.png
