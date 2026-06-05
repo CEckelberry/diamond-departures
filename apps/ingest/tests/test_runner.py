@@ -25,6 +25,7 @@ def _settings(tmp_path: Path) -> IngestSettings:
         season_refresh_live_seconds=60,
         season_refresh_idle_seconds=3600,
         current_season=2026,
+        resend_api_key='',
     )
 
 
@@ -107,6 +108,7 @@ def test_season_refresh_called_when_due(tmp_path):
         season_refresh_live_seconds=60,
         season_refresh_idle_seconds=3600,
         current_season=2026,
+        resend_api_key='',
     )
 
     mock_run_once = MagicMock(return_value={"status": "ok", "live_games": [], "snapshot": set()})

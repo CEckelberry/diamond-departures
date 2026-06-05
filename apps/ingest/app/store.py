@@ -82,3 +82,56 @@ class StoreContext:
 
 def init_store(database_url: str) -> StoreContext:
     return StoreContext(database_url=database_url)
+
+
+def fetch_triggered_alerts(database_url: str) -> list[dict]:
+    """Return all alerts whose threshold is currently met and not fired in the last hour."""
+    from psycopg2.extras import RealDictCursor
+    try:
+        with psycopg2.connect(database_url) as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    """
+                    SELECT
+                        ea.id::text AS id,
+                        u.email,
+                        p.full_name AS player_name,
+                        ea.stat_name,
+                        ea.threshold,
+                        ea.direction,
+                        ps.stat_value
+                    FROM email_alerts ea
+                    JOIN users u ON u.id = ea.user_id
+                    JOIN players p ON p.id = ea.player_id
+                    JOIN player_stats ps
+                        ON ps.player_id = ea.player_id
+                       AND ps.stat_name = ea.stat_name
+                       AND ps.valid_to IS NULL
+                    WHERE
+                      (
+                        (ea.direction = 'up'   AND ps.stat_value >= ea.threshold)
+                        OR
+                        (ea.direction = 'down' AND ps.stat_value <= ea.threshold)
+                      )
+                      AND (ea.last_fired_at IS NULL OR ea.last_fired_at < now() - interval '1 hour')
+                    """,
+                )
+                return [dict(row) for row in cur.fetchall()]
+    except Exception as exc:
+        logging.getLogger("apps.ingest.store").warning("fetch_triggered_alerts failed: %s", exc)
+        return []
+
+
+def mark_alerts_fired(database_url: str, alert_ids: list[str]) -> None:
+    """Update last_fired_at for the given alert IDs."""
+    if not alert_ids:
+        return
+    try:
+        with psycopg2.connect(database_url) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE email_alerts SET last_fired_at = now() WHERE id = ANY(%s::uuid[])",
+                    (alert_ids,),
+                )
+    except Exception as exc:
+        logging.getLogger("apps.ingest.store").warning("mark_alerts_fired failed: %s", exc)

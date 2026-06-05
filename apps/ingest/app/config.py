@@ -25,6 +25,7 @@ class IngestSettings:
     season_refresh_live_seconds: int
     season_refresh_idle_seconds: int
     current_season: int
+    resend_api_key: str
 
 
 def load_settings() -> IngestSettings:
@@ -53,4 +54,5 @@ def load_settings() -> IngestSettings:
         season_refresh_live_seconds=max(10, int(os.getenv("SEASON_REFRESH_LIVE_SECONDS", "60"))),
         season_refresh_idle_seconds=max(60, int(os.getenv("SEASON_REFRESH_IDLE_SECONDS", "3600"))),
         current_season=int(os.getenv("CURRENT_SEASON", str(datetime.now(UTC).year))),
+        resend_api_key=os.getenv("RESEND_API_KEY", ""),
     )

@@ -7,8 +7,10 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .config import IngestSettings, load_settings
+from .email import send_alert_email
 from .job import run_once
 from .season_stats import SeasonStatsRefresher
+from .store import fetch_triggered_alerts, mark_alerts_fired
 
 
 def _iso_now() -> str:
@@ -67,6 +69,31 @@ def run_loop(
                 import logging
                 logging.getLogger("apps.ingest.runner").error("season refresh failed: %s", exc)
             last_season_refresh = now
+
+            if resolved.resend_api_key:
+                try:
+                    triggered = fetch_triggered_alerts(resolved.database_url)
+                    for alert in triggered:
+                        send_alert_email(
+                            resolved.resend_api_key,
+                            str(alert["email"]),
+                            str(alert["player_name"]),
+                            str(alert["stat_name"]),
+                            float(alert["stat_value"]),
+                            str(alert["direction"]),
+                            float(alert["threshold"]),
+                        )
+                    if triggered:
+                        mark_alerts_fired(resolved.database_url, [a["id"] for a in triggered])
+                        import logging
+                        logging.getLogger("apps.ingest.runner").info(
+                            "fired %d email alerts", len(triggered)
+                        )
+                except Exception as exc:
+                    import logging
+                    logging.getLogger("apps.ingest.runner").warning(
+                        "alert firing failed: %s", exc
+                    )
 
         report = {
             'iteration': iteration,
