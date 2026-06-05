@@ -56,6 +56,11 @@ services:
     container_name: diamond-api
     environment:
       - DATABASE_URL=postgresql://diamond:diamond@db:5432/diamond
+      - SUPABASE_JWT_SECRET=${SUPABASE_JWT_SECRET:-}
+      - CREEM_API_KEY=${CREEM_API_KEY:-}
+      - CREEM_WEBHOOK_SECRET=${CREEM_WEBHOOK_SECRET:-}
+      - CREEM_PRODUCT_ID=${CREEM_PRODUCT_ID:-}
+      - RESEND_API_KEY=${RESEND_API_KEY:-}
     ports:
       - "18000:18000"
     depends_on:
@@ -70,6 +75,7 @@ services:
     environment:
       - DATABASE_URL=postgresql://diamond:diamond@db:5432/diamond
       - MLB_API_URL=http://mlb-mock:8090
+      - RESEND_API_KEY=${RESEND_API_KEY:-}
     depends_on:
       db:
         condition: service_healthy
@@ -84,6 +90,8 @@ services:
     environment:
       - API_URL=http://api:18000
       - PORT=5174
+      - PUBLIC_SUPABASE_URL=${PUBLIC_SUPABASE_URL:-}
+      - PUBLIC_SUPABASE_ANON_KEY=${PUBLIC_SUPABASE_ANON_KEY:-}
     ports:
       - "5174:5174"
     depends_on:
