@@ -1,8 +1,18 @@
 <!-- src/lib/components/auth/PremiumGate.svelte -->
 <script lang="ts">
 	import { userStore } from '$lib/stores/user';
+	import { createSupabaseBrowserClient } from '$lib/supabase';
+	import { page } from '$app/stores';
 
 	let { children, feature = 'This feature' }: { children: any; feature?: string } = $props();
+
+	async function signIn() {
+		const supabase = createSupabaseBrowserClient();
+		await supabase.auth.signInWithOAuth({
+			provider: 'google',
+			options: { redirectTo: `${$page.url.origin}/` },
+		});
+	}
 </script>
 
 {#if $userStore?.is_premium}
@@ -13,7 +23,7 @@
 		<p class="gate-text">{feature} is available to Premium members.</p>
 		<a href="/upgrade" class="gate-btn">Upgrade for $5.99</a>
 		{#if !$userStore}
-			<p class="gate-sub">Already purchased? <a href="/upgrade" class="gate-signin">Sign in</a></p>
+			<p class="gate-sub">Already purchased? <button class="gate-signin" onclick={signIn}>Sign in</button></p>
 		{/if}
 	</div>
 {/if}
@@ -48,5 +58,14 @@
 	}
 	.gate-btn:hover { opacity: 0.85; }
 	.gate-sub { font-size: 0.7rem; color: color-mix(in oklab, var(--chrome-text) 45%, transparent); margin: 0; }
-	.gate-signin { color: var(--chrome-text); text-decoration: underline; }
+	.gate-signin {
+		background: none;
+		border: none;
+		color: var(--chrome-text);
+		cursor: pointer;
+		font-family: inherit;
+		font-size: inherit;
+		padding: 0;
+		text-decoration: underline;
+	}
 </style>
