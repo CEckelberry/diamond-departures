@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import json
 import logging
 from collections.abc import Callable
 
-from fastapi import Depends, FastAPI, HTTPException, Query, BackgroundTasks
+from fastapi import Depends, FastAPI, HTTPException, Query, BackgroundTasks, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from .board import (
@@ -31,9 +32,14 @@ from .status import (
     in_memory_freshness_reader,
     in_memory_season_state_reader,
 )
-from .store import postgres_health_check, postgres_board_reader, postgres_player_detail_reader, postgres_player_history_reader, postgres_user_upsert
+from .store import postgres_health_check, postgres_board_reader, postgres_player_detail_reader, postgres_player_history_reader, postgres_user_upsert, postgres_mark_premium
 from .auth import make_jwt_verifier
 from .users import UserUpsert, in_memory_user_upsert
+from .creem import (
+    CreemCheckout, CreemMarkPremium,
+    in_memory_creem_checkout, in_memory_creem_mark_premium,
+    live_creem_checkout, verify_creem_signature,
+)
 
 
 def create_app(
@@ -48,6 +54,10 @@ def create_app(
     freshness_reader: FreshnessReader | None = None,
     user_upsert: UserUpsert | None = None,
     supabase_jwt_secret: str = "",
+    creem_checkout: CreemCheckout | None = None,
+    creem_mark_premium: CreemMarkPremium | None = None,
+    creem_product_id: str = "",
+    creem_webhook_secret: str = "",
 ) -> FastAPI:
     resolved_settings = settings or load_settings()
     configure_logging(resolved_settings.log_level)
@@ -64,6 +74,13 @@ def create_app(
     freshness_loader = freshness_reader or in_memory_freshness_reader
     upsert_user = user_upsert or postgres_user_upsert(resolved_settings.database_url)
     get_current_user = make_jwt_verifier(supabase_jwt_secret or resolved_settings.supabase_jwt_secret)
+    checkout_fn = creem_checkout or live_creem_checkout(
+        resolved_settings.creem_api_key,
+        resolved_settings.creem_product_id,
+    )
+    mark_premium_fn = creem_mark_premium or postgres_mark_premium(resolved_settings.database_url)
+    effective_product_id = creem_product_id or resolved_settings.creem_product_id
+    effective_webhook_secret = creem_webhook_secret or resolved_settings.creem_webhook_secret
     app.state.sse_hub = hub
 
     @app.get("/api/health")
@@ -147,6 +164,29 @@ def create_app(
         avatar_url = user_meta.get("avatar_url") or user_meta.get("picture")
         user = upsert_user(payload["sub"], payload.get("email", ""), name, avatar_url)
         return JSONResponse(content=user)
+
+    @app.post("/api/creem/checkout")
+    def creem_checkout_endpoint(payload: dict = Depends(get_current_user)) -> JSONResponse:
+        url = checkout_fn(
+            effective_product_id,
+            payload["sub"],
+            payload.get("email", ""),
+            "https://diamonddepartures.com/upgrade/success",
+        )
+        return JSONResponse(content={"checkout_url": url})
+
+    @app.post("/api/creem/webhook")
+    async def creem_webhook(request: Request) -> JSONResponse:
+        body = await request.body()
+        sig = request.headers.get("creem-signature", "")
+        if effective_webhook_secret and not verify_creem_signature(body, sig, effective_webhook_secret):
+            raise HTTPException(status_code=400, detail="Invalid signature")
+        event = json.loads(body)
+        if event.get("type") == "payment.succeeded":
+            user_id = event.get("data", {}).get("metadata", {}).get("user_id", "")
+            if user_id:
+                mark_premium_fn(user_id)
+        return JSONResponse(content={"ok": True})
 
     @app.on_event("startup")
     async def start_db_poller() -> None:

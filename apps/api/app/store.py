@@ -133,6 +133,17 @@ def postgres_player_history_reader(database_url: str) -> PlayerHistoryReader:
     return _read
 
 
+def postgres_mark_premium(database_url: str) -> Callable[[str], None]:
+    def _mark(user_id: str) -> None:
+        with psycopg2.connect(database_url) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE users SET is_premium = true, purchased_at = now() WHERE id = %s",
+                    (user_id,),
+                )
+    return _mark
+
+
 def postgres_user_upsert(database_url: str) -> UserUpsert:
     def _upsert(user_id: str, email: str, name: str | None, avatar_url: str | None) -> dict:
         with psycopg2.connect(database_url) as conn:
