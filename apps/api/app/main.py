@@ -74,10 +74,7 @@ def create_app(
     freshness_loader = freshness_reader or in_memory_freshness_reader
     upsert_user = user_upsert or postgres_user_upsert(resolved_settings.database_url)
     get_current_user = make_jwt_verifier(supabase_jwt_secret or resolved_settings.supabase_jwt_secret)
-    checkout_fn = creem_checkout or live_creem_checkout(
-        resolved_settings.creem_api_key,
-        resolved_settings.creem_product_id,
-    )
+    checkout_fn = creem_checkout or live_creem_checkout(resolved_settings.creem_api_key)
     mark_premium_fn = creem_mark_premium or postgres_mark_premium(resolved_settings.database_url)
     effective_product_id = creem_product_id or resolved_settings.creem_product_id
     effective_webhook_secret = creem_webhook_secret or resolved_settings.creem_webhook_secret
@@ -181,7 +178,10 @@ def create_app(
         sig = request.headers.get("creem-signature", "")
         if effective_webhook_secret and not verify_creem_signature(body, sig, effective_webhook_secret):
             raise HTTPException(status_code=400, detail="Invalid signature")
-        event = json.loads(body)
+        try:
+            event = json.loads(body)
+        except (json.JSONDecodeError, ValueError):
+            raise HTTPException(status_code=400, detail="Invalid JSON body")
         if event.get("type") == "payment.succeeded":
             user_id = event.get("data", {}).get("metadata", {}).get("user_id", "")
             if user_id:

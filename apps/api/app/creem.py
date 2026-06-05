@@ -19,7 +19,7 @@ def in_memory_creem_mark_premium(user_id: str) -> None:
     pass
 
 
-def live_creem_checkout(api_key: str, product_id: str) -> CreemCheckout:
+def live_creem_checkout(api_key: str) -> CreemCheckout:
     def _checkout(prod_id: str, user_id: str, email: str, success_url: str) -> str:
         resp = httpx.post(
             "https://api.creem.io/v1/checkouts",
