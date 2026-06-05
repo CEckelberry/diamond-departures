@@ -9,6 +9,9 @@ from psycopg2.extras import RealDictCursor
 
 from .players import PlayerDetailReader, PlayerHistoryReader
 from .users import UserUpsert
+from .watchlist import WatchlistLister, WatchlistAdder, WatchlistRemover
+from .watch_boards import BoardLister, BoardCreator, BoardGetter, BoardRenamer, BoardDeleter, BoardPlayerAdder, BoardPlayerRemover
+from .alerts import AlertLister, AlertCreator, AlertDeleter
 
 
 def postgres_health_check(database_url: str) -> Callable[[], bool]:
@@ -171,3 +174,140 @@ def postgres_user_upsert(database_url: str) -> UserUpsert:
                     "purchased_at": row["purchased_at"].isoformat() if row["purchased_at"] else None,
                 }
     return _upsert
+
+
+def postgres_watchlist_lister(database_url: str) -> WatchlistLister:
+    def _list(user_id: str) -> list[dict]:
+        with psycopg2.connect(database_url) as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    "SELECT user_id::text, player_id FROM watchlist_players WHERE user_id = %s ORDER BY added_at DESC",
+                    (user_id,),
+                )
+                return [dict(r) for r in cur.fetchall()]
+    return _list
+
+
+def postgres_watchlist_adder(database_url: str) -> WatchlistAdder:
+    def _add(user_id: str, player_id: int) -> None:
+        with psycopg2.connect(database_url) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO watchlist_players (user_id, player_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                    (user_id, player_id),
+                )
+    return _add
+
+
+def postgres_watchlist_remover(database_url: str) -> WatchlistRemover:
+    def _remove(user_id: str, player_id: int) -> bool:
+        with psycopg2.connect(database_url) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "DELETE FROM watchlist_players WHERE user_id = %s AND player_id = %s",
+                    (user_id, player_id),
+                )
+                return (cur.rowcount or 0) > 0
+    return _remove
+
+
+def postgres_board_lister(database_url: str) -> BoardLister:
+    def _list(user_id: str) -> list[dict]:
+        with psycopg2.connect(database_url) as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("SELECT id::text, user_id::text, name FROM watch_boards WHERE user_id = %s ORDER BY created_at ASC", (user_id,))
+                return [dict(r) for r in cur.fetchall()]
+    return _list
+
+
+def postgres_board_creator(database_url: str) -> BoardCreator:
+    def _create(user_id: str, name: str) -> dict:
+        with psycopg2.connect(database_url) as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("INSERT INTO watch_boards (user_id, name) VALUES (%s, %s) RETURNING id::text, user_id::text, name", (user_id, name))
+                return dict(cur.fetchone())
+    return _create
+
+
+def postgres_board_getter(database_url: str) -> BoardGetter:
+    def _get(board_id: str, user_id: str) -> dict | None:
+        with psycopg2.connect(database_url) as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("SELECT id::text, user_id::text, name FROM watch_boards WHERE id = %s AND user_id = %s", (board_id, user_id))
+                row = cur.fetchone()
+                if not row:
+                    return None
+                cur.execute("SELECT player_id FROM watch_board_players WHERE board_id = %s", (board_id,))
+                players = [r["player_id"] for r in cur.fetchall()]
+                return {**dict(row), "players": players}
+    return _get
+
+
+def postgres_board_renamer(database_url: str) -> BoardRenamer:
+    def _rename(board_id: str, user_id: str, name: str) -> bool:
+        with psycopg2.connect(database_url) as conn:
+            with conn.cursor() as cur:
+                cur.execute("UPDATE watch_boards SET name = %s, updated_at = now() WHERE id = %s AND user_id = %s", (name, board_id, user_id))
+                return (cur.rowcount or 0) > 0
+    return _rename
+
+
+def postgres_board_deleter(database_url: str) -> BoardDeleter:
+    def _delete(board_id: str, user_id: str) -> bool:
+        with psycopg2.connect(database_url) as conn:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM watch_boards WHERE id = %s AND user_id = %s", (board_id, user_id))
+                return (cur.rowcount or 0) > 0
+    return _delete
+
+
+def postgres_board_player_adder(database_url: str) -> BoardPlayerAdder:
+    def _add(board_id: str, user_id: str, player_id: int) -> bool:
+        with psycopg2.connect(database_url) as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1 FROM watch_boards WHERE id = %s AND user_id = %s", (board_id, user_id))
+                if not cur.fetchone():
+                    return False
+                cur.execute("INSERT INTO watch_board_players (board_id, player_id) VALUES (%s, %s) ON CONFLICT DO NOTHING", (board_id, player_id))
+                return True
+    return _add
+
+
+def postgres_board_player_remover(database_url: str) -> BoardPlayerRemover:
+    def _remove(board_id: str, user_id: str, player_id: int) -> bool:
+        with psycopg2.connect(database_url) as conn:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM watch_board_players WHERE board_id = %s AND player_id = %s", (board_id, player_id))
+                return (cur.rowcount or 0) > 0
+    return _remove
+
+
+def postgres_alert_lister(database_url: str) -> AlertLister:
+    def _list(user_id: str) -> list[dict]:
+        with psycopg2.connect(database_url) as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("SELECT id::text, user_id::text, player_id, stat_name, threshold, direction FROM email_alerts WHERE user_id = %s ORDER BY created_at DESC", (user_id,))
+                return [{**dict(r), "threshold": float(r["threshold"])} for r in cur.fetchall()]
+    return _list
+
+
+def postgres_alert_creator(database_url: str) -> AlertCreator:
+    def _create(user_id: str, player_id: int, stat_name: str, threshold: float, direction: str) -> dict:
+        with psycopg2.connect(database_url) as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    "INSERT INTO email_alerts (user_id, player_id, stat_name, threshold, direction) VALUES (%s, %s, %s, %s, %s) RETURNING id::text, user_id::text, player_id, stat_name, threshold, direction",
+                    (user_id, player_id, stat_name, threshold, direction),
+                )
+                r = cur.fetchone()
+                return {**dict(r), "threshold": float(r["threshold"])}
+    return _create
+
+
+def postgres_alert_deleter(database_url: str) -> AlertDeleter:
+    def _delete(alert_id: str, user_id: str) -> bool:
+        with psycopg2.connect(database_url) as conn:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM email_alerts WHERE id = %s AND user_id = %s", (alert_id, user_id))
+                return (cur.rowcount or 0) > 0
+    return _delete

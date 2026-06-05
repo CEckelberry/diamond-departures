@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import csv
+import io
 import json
 import logging
 from collections.abc import Callable
 
-from fastapi import Depends, FastAPI, HTTPException, Query, BackgroundTasks, Request
+from fastapi import Body, Depends, FastAPI, HTTPException, Query, BackgroundTasks, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from .board import (
@@ -35,6 +37,17 @@ from .status import (
 from .store import postgres_health_check, postgres_board_reader, postgres_player_detail_reader, postgres_player_history_reader, postgres_user_upsert, postgres_mark_premium
 from .auth import make_jwt_verifier
 from .users import UserUpsert, in_memory_user_upsert
+from .watchlist import WatchlistLister, WatchlistAdder, WatchlistRemover
+from .watchlist import in_memory_watchlist_lister, in_memory_watchlist_adder, in_memory_watchlist_remover
+from .watch_boards import (
+    BoardLister, BoardCreator, BoardGetter, BoardRenamer, BoardDeleter,
+    BoardPlayerAdder, BoardPlayerRemover,
+    in_memory_board_lister, in_memory_board_creator, in_memory_board_getter,
+    in_memory_board_renamer, in_memory_board_deleter,
+    in_memory_board_player_adder, in_memory_board_player_remover,
+)
+from .alerts import AlertLister, AlertCreator, AlertDeleter
+from .alerts import in_memory_alert_lister, in_memory_alert_creator, in_memory_alert_deleter
 from .creem import (
     CreemCheckout, CreemMarkPremium,
     in_memory_creem_checkout, in_memory_creem_mark_premium,
@@ -58,6 +71,19 @@ def create_app(
     creem_mark_premium: CreemMarkPremium | None = None,
     creem_product_id: str = "",
     creem_webhook_secret: str = "",
+    watchlist_lister: WatchlistLister | None = None,
+    watchlist_adder: WatchlistAdder | None = None,
+    watchlist_remover: WatchlistRemover | None = None,
+    board_lister: BoardLister | None = None,
+    board_creator: BoardCreator | None = None,
+    board_getter: BoardGetter | None = None,
+    board_renamer: BoardRenamer | None = None,
+    board_deleter: BoardDeleter | None = None,
+    board_player_adder: BoardPlayerAdder | None = None,
+    board_player_remover: BoardPlayerRemover | None = None,
+    alert_lister: AlertLister | None = None,
+    alert_creator: AlertCreator | None = None,
+    alert_deleter: AlertDeleter | None = None,
 ) -> FastAPI:
     resolved_settings = settings or load_settings()
     configure_logging(resolved_settings.log_level)
@@ -78,6 +104,37 @@ def create_app(
     mark_premium_fn = creem_mark_premium or postgres_mark_premium(resolved_settings.database_url)
     effective_product_id = creem_product_id or resolved_settings.creem_product_id
     effective_webhook_secret = creem_webhook_secret or resolved_settings.creem_webhook_secret
+
+    from .store import (
+        postgres_watchlist_lister, postgres_watchlist_adder, postgres_watchlist_remover,
+        postgres_board_lister, postgres_board_creator, postgres_board_getter,
+        postgres_board_renamer, postgres_board_deleter,
+        postgres_board_player_adder, postgres_board_player_remover,
+        postgres_alert_lister, postgres_alert_creator, postgres_alert_deleter,
+    )
+
+    wl_lister  = watchlist_lister  or postgres_watchlist_lister(resolved_settings.database_url)
+    wl_adder   = watchlist_adder   or postgres_watchlist_adder(resolved_settings.database_url)
+    wl_remover = watchlist_remover or postgres_watchlist_remover(resolved_settings.database_url)
+
+    b_lister     = board_lister        or postgres_board_lister(resolved_settings.database_url)
+    b_creator    = board_creator       or postgres_board_creator(resolved_settings.database_url)
+    b_getter     = board_getter        or postgres_board_getter(resolved_settings.database_url)
+    b_renamer    = board_renamer       or postgres_board_renamer(resolved_settings.database_url)
+    b_deleter    = board_deleter       or postgres_board_deleter(resolved_settings.database_url)
+    b_pl_adder   = board_player_adder  or postgres_board_player_adder(resolved_settings.database_url)
+    b_pl_remover = board_player_remover or postgres_board_player_remover(resolved_settings.database_url)
+
+    a_lister  = alert_lister  or postgres_alert_lister(resolved_settings.database_url)
+    a_creator = alert_creator or postgres_alert_creator(resolved_settings.database_url)
+    a_deleter = alert_deleter or postgres_alert_deleter(resolved_settings.database_url)
+
+    def _require_premium(payload: dict = Depends(get_current_user)) -> dict:
+        user = upsert_user(payload["sub"], payload.get("email", ""), None, None)
+        if not user.get("is_premium"):
+            raise HTTPException(status_code=403, detail="Premium required")
+        return payload
+
     app.state.sse_hub = hub
 
     @app.get("/api/health")
@@ -187,6 +244,110 @@ def create_app(
             if user_id:
                 mark_premium_fn(user_id)
         return JSONResponse(content={"ok": True})
+
+    @app.get("/api/watchlist")
+    def get_watchlist(payload: dict = Depends(_require_premium)) -> JSONResponse:
+        return JSONResponse(content=wl_lister(payload["sub"]))
+
+    @app.post("/api/watchlist")
+    def add_watchlist(body: dict = Body(...), payload: dict = Depends(_require_premium)) -> JSONResponse:
+        wl_adder(payload["sub"], int(body["player_id"]))
+        return JSONResponse(content={"ok": True})
+
+    @app.delete("/api/watchlist/{player_id}")
+    def remove_watchlist(player_id: int, payload: dict = Depends(_require_premium)) -> JSONResponse:
+        wl_remover(payload["sub"], player_id)
+        return JSONResponse(content={"ok": True})
+
+    @app.get("/api/watch-boards")
+    def list_boards(payload: dict = Depends(_require_premium)) -> JSONResponse:
+        return JSONResponse(content=b_lister(payload["sub"]))
+
+    @app.post("/api/watch-boards")
+    def create_board(body: dict = Body(...), payload: dict = Depends(_require_premium)) -> JSONResponse:
+        board = b_creator(payload["sub"], str(body["name"]))
+        return JSONResponse(content=board)
+
+    @app.get("/api/watch-boards/{board_id}")
+    def get_board(board_id: str, payload: dict = Depends(_require_premium)) -> JSONResponse:
+        board = b_getter(board_id, payload["sub"])
+        if board is None:
+            raise HTTPException(status_code=404, detail="Board not found")
+        return JSONResponse(content=board)
+
+    @app.put("/api/watch-boards/{board_id}")
+    def rename_board(board_id: str, body: dict = Body(...), payload: dict = Depends(_require_premium)) -> JSONResponse:
+        if not b_renamer(board_id, payload["sub"], str(body["name"])):
+            raise HTTPException(status_code=404, detail="Board not found")
+        return JSONResponse(content={"ok": True})
+
+    @app.delete("/api/watch-boards/{board_id}")
+    def delete_board(board_id: str, payload: dict = Depends(_require_premium)) -> JSONResponse:
+        b_deleter(board_id, payload["sub"])
+        return JSONResponse(content={"ok": True})
+
+    @app.post("/api/watch-boards/{board_id}/players/{player_id}")
+    def add_board_player(board_id: str, player_id: int, payload: dict = Depends(_require_premium)) -> JSONResponse:
+        if not b_pl_adder(board_id, payload["sub"], player_id):
+            raise HTTPException(status_code=404, detail="Board not found")
+        return JSONResponse(content={"ok": True})
+
+    @app.delete("/api/watch-boards/{board_id}/players/{player_id}")
+    def remove_board_player(board_id: str, player_id: int, payload: dict = Depends(_require_premium)) -> JSONResponse:
+        b_pl_remover(board_id, payload["sub"], player_id)
+        return JSONResponse(content={"ok": True})
+
+    @app.get("/api/alerts")
+    def list_alerts(payload: dict = Depends(_require_premium)) -> JSONResponse:
+        return JSONResponse(content=a_lister(payload["sub"]))
+
+    @app.post("/api/alerts")
+    def create_alert(body: dict = Body(...), payload: dict = Depends(_require_premium)) -> JSONResponse:
+        alert = a_creator(
+            payload["sub"],
+            int(body["player_id"]),
+            str(body["stat_name"]),
+            float(body["threshold"]),
+            str(body["direction"]),
+        )
+        return JSONResponse(content=alert)
+
+    @app.delete("/api/alerts/{alert_id}")
+    def delete_alert(alert_id: str, payload: dict = Depends(_require_premium)) -> JSONResponse:
+        a_deleter(alert_id, payload["sub"])
+        return JSONResponse(content={"ok": True})
+
+    @app.get("/api/board/export")
+    def board_export(
+        view: str = Query(...),
+        sort: str = Query(...),
+        season: int = Query(default=None),
+        payload: dict = Depends(_require_premium),
+    ) -> StreamingResponse:
+        _validate_view_sort(view, sort)
+        effective_season = season if season is not None else resolved_settings.current_season
+        rows = board_loader(view, sort, effective_season)[:100]
+        entries = _entries_from_rows(rows)
+
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        writer.writerow(["rank", "name", "team", "position", "stat", "stat_value"])
+        for e in entries:
+            writer.writerow([
+                e["rank"],
+                e["player"]["name"],
+                e["player"]["team_abbr"],
+                e["player"]["position"],
+                sort,
+                e["stat_value"],
+            ])
+        buf.seek(0)
+
+        return StreamingResponse(
+            iter([buf.getvalue()]),
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename=diamond-departures-{view}-{sort}.csv"},
+        )
 
     @app.on_event("startup")
     async def start_db_poller() -> None:
