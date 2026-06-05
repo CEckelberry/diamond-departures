@@ -17,6 +17,7 @@ class ApiSettings:
     creem_webhook_secret: str = ""
     creem_product_id: str = ""
     resend_api_key: str = ""
+    public_url: str = "https://diamonddepartures.com"
 
 
 def load_settings() -> ApiSettings:
@@ -31,4 +32,5 @@ def load_settings() -> ApiSettings:
         creem_webhook_secret=os.getenv("CREEM_WEBHOOK_SECRET", ""),
         creem_product_id=os.getenv("CREEM_PRODUCT_ID", ""),
         resend_api_key=os.getenv("RESEND_API_KEY", ""),
+        public_url=os.getenv("PUBLIC_URL", "https://diamonddepartures.com"),
     )

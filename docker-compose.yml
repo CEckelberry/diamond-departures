@@ -61,6 +61,7 @@ services:
       - CREEM_WEBHOOK_SECRET=${CREEM_WEBHOOK_SECRET:-}
       - CREEM_PRODUCT_ID=${CREEM_PRODUCT_ID:-}
       - RESEND_API_KEY=${RESEND_API_KEY:-}
+      - PUBLIC_URL=${PUBLIC_URL:-https://diamonddepartures.com}
     ports:
       - "18000:18000"
     depends_on:

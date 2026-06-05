@@ -225,7 +225,7 @@ def create_app(
             effective_product_id,
             payload["sub"],
             payload.get("email", ""),
-            "https://diamonddepartures.com/upgrade/success",
+            f"{resolved_settings.public_url}/upgrade/success",
         )
         return JSONResponse(content={"checkout_url": url})
 
