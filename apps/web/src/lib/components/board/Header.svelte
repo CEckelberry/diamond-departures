@@ -3,6 +3,7 @@
 	import { soundEnabled, setSoundEnabled } from '$lib/stores/sound';
 	import FreshnessPanel from '$lib/components/board/FreshnessPanel.svelte';
 	import EinkToggle from '$lib/components/board/EinkToggle.svelte';
+	import { toggleBigScreen } from '$lib/stores/bigScreen';
 
 	type SeasonMode = 'live' | 'between' | 'off-game' | 'off-season';
 	type SeasonState = {
@@ -104,6 +105,10 @@
 
 		<button class="icon-btn freshness-btn" type="button" aria-label="Show freshness debug panel" onclick={toggleFreshnessDebug}>
 			⏱
+		</button>
+
+		<button class="icon-btn" type="button" aria-label="Big screen mode" title="Big screen (press F)" onclick={toggleBigScreen}>
+			⛶
 		</button>
 	</div>
 

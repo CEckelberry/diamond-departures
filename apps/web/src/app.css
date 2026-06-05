@@ -35,6 +35,11 @@ body {
 	color: var(--chrome-text);
 	min-height: 100vh;
 	overflow-x: hidden;
+	scrollbar-width: none;
+}
+
+body::-webkit-scrollbar {
+	display: none;
 }
 
 .app-shell {
@@ -46,10 +51,10 @@ body {
 .shell-main {
         background: radial-gradient(circle at 50% -20%, color-mix(in oklab, var(--mlb-blue) 15%, transparent), transparent 70%);
 	flex: 1;
-	width: min(1600px, calc(100% - 2rem));
+	width: min(1800px, calc(100% - 1rem));
 	margin: 0 auto;
-	padding-top: 4.3rem;
-	padding-bottom: 1.25rem;
+	padding-top: calc(var(--nav-height, 2.75rem) + 0.5rem);
+	padding-bottom: 1rem;
 }
 
 .flap-cell {

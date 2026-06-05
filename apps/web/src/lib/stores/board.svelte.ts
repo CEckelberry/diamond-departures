@@ -28,6 +28,8 @@ export type BoardEntry = {
 	freshness: { timestamp: string; age_category: 'live' | 'recent' | 'stale' | 'old' };
 	newly_qualified?: boolean;
 	qualified_at?: string | null;
+	rankDelta?: number;
+	rankDeltaAt?: number;
 };
 
 type DeltaChange = {
@@ -48,7 +50,13 @@ export function applyDelta(entries: BoardEntry[], payload: { changes: DeltaChang
 	for (const change of payload.changes) {
 		const entry = next.find((item) => item.player.id === change.player_id);
 		if (!entry) continue;
-		if (typeof change.new_rank === 'number') entry.rank = change.new_rank;
+		if (typeof change.new_rank === 'number') {
+			if (typeof change.old_rank === 'number' && change.old_rank !== change.new_rank) {
+				entry.rankDelta = change.old_rank - change.new_rank; // positive = moved up
+				entry.rankDeltaAt = Date.now();
+			}
+			entry.rank = change.new_rank;
+		}
 		if (change.newly_qualified) {
 			entry.newly_qualified = true;
 			entry.qualified_at = change.qualified_at ?? new Date().toISOString();
@@ -82,6 +90,8 @@ export function toBoardRows(entries: BoardEntry[]): BoardRow[] {
 			return s;
 		})(),
 		justQualified: Boolean(entry.newly_qualified),
-		qualifiedAt: entry.qualified_at ?? null
+		qualifiedAt: entry.qualified_at ?? null,
+		rankDelta: entry.rankDelta,
+		rankDeltaAt: entry.rankDeltaAt
 	}));
 }

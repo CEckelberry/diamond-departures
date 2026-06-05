@@ -2,7 +2,6 @@
 	import { onMount, tick } from 'svelte';
 	import { page } from '$app/stores';
 	import Header from '$lib/components/board/Header.svelte';
-	import PageTitle from '$lib/components/board/PageTitle.svelte';
 	import ViewTabs from '$lib/components/board/ViewTabs.svelte';
 	import StatPicker from '$lib/components/board/StatPicker.svelte';
 	import SeasonPicker from '$lib/components/board/SeasonPicker.svelte';
@@ -160,8 +159,6 @@
 <div class="fps-badge" style="color:{fpsColor}">{fps} <span>fps</span></div>
 
 <SEO title="Diamond Departures · Live Board" description="Live baseball split-flap leaderboard powered by MLB Statcast data." path="/" />
-
-<PageTitle />
 
 <section class="board-screen">
 	<div class="top-bar">

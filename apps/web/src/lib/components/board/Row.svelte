@@ -61,7 +61,18 @@
 	onclick={handleClick}
 	onkeydown={handleKeydown}
 >
-	<div class="cell"><Word value={row.rank} width={3} cellWidth={16} cellHeight={26} {rowIndex} baseColIndex={0} /></div>
+	<div class="cell rank-cell">
+		<Word value={row.rank} width={3} cellWidth={16} cellHeight={26} {rowIndex} baseColIndex={0} />
+		{#if row.rankDelta && row.rankDeltaAt}
+			{#key row.rankDeltaAt}
+				<span
+					class="rank-delta"
+					class:rank-up={row.rankDelta > 0}
+					class:rank-down={row.rankDelta < 0}
+				>{row.rankDelta > 0 ? '▲' : '▼'}{Math.abs(row.rankDelta)}</span>
+			{/key}
+		{/if}
+	</div>
 	<div class="cell player">
 		<Word value={row.player} width={Math.min(Math.max(1, row.player.trim().length), 18)} cellWidth={16} cellHeight={26} {rowIndex} baseColIndex={3} />
 		{#if row.justQualified}
@@ -111,6 +122,40 @@
 		position: relative;
 	}
 
+	.cell:not(:last-child) {
+		border-right: 1px solid rgba(255, 255, 255, 0.08);
+	}
+
+	.rank-cell {
+		position: relative;
+		overflow: visible;
+	}
+
+	.rank-delta {
+		position: absolute;
+		left: calc(100% + 2px);
+		top: 50%;
+		transform: translateY(-50%);
+		font-family: 'JetBrains Mono', monospace;
+		font-size: 0.52rem;
+		font-weight: 700;
+		letter-spacing: 0.02em;
+		white-space: nowrap;
+		pointer-events: none;
+		z-index: 10;
+		animation: delta-fade 4s ease forwards;
+	}
+
+	.rank-up   { color: var(--row-up); }
+	.rank-down { color: var(--row-down); }
+
+	@keyframes delta-fade {
+		0%   { opacity: 0; transform: translateY(-60%); }
+		10%  { opacity: 1; transform: translateY(-50%); }
+		70%  { opacity: 1; transform: translateY(-50%); }
+		100% { opacity: 0; transform: translateY(-50%); }
+	}
+
 	.cell.stat {
 		justify-content: center;
 	}
@@ -123,6 +168,8 @@
 
 	.stat-active {
 		color: #fbbf24;
+		border-left: 1px solid rgba(251, 191, 36, 0.3);
+		border-right: 1px solid rgba(251, 191, 36, 0.3);
 	}
 
 	/* Overlay sits above Cell internals (hairline z-index:20) to tint the whole column */
@@ -130,7 +177,7 @@
 		content: '';
 		position: absolute;
 		inset: 0;
-		background: rgba(251, 191, 36, 0.09);
+		background: rgba(251, 191, 36, 0.15);
 		pointer-events: none;
 		z-index: 25;
 		border-radius: 0.2rem;

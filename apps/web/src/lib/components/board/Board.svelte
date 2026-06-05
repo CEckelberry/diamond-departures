@@ -4,7 +4,7 @@
 	import { cubicOut } from 'svelte/easing';
 	import { goto, preloadData } from '$app/navigation';
 	import { page } from '$app/stores';
-	import { playRowShift } from '$lib/audio/flap';
+	import { playRankChange } from '$lib/audio/flap';
 	import Row from './Row.svelte';
 	import type { BoardRow } from './types';
 	import { anim } from '$lib/stores/board.svelte';
@@ -90,7 +90,13 @@
 	let previousOrder = '';
 	$effect(() => {
 		const order = rows.map((r) => r.playerId).join(',');
-		if (previousOrder && order !== previousOrder) playRowShift();
+		if (previousOrder && order !== previousOrder) {
+			const maxMag = Math.max(0, ...rows.map((r) => Math.abs(r.rankDelta ?? 0)));
+			const upCount = rows.filter((r) => (r.rankDelta ?? 0) > 0).length;
+			const downCount = rows.filter((r) => (r.rankDelta ?? 0) < 0).length;
+			const dir = upCount >= downCount ? 'up' : 'down';
+			playRankChange(dir, maxMag || 1);
+		}
 		previousOrder = order;
 	});
 
@@ -182,12 +188,17 @@
 		font-family: 'JetBrains Mono', monospace;
 		font-size: 0.65rem;
 		text-transform: uppercase;
-		color: color-mix(in oklab, var(--chrome-text) 50%, transparent);
+		color: color-mix(in oklab, var(--chrome-text) 75%, transparent);
 		padding-bottom: 0.5rem;
 		margin-bottom: 0.5rem;
 	}
 
 	.rk-head { padding-left: 0.4rem; }
+
+	.board-header-row > span:not(:last-child) {
+		border-right: 1px solid rgba(255, 255, 255, 0.1);
+		padding-right: 0.4rem;
+	}
 
 	.stat-col-head {
 		text-align: center;
@@ -204,7 +215,7 @@
 	.stat-head {
 		color: #fbbf24;
 		font-weight: 700;
-		background: rgba(251, 191, 36, 0.1);
+		background: rgba(251, 191, 36, 0.18);
 		border-radius: 0.2rem;
 		padding: 0.1rem 0.3rem;
 	}
@@ -212,8 +223,6 @@
 	.board-body {
 		display: grid;
 		gap: 0.25rem;
-		max-height: 80vh;
-		overflow: auto;
 	}
 
 	.row-shell {

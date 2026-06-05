@@ -37,3 +37,8 @@ pnpm-debug.log*
 # agent runtime artifacts
 .crew/
 __pycache__/
+.superpowers/
+.playwright-mcp/
+
+# dev/session screenshots
+*.png

@@ -51,7 +51,6 @@ def run_once(
     provider = build_provider(settings)
     store = init_store(settings.database_url)
     schedule = provider.fetch_schedule()
-    _ = store.session_factory()
 
     checkpoint = load_checkpoint(settings.scanner_checkpoint_path)
 

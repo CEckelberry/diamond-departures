@@ -3,8 +3,7 @@
 		<span>Built with obsessive baseball nerdery.</span>
 		<div class="links">
 			<a href="/methodology">Methodology</a>
-			<a href="https://github.com" rel="noreferrer" target="_blank">GitHub</a>
-			<a href="/about">About</a>
+			<a href="https://cole.codes" rel="noreferrer" target="_blank">Back to Portfolio</a>
 		</div>
 	</div>
 </footer>

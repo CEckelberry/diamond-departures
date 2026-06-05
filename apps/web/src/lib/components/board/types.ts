@@ -24,4 +24,6 @@ export type BoardRow = {
 	stats: Record<string, number>;
 	justQualified?: boolean;
 	qualifiedAt?: string | null;
+	rankDelta?: number;       // positive = moved up, negative = moved down
+	rankDeltaAt?: number;     // Date.now() when delta was set, for timed fade
 };
