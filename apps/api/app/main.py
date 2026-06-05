@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 
-from fastapi import FastAPI, HTTPException, Query, BackgroundTasks
+from fastapi import Depends, FastAPI, HTTPException, Query, BackgroundTasks
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from .board import (
@@ -32,6 +32,8 @@ from .status import (
     in_memory_season_state_reader,
 )
 from .store import postgres_health_check, postgres_board_reader, postgres_player_detail_reader, postgres_player_history_reader
+from .auth import make_jwt_verifier
+from .users import UserUpsert, in_memory_user_upsert
 
 
 def create_app(
@@ -44,6 +46,8 @@ def create_app(
     player_history_reader: PlayerHistoryReader | None = None,
     season_state_reader: SeasonStateReader | None = None,
     freshness_reader: FreshnessReader | None = None,
+    user_upsert: UserUpsert | None = None,
+    supabase_jwt_secret: str = "",
 ) -> FastAPI:
     resolved_settings = settings or load_settings()
     configure_logging(resolved_settings.log_level)
@@ -58,6 +62,8 @@ def create_app(
     history_loader = player_history_reader or postgres_player_history_reader(resolved_settings.database_url)
     season_state_loader = season_state_reader or in_memory_season_state_reader
     freshness_loader = freshness_reader or in_memory_freshness_reader
+    upsert_user = user_upsert or in_memory_user_upsert
+    get_current_user = make_jwt_verifier(supabase_jwt_secret or resolved_settings.supabase_jwt_secret)
     app.state.sse_hub = hub
 
     @app.get("/api/health")
@@ -133,6 +139,14 @@ def create_app(
     @app.get("/api/freshness")
     def freshness() -> JSONResponse:
         return JSONResponse(content=freshness_loader(), headers={"Cache-Control": "no-store"})
+
+    @app.get("/api/auth/me")
+    def auth_me(payload: dict = Depends(get_current_user)) -> JSONResponse:
+        user_meta = payload.get("user_metadata") or {}
+        name = user_meta.get("full_name") or user_meta.get("name") or payload.get("email", "").split("@")[0]
+        avatar_url = user_meta.get("avatar_url") or user_meta.get("picture")
+        user = upsert_user(payload["sub"], payload.get("email", ""), name, avatar_url)
+        return JSONResponse(content=user)
 
     @app.on_event("startup")
     async def start_db_poller() -> None:

@@ -12,6 +12,11 @@ class ApiSettings:
     database_url: str = "postgresql://diamond:diamond@localhost:5432/diamond"
     sse_poll_seconds: float = 30.0
     current_season: int = field(default_factory=lambda: datetime.now(UTC).year)
+    supabase_jwt_secret: str = ""
+    creem_api_key: str = ""
+    creem_webhook_secret: str = ""
+    creem_product_id: str = ""
+    resend_api_key: str = ""
 
 
 def load_settings() -> ApiSettings:
@@ -21,4 +26,9 @@ def load_settings() -> ApiSettings:
         database_url=os.getenv("DATABASE_URL", "postgresql://diamond:diamond@localhost:5432/diamond"),
         sse_poll_seconds=float(os.getenv("SSE_POLL_SECONDS", "30")),
         current_season=int(os.getenv("CURRENT_SEASON", str(datetime.now(UTC).year))),
+        supabase_jwt_secret=os.getenv("SUPABASE_JWT_SECRET", ""),
+        creem_api_key=os.getenv("CREEM_API_KEY", ""),
+        creem_webhook_secret=os.getenv("CREEM_WEBHOOK_SECRET", ""),
+        creem_product_id=os.getenv("CREEM_PRODUCT_ID", ""),
+        resend_api_key=os.getenv("RESEND_API_KEY", ""),
     )
