@@ -31,7 +31,7 @@ from .status import (
     in_memory_freshness_reader,
     in_memory_season_state_reader,
 )
-from .store import postgres_health_check, postgres_board_reader, postgres_player_detail_reader, postgres_player_history_reader
+from .store import postgres_health_check, postgres_board_reader, postgres_player_detail_reader, postgres_player_history_reader, postgres_user_upsert
 from .auth import make_jwt_verifier
 from .users import UserUpsert, in_memory_user_upsert
 
@@ -62,7 +62,7 @@ def create_app(
     history_loader = player_history_reader or postgres_player_history_reader(resolved_settings.database_url)
     season_state_loader = season_state_reader or in_memory_season_state_reader
     freshness_loader = freshness_reader or in_memory_freshness_reader
-    upsert_user = user_upsert or in_memory_user_upsert
+    upsert_user = user_upsert or postgres_user_upsert(resolved_settings.database_url)
     get_current_user = make_jwt_verifier(supabase_jwt_secret or resolved_settings.supabase_jwt_secret)
     app.state.sse_hub = hub
 

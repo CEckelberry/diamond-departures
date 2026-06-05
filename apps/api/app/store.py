@@ -8,6 +8,7 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 
 from .players import PlayerDetailReader, PlayerHistoryReader
+from .users import UserUpsert
 
 
 def postgres_health_check(database_url: str) -> Callable[[], bool]:
@@ -130,3 +131,32 @@ def postgres_player_history_reader(database_url: str) -> PlayerHistoryReader:
             return None
 
     return _read
+
+
+def postgres_user_upsert(database_url: str) -> UserUpsert:
+    def _upsert(user_id: str, email: str, name: str | None, avatar_url: str | None) -> dict:
+        with psycopg2.connect(database_url) as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    """
+                    INSERT INTO users (id, email, name, avatar_url, last_seen_at)
+                    VALUES (%s, %s, %s, %s, now())
+                    ON CONFLICT (id) DO UPDATE SET
+                        email        = EXCLUDED.email,
+                        name         = COALESCE(EXCLUDED.name, users.name),
+                        avatar_url   = COALESCE(EXCLUDED.avatar_url, users.avatar_url),
+                        last_seen_at = now()
+                    RETURNING id, email, name, avatar_url, is_premium, purchased_at, created_at, last_seen_at
+                    """,
+                    (user_id, email, name, avatar_url),
+                )
+                row = cur.fetchone()
+                return {
+                    "id": str(row["id"]),
+                    "email": row["email"],
+                    "name": row["name"],
+                    "avatar_url": row["avatar_url"],
+                    "is_premium": row["is_premium"],
+                    "purchased_at": row["purchased_at"].isoformat() if row["purchased_at"] else None,
+                }
+    return _upsert
