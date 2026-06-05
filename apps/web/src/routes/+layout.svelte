@@ -7,8 +7,13 @@
 	import SEO from '$lib/components/shell/SEO.svelte';
 	import { einkStore } from '$lib/stores/eink';
 	import { bigScreen, toggleBigScreen } from '$lib/stores/bigScreen';
+	import { userStore } from '$lib/stores/user';
 
-	let { children } = $props();
+	let { children, data } = $props();
+
+	$effect(() => {
+		userStore.set(data.user ?? null);
+	});
 
 	let showHint = $state(false);
 	let hintTimer: ReturnType<typeof setTimeout> | null = null;
