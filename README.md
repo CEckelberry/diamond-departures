@@ -1,102 +1,121 @@
 # Diamond Departures
 
-> Top 100 active MLB players ranked by sabermetrics, styled as a Penn Station split-flap board, updating live during games.
+> MLB's best players, ranked live by sabermetrics, rendered as a Penn Station split-flap departure board.
 
-The aesthetic of an old train station departure board — letters and digits physically rotating when they change — applied to a leaderboard of the best baseball players right now. As stats update mid-game, rows reshuffle and individual cells flip to their new values. As Judge gets a hit and his wRC+ ticks up, the cell flips. As Soto's xFIP climbs after a rough inning, his row drops three spots and the rank cell flips on every row that moved.
+As Judge gets a hit and his wRC+ ticks up, the cell physically flips to its new value. As a pitcher's ERA climbs in the third inning, his row drops four spots and every rank cell that moved animates in sequence. The board sounds like a real departure board — mechanical clicks on every flip, a scoreboard chime when the rankings shift.
 
-It's a baseball nerd's dream rendered as a working dashboard.
+---
 
-## What this is
+## What it does
 
-A single-page app with three primary views, all live:
+A live leaderboard of MLB's top players with a split-flap animation engine built from scratch. No animation library. Every flip is a custom CSS 3D transform with tuned easing curves: free fall, mechanical stop, overshoot, damped bounce.
 
-- **All hitters** ranked by wRC+ (the gold-standard rate stat for offense)
-- **All pitchers** ranked by FIP (the gold-standard for run prevention)
-- **By position** — top players at C, 1B, 2B, 3B, SS, LF, CF, RF, DH, SP, RP
+**Board views**
+- Hitters ranked by any of 15+ stats (wRC+, wOBA, OPS, ISO, BABIP, BB%, K%, AVG, HR, RBI, SB, OBP, SLG, xBA, barrel %, hard hit %, exit velocity)
+- Pitchers ranked by ERA, FIP, xFIP, K%, WHIP, K/9, BB/9, K-BB%, W, SV
+- Defense view ranked by DRS, OAA, UZR, Def, Fielding %
+- Positions view filtered by fielding position
+- Sabermetric, Traditional, and Statcast stat tabs
 
-Each view shows the top 100 in real time. Clicking any player opens a detailed card with their full stat line, recent game logs, and a small visualization of their season trend.
+**Live updates**
+- SSE stream pushes rank changes and stat deltas mid-game
+- Rows animate to new positions via Svelte's `flip` directive
+- Individual stat cells flip through intermediate glyphs on change
+- `▲N` / `▼N` rank change badges fade in and out on moving rows
 
-A "stat picker" in each view lets you re-rank by any of ~20 sabermetric stats: AVG, OBP, SLG, OPS, wRC+, wOBA, BABIP, ISO, DRS, UZR/150, OAA for hitters; ERA, FIP, xFIP, SIERA, ERA+, K/9, BB/9, K-BB%, WHIP for pitchers. The leaderboard re-sorts and animates every cell that moved.
+**Big screen mode**
+- Press `F` or click `⛶` to enter native fullscreen
+- All controls hide, leaving only the board and the "◈ Diamond Departures" serif logo
+- Press `Esc` or `F` to exit
 
-## What this isn't
+**Sound**
+- Synthesized via `OfflineAudioContext` → WAV blob → Audio element (no audio files)
+- Mechanical white-noise click on each cell flip
+- Cascading burst when many cells flip together
+- Ascending or descending pentatonic chime when rankings shift, scaled by magnitude (2–4 notes for 1–2, 3–5, 6+ spot moves)
 
-- Not a fantasy baseball site. There are no projections, no recommendations, no draft tools.
-- Not a real-time scoring service. We don't show pitch-by-pitch; we show the leaderboard _responding_ to game events.
-- Not a historical encyclopedia. We track current-season stats with rolling history. For deep history, Baseball Reference exists.
-- Not a betting tool. There are no odds, no money lines, no anything financial.
-- Not affiliated with MLB. We use public stat data, branded carefully (no logos we don't have rights to).
+**Season selector**
+- Any season 2016–present
+- LIVE indicator when viewing the current season during games
+- Off-season banner with next season info
 
-## Repository layout
+**Player detail**
+- Click any row for a stat panel with full season totals and recent game history
+
+---
+
+## Stack
+
+| Layer | Technology |
+|---|---|
+| Frontend | SvelteKit 2, TypeScript, Tailwind v4 |
+| Animation | Custom split-flap engine (CSS 3D, no library) |
+| API | FastAPI, Server-Sent Events, asyncpg |
+| Ingest | Python worker — MLB Stats API → Postgres |
+| Database | PostgreSQL 18 |
+| Dev | Docker Compose (web + api + db + mlb-mock) |
+
+---
+
+## Running locally
+
+```bash
+docker compose up
+```
+
+The board runs at `http://localhost:5174`. The API is at `http://localhost:18000`.
+
+To seed or backfill historical stats:
+
+```bash
+# inside the ingest container or virtualenv
+python -m apps.ingest backfill --season 2026
+```
+
+---
+
+## Repo layout
 
 ```
-diamond/
-├── README.md
-├── DATA.md                  ← stat sources, freshness, off-season, position taxonomy
-├── ARCHITECTURE.md          ← system design, ingestion, SSE, caching
-├── DESIGN.md                ← visual language, the split-flap mechanic
-├── STATS.md                 ← every stat we display: formula, range, how to read
-├── TASKS.md                 ← phased build plan
+diamond-departures/
 ├── apps/
-│   ├── web/                 ← SvelteKit frontend (the split-flap board)
-│   ├── api/                 ← FastAPI service: SSE broadcast, leaderboard queries
-│   └── ingest/              ← Python worker/job: pulls MLB Stats API, computes derived stats
+│   ├── web/          # SvelteKit frontend
+│   │   ├── src/lib/
+│   │   │   ├── audio/        # OfflineAudioContext synthesis
+│   │   │   ├── components/
+│   │   │   │   ├── board/    # Board, Row, Header, ViewTabs, StatPicker, SeasonPicker
+│   │   │   │   ├── flap/     # Cell, Word — the split-flap engine
+│   │   │   │   ├── player/   # Detail panel
+│   │   │   │   └── shell/    # Nav, Footer, SEO
+│   │   │   └── stores/       # board, sound, bigScreen, eink
+│   │   └── static/
+│   ├── api/          # FastAPI — /board, /board/sse, /players, /season-state
+│   │   └── migrations/
+│   └── ingest/       # MLB Stats API → leaderboard_views
 ├── packages/
-│   ├── stats/               ← shared sabermetric formulas (used by ingest + api)
-│   └── content/             ← player metadata, position taxonomy, descriptions
-├── infra/
-│   ├── terraform/           ← Cloud Run, Cloud SQL, Cloud Scheduler, DNS
-│   └── docker/
-├── scripts/                 ← local dev + agent orchestration helpers
-├── orchestration/           ← task packets, check-ins, run artifacts
-└── .github/workflows/
+│   └── stats/        # Sabermetric formulas shared between ingest + api
+├── docker-compose.yml
+└── Makefile
 ```
 
-## Stack at a glance
+---
 
-- **Frontend**: SvelteKit, TypeScript, Tailwind v4, custom split-flap component (no library — it has to feel right)
-- **API**: Python `FastAPI`, Server-Sent Events for live updates, `asyncpg`/`SQLAlchemy` for Postgres
-- **Ingest**: Python Cloud Run job (non-HTTP worker) triggered by Cloud Scheduler. Runs every 60 seconds during games, every hour off-game, daily off-season.
-- **Database**: Cloud SQL Postgres 18, `db-custom-1-3840` (1 vCPU, 3.75GB)
-- **Stat source (v1)**: MLB Stats API (free, official, sufficient). FanGraphs scraping considered and rejected — see DATA.md.
-- **Hosting**: Cloud Run for frontend, api, ingest. Cloud SQL for the database. Cloud Scheduler for ingest cadence.
-- **Cost target**: ~$25-35/month, hard-capped at $50/month.
+## Architecture
 
-## Three modes of viewing
+**Ingest** runs on a schedule, pulls from the MLB Stats API, computes derived stats (wRC+, BABIP, FIP, etc.), and writes ranked rows to `leaderboard_views` in Postgres — one row per `(view_key, sort_stat, season, player)`.
 
-**The board** (default). The full top-100 leaderboard with split-flap mechanics. Click any row for a player detail card. The default sort is wRC+ for hitters, switchable in one click.
+**API** has two board endpoints:
+- `GET /api/board` — snapshot of current leaderboard (server-side rendered initial load)
+- `GET /api/board/sse` — SSE stream that polls for DB changes and pushes rank/stat deltas
 
-**By position**. Same board, filtered to a single position (e.g., "top SS by wRC+"). Smaller list (typically 20-30 qualifying players), so the board feels less dense and more focused.
+**Frontend** opens the SSE stream after page load and applies deltas with `applyDelta`, which triggers the animation engine. The split-flap engine queues intermediate glyphs and schedules each flip with `setTimeout`, staggered by row and column index to stay within GPU compositor budget (~560 simultaneous animated cells).
 
-**Player detail**. A modal or side panel showing one player: full stat line across multiple categories, recent game-by-game performance, season trend chart for the currently-active stat. Closes back to wherever the visitor came from.
+---
 
-## Why this is a good portfolio project
+## What's next
 
-It demonstrates:
-
-- **Real-time backend work** — SSE channels per-view, change detection, broadcast efficiency
-- **Animation that matters** — the split-flap is _the_ feature; getting it to feel snappy without being chaotic is real frontend craft
-- **Data pipeline thinking** — stat ingestion, schema-stable computation, off-season handling, drift detection
-- **Domain knowledge done right** — sabermetrics has its own vocabulary; doing it well shows depth
-- **Honest framing of data sources** — MLB Stats API has gaps; the case study explains them
-
-It also has the highest "share-on-Twitter" ceiling of the four projects. Beautiful animation + recognizable players + a niche audience = the kind of thing baseball Twitter loves.
-
-## Read order
-
-If you're starting from zero:
-
-1. `DATA.md` first — every architectural decision flows from how we get stats and how fresh they are
-2. `STATS.md` second — what we're actually computing
-3. `ARCHITECTURE.md` third — how it's wired
-4. `DESIGN.md` fourth — how it looks and moves
-5. `TASKS.md` last — the build plan
-
-Pin DATA.md and ARCHITECTURE.md in any Claude Code session that touches the backend or pipeline. Pin DESIGN.md for any frontend work. STATS.md is reference material — handy when implementing a specific computation, less needed otherwise.
-
-## When to build this
-
-Recommended slot in the portfolio buildout: **third project to ship**, after Backend Bake-off and Terraplane.
-
-Reasoning: Diamond depends on a live data source (MLB Stats API) which is most useful to demonstrate during baseball season (April through October). If you're shipping in November-March, the off-season presentation is the _only_ thing visitors see, which undersells the project. Better to time the launch with at least a few weeks of regular-season games left so the live aspect is the first impression.
-
-If timing pushes the build into off-season, ship a "preview mode" that replays a recent week of games at accelerated speed so visitors can see the split-flap mechanic in action even without live games.
+Authentication (Google OAuth), Stripe subscriptions, and premium features:
+- Custom watch boards — build a named board with hand-picked players or whole teams
+- Player watchlist — pin players highlighted across all views
+- Email alerts on stat moves
+- Export to CSV
