@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { userStore } from '$lib/stores/user';
+
 	type TrendChartComponent = typeof import('./TrendChart.svelte').default;
 	type PlayerDetail = {
 		player: {
@@ -114,6 +116,53 @@
 
 		return () => controller.abort();
 	});
+
+	// Email alerts
+	let alerts = $state<any[]>([]);
+	let alertStat = $state('wRC+');
+	let alertThreshold = $state('');
+	let alertDirection = $state<'up' | 'down'>('up');
+
+	async function loadAlerts(playerId: number) {
+		if (!$userStore?.is_premium) return;
+		const resp = await fetch('/api/alerts');
+		if (resp.ok) {
+			const all = await resp.json();
+			alerts = all.filter((a: any) => a.player_id === playerId);
+		}
+	}
+
+	async function createAlert() {
+		const threshold = parseFloat(alertThreshold);
+		if (isNaN(threshold) || !selectedPlayerId) return;
+		const resp = await fetch('/api/alerts', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({
+				player_id: selectedPlayerId,
+				stat_name: alertStat,
+				threshold,
+				direction: alertDirection,
+			}),
+		});
+		if (resp.ok) {
+			alerts = [...alerts, await resp.json()];
+			alertThreshold = '';
+		}
+	}
+
+	async function deleteAlert(id: string) {
+		await fetch(`/api/alerts/${id}`, { method: 'DELETE' });
+		alerts = alerts.filter((a) => a.id !== id);
+	}
+
+	$effect(() => {
+		if (selectedPlayerId) {
+			loadAlerts(selectedPlayerId);
+		} else {
+			alerts = [];
+		}
+	});
 </script>
 
 <aside class="player-panel" aria-label="Player detail panel">
@@ -155,6 +204,41 @@
 			<TrendChart points={historyPoints} stat={trendStat} />
 		{:else}
 			<p class="panel-loading">Loading chart…</p>
+		{/if}
+
+		{#if $userStore?.is_premium && selectedPlayerId}
+			<div class="alerts-section">
+				<h3 class="alerts-title">Email Alerts</h3>
+				{#each alerts as alert (alert.id)}
+					<div class="alert-row">
+						<span class="alert-label">{alert.stat_name} {alert.direction === 'up' ? '≥' : '≤'} {alert.threshold}</span>
+						<button class="alert-del" onclick={() => deleteAlert(alert.id)}>✕</button>
+					</div>
+				{/each}
+				<div class="alert-form">
+					<select class="alert-select" bind:value={alertStat}>
+						<option>wRC+</option>
+						<option>OPS</option>
+						<option>ERA</option>
+						<option>FIP</option>
+						<option>K%</option>
+						<option>AVG</option>
+						<option>HR</option>
+					</select>
+					<select class="alert-select" bind:value={alertDirection}>
+						<option value="up">≥</option>
+						<option value="down">≤</option>
+					</select>
+					<input
+						class="alert-input"
+						bind:value={alertThreshold}
+						placeholder="threshold"
+						type="number"
+						step="0.1"
+					/>
+					<button class="alert-add" onclick={createAlert}>Add</button>
+				</div>
+			</div>
 		{/if}
 	{/if}
 </aside>
@@ -241,5 +325,63 @@
 	.trend-controls button.active {
 		color: var(--cell-text);
 		border-color: color-mix(in oklab, var(--cell-text) 45%, transparent);
+	}
+
+	.alerts-section {
+		padding: 1rem;
+		border-top: 1px solid color-mix(in oklab, var(--chrome-text) 8%, transparent);
+	}
+	.alerts-title {
+		font-family: 'JetBrains Mono', monospace;
+		font-size: 0.7rem;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		color: color-mix(in oklab, var(--chrome-text) 45%, transparent);
+		margin: 0 0 0.75rem;
+	}
+	.alert-row {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		font-family: 'JetBrains Mono', monospace;
+		font-size: 0.75rem;
+		color: var(--chrome-text);
+		margin-bottom: 0.4rem;
+	}
+	.alert-del {
+		background: none;
+		border: none;
+		color: color-mix(in oklab, var(--chrome-text) 35%, transparent);
+		cursor: pointer;
+		font-size: 0.7rem;
+		padding: 0;
+	}
+	.alert-del:hover { color: var(--mlb-red); }
+	.alert-form {
+		display: flex;
+		gap: 0.35rem;
+		margin-top: 0.75rem;
+		flex-wrap: wrap;
+	}
+	.alert-select, .alert-input {
+		background: color-mix(in oklab, var(--chrome-bg) 80%, transparent);
+		border: 1px solid color-mix(in oklab, var(--chrome-text) 18%, transparent);
+		border-radius: 0.25rem;
+		color: var(--chrome-text);
+		font-family: 'JetBrains Mono', monospace;
+		font-size: 0.72rem;
+		padding: 0.3rem 0.5rem;
+	}
+	.alert-input { width: 5rem; }
+	.alert-add {
+		background: var(--mlb-red);
+		border: none;
+		border-radius: 0.25rem;
+		color: #fff;
+		cursor: pointer;
+		font-family: 'JetBrains Mono', monospace;
+		font-size: 0.72rem;
+		font-weight: 700;
+		padding: 0.3rem 0.65rem;
 	}
 </style>
