@@ -283,7 +283,8 @@ def create_app(
 
     @app.delete("/api/watch-boards/{board_id}")
     def delete_board(board_id: str, payload: dict = Depends(_require_premium)) -> JSONResponse:
-        b_deleter(board_id, payload["sub"])
+        if not b_deleter(board_id, payload["sub"]):
+            raise HTTPException(status_code=404, detail="Board not found")
         return JSONResponse(content={"ok": True})
 
     @app.post("/api/watch-boards/{board_id}/players/{player_id}")

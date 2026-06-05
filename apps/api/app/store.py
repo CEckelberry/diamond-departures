@@ -277,8 +277,12 @@ def postgres_board_player_remover(database_url: str) -> BoardPlayerRemover:
     def _remove(board_id: str, user_id: str, player_id: int) -> bool:
         with psycopg2.connect(database_url) as conn:
             with conn.cursor() as cur:
+                # Verify the board belongs to this user before deleting
+                cur.execute("SELECT 1 FROM watch_boards WHERE id = %s AND user_id = %s", (board_id, user_id))
+                if not cur.fetchone():
+                    return False
                 cur.execute("DELETE FROM watch_board_players WHERE board_id = %s AND player_id = %s", (board_id, player_id))
-                return (cur.rowcount or 0) > 0
+                return True
     return _remove
 
 
