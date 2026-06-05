@@ -17,6 +17,7 @@
 			boardView: string;
 			boardSort: string;
 			boardStyle: string;
+			boardSeason: number;
 			entries: BoardEntry[];
 			selectedPosition: string;
 		}
@@ -162,7 +163,7 @@
 
 <section class="board-screen">
 	<div class="top-bar">
-		<Header />
+		<Header view={data.boardView} sort={data.boardSort} season={data.boardSeason} />
 		<div class="controls">
 			<ViewTabs />
 			<StatPicker {view} style={data.boardStyle} />

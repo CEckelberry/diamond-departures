@@ -4,6 +4,20 @@
 	import FreshnessPanel from '$lib/components/board/FreshnessPanel.svelte';
 	import EinkToggle from '$lib/components/board/EinkToggle.svelte';
 	import { toggleBigScreen } from '$lib/stores/bigScreen';
+	import { userStore } from '$lib/stores/user';
+
+	let { view = 'hitters', sort = 'OPS', season = undefined }: {
+		view?: string;
+		sort?: string;
+		season?: number;
+	} = $props();
+
+	function downloadCsv() {
+		if (!$userStore?.is_premium) return;
+		const params = new URLSearchParams({ view, sort });
+		if (season) params.set('season', String(season));
+		window.open(`/api/board/export?${params}`, '_blank');
+	}
 
 	type SeasonMode = 'live' | 'between' | 'off-game' | 'off-season';
 	type SeasonState = {
@@ -110,6 +124,10 @@
 		<button class="icon-btn" type="button" aria-label="Big screen mode" title="Big screen (press F)" onclick={toggleBigScreen}>
 			⛶
 		</button>
+
+		{#if $userStore?.is_premium}
+			<button class="export-btn" onclick={downloadCsv} title="Download CSV">↓ CSV</button>
+		{/if}
 	</div>
 
 	{#if showFreshnessDebug}
@@ -185,5 +203,22 @@
 		margin: 0;
 		color: #fca5a5;
 		font-size: 0.8rem;
+	}
+
+	.export-btn {
+		font-family: 'JetBrains Mono', monospace;
+		font-size: 0.68rem;
+		letter-spacing: 0.04em;
+		background: none;
+		border: 1px solid color-mix(in oklab, var(--chrome-text) 22%, transparent);
+		border-radius: 0.3rem;
+		color: color-mix(in oklab, var(--chrome-text) 60%, transparent);
+		cursor: pointer;
+		padding: 0.25rem 0.55rem;
+		transition: color 0.15s, border-color 0.15s;
+	}
+	.export-btn:hover {
+		color: var(--chrome-text);
+		border-color: color-mix(in oklab, var(--chrome-text) 45%, transparent);
 	}
 </style>
